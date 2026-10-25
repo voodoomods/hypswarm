@@ -32,7 +32,7 @@ PORT = 8765
 def serve(record: str, tokens: dict[str, str]) -> subprocess.Popen:
     cmd = [sys.executable, "-m", "hypgraph", "--db", record, "serve", "--writable", "--no-browser", "--port", str(PORT)]
     for tok, authors in tokens.items():
-        cmd += ["--token", f"{tok}={authors}"]
+        cmd += [f"--token={tok}={authors}"]               # one argument: a token can start with a dash
     p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     for _ in range(60):
         try:
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     if not Path(args.record).exists():                          # the server serves an existing record
         from hypgraph import Graph
         Graph(args.record).close()
-    swarm_token, person_token = secrets.token_urlsafe(16), secrets.token_urlsafe(16)
+    swarm_token, person_token = "swarm-" + secrets.token_hex(12), "nic-" + secrets.token_hex(12)
     srv = serve(args.record, {swarm_token: "harness,analyst,critic,lead", person_token: "nicolas"})
     base = f"http://127.0.0.1:{PORT}"
     print(f"\nrecord server: {base}   (the Atlas; open it while the run goes)\n")

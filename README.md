@@ -84,7 +84,7 @@ re-runs the solve* → `review` by the verifier against the constraints → clai
 with a bound that meets the objective → *incumbent feasible*. Refused on the way: an objective with no
 feasibility, "optimal" without a bound.
 
-Each of these is one of the [examples](examples/), runnable for free.
+Each of these is one of the [examples](https://github.com/voodoomods/hypswarm/tree/main/examples), runnable for free.
 
 ## What you get
 
@@ -206,7 +206,7 @@ Any object with `async complete(messages, tools) -> Reply` is a model.
 
 ## Examples
 
-Ten runnable examples in [examples/](examples/), each free on scripted models and cents on a real provider: one per
+Ten runnable examples in [examples/](https://github.com/voodoomods/hypswarm/tree/main/examples), each free on scripted models and cents on a real provider: one per
 profile (an eval report, tests the instrument runs, a paper trading desk, a sourced brief, a solve with a bound),
 the mixed swarm (LangChain + PydanticAI + CrewAI + Claude / Bedrock + a person), a person as reviewer over MCP, a
 served record with tokens, stop-and-resume with a file withdrawn mid-run, and a custom seat and toolkit from
@@ -228,6 +228,6 @@ rosters, the tool registry, external seats over MCP, the record server with toke
 instrument reproduction, verified file tools, the OpenAI-compatible, Anthropic, Bedrock and LangChain adapters,
 agent seats with bridges for LangChain / LangGraph, PydanticAI and CrewAI, ten runnable examples, and a test suite
 that runs every scheduler path — and every bridge — on scripted models in seconds. Every design decision is in
-[docs/decisions](docs/decisions/).
+[docs/decisions](https://github.com/voodoomods/hypswarm/tree/main/docs/decisions).
 
 Made by Nicolas Houghtaling at [VoodooMods LLC](https://github.com/voodoomods). Apache-2.0.

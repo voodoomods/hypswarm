@@ -173,7 +173,7 @@ def test_pydantic_ai_agent_holds_a_seat():
 
 # ── CrewAI agent as a seat ───────────────────────────────────────────────────
 def test_crewai_agent_holds_a_seat():
-    pytest.importorskip("crewai")
+    pytest.importorskip("crewai", minversion="1.15")      # older executors take only text back from a custom BaseLLM
     from crewai import Agent, Crew, Task
     from crewai.llm import BaseLLM
 
