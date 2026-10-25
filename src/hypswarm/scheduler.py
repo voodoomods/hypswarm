@@ -20,7 +20,8 @@ from hypgraph import GraphError
 from .budget import BudgetExhausted, Meter
 from .messages import Message, Tool
 from .providers.base import ChatModel
-from .record import HARNESS, LocalRecord
+from .record import HARNESS, INSTRUMENT, LocalRecord
+from .reproduce import Reproducer, reproduce_result
 from .seats import Seat, fit
 from .tools import lead_tools
 from .worker import WorkerResult, await_external, run_order
@@ -37,6 +38,7 @@ class SchedulerResult:
     escalations: int = 0                    # orders the lead had to judge
     model_escalations: int = 0              # dispatches on a seat's deeper model (after a NOT MET)
     adopted: int = 0                        # orders taken over from a previous run (resume)
+    reproductions: int = 0                  # results the instrument re-executed (no model calls)
     lead_calls: int = 0
     report: str = ""
     report_accepted: bool = False
@@ -51,10 +53,12 @@ class Scheduler:
                  meter: Meter, *, data_tools: Sequence[Tool] = (), preamble: str = "", max_reworks: int = 2,
                  lease_minutes: int = 240, lead_turns: int = 6,
                  on_return: Callable[[Scheduler, int], None] | None = None, external_poll_s: float = 1.0,
-                 external_timeout_s: float | None = None, header: str = ""):
+                 external_timeout_s: float | None = None, header: str = "", reproducer: Reproducer | None = None):
         self.r, self.inv, self.seats = record, inv, list(seats)
         self.model_for, self.meter = model_for, meter
         self.data_tools, self.preamble, self.header = list(data_tools), preamble, header
+        self.reproducer = reproducer                        # host-supplied: re-executes registered code (no model)
+        self._reproduced: set[str] = set()
         self.max_reworks, self.lease_minutes, self.lead_turns = max_reworks, lease_minutes, lead_turns
         self.workers = [s for s in seats if s.role == "worker"]
         self.reviewers = [s for s in seats if s.role == "reviewer"]
@@ -185,6 +189,24 @@ class Scheduler:
         return True
 
     # ── one round ────────────────────────────────────────────
+    async def _reproduce_new(self) -> None:
+        """Every result an author registered with its code is re-executed once by the instrument, before any
+        reviewer sees it. Mechanical verification costs no model call; the reviewer's calls go to judgement."""
+        if not self.reproducer:
+            return
+        for r in self.r.search("", "result", self.inv, 500):
+            if r["id"] in self._reproduced or r.get("by") == INSTRUMENT:
+                continue
+            self._reproduced.add(r["id"])
+            try:
+                out = await reproduce_result(self.r, self.inv, r["id"], self.reproducer)
+            except GraphError as e:
+                self._ev("reproduce_failed", result=r.get("code"), why=str(e)[:200])
+                continue
+            if out:
+                self.res.reproductions += 1
+                self._ev("reproduced", result=r.get("code"), ok=out["ok"], run=out["run"], missing=out["missing"])
+
     def _settle_and_rework(self) -> None:
         moot = self.r.cancel_moot(author=HARNESS, inv=self.inv)
         for m in moot:
@@ -255,9 +277,11 @@ class Scheduler:
                         busy_targets.add(q["id"])
                     continue
                 seat = self._pick(pool, q["text"], "claim")
-                if seat and self._issue(seat, claim, f"Review {q['answers'][-1]}, which answers {q['code']}: check its "
-                                                     "numbers and reasoning against the files and the record.",
-                                        [{"p": "reviewed"}]):
+                objective = (f"Review {q['answers'][-1]}, which answers {q['code']}. The order lists the claim, its "
+                             "measurements and the results it rests on" + (", and whether the instrument reproduced "
+                             "them — recompute only what is not reproduced" if self.reproducer else "") +
+                             ". Judge the method and the wording against the question; record a verdict.")
+                if seat and self._issue(seat, claim, objective, [{"p": "reviewed"}]):
                     busy_targets.add(claim)
         try:
             nx = self.r.next_experiments(self.inv, limit=10)
@@ -288,6 +312,7 @@ class Scheduler:
         while not self._stop:
             self.res.rounds += 1
             try:
+                await self._reproduce_new()
                 self._settle_and_rework()
                 while self._pending_lead:
                     o, missing = self._pending_lead.pop(0)

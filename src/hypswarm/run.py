@@ -94,12 +94,14 @@ async def run(task: Task, seats: Sequence[Seat], models: ModelSpec, *, record: s
               default_model: ChatModel | None = None,
               on_return: Callable[[Scheduler, int], None] | None = None, lease_minutes: int = 240,
               external_poll_s: float = 1.0, external_timeout_s: float | None = None,
-              resume: str = "") -> RunResult:
+              resume: str = "", reproducer: Any = None) -> RunResult:
     """Run ``task`` with ``seats`` on a record at ``record`` — a path, in memory, or a record client such as
     ``HttpRecord`` for a record served by ``hypgraph serve --writable`` — under ``budget``.
     ``models``: one model for every seat, a mapping by seat name / role / model id, or a function of the seat.
     ``resume``: the investigation (id or code) a previous run of this task left in the record — the task is not
-    seeded again, orders left open are taken over, and this run is filed as a new run node that resumes it."""
+    seeded again, orders left open are taken over, and this run is filed as a new run node that resumes it.
+    ``reproducer``: ``(source) -> stdout`` (sync or async) that re-executes a worker's registered code in the host's
+    sandbox; every result with code is re-run once by the instrument before review (see reproduce.py)."""
     if not seats:
         raise ValueError("at least one seat")
     t0 = time.time()
@@ -123,7 +125,7 @@ async def run(task: Task, seats: Sequence[Seat], models: ModelSpec, *, record: s
     rid = rec.file_run(inv, config)
     sched = Scheduler(rec, inv, seats, model_for, meter, data_tools=data_tools, preamble=task.preamble(),
                       on_return=on_return, lease_minutes=lease_minutes, external_poll_s=external_poll_s,
-                      external_timeout_s=external_timeout_s, header=task.header)
+                      external_timeout_s=external_timeout_s, header=task.header, reproducer=reproducer)
     for s in seats:
         if s.external:
             log.info("external seat %s: %s", s.name, s.mcp_hint(str(rec.path)))

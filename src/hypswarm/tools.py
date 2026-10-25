@@ -63,13 +63,19 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter)
         return f"added {n['code']} — {n['state']['sentence']}" + _tail(n, meter)
 
     def register_run(name: str, result_summary: str, values: dict[str, Any] | None = None, outcome: str = "",
-                     experiment: str = "", code: str = "") -> str:
-        """Record a computation you ran and the result it produced: values {name: {value, unit} | {k, n}}.
-        experiment: the experiment it executes, if any. The result counts toward your order by itself."""
+                     experiment: str = "", code: str = "", claim: str = "", answers: str = "", scope: str = "",
+                     claim_kind: str = "") -> str:
+        """Record a computation you ran and the result it produced: values {name: {value, unit} | {k, n}}; code: the
+        exact code you ran (the instrument re-executes it, so a reviewer needn't). experiment: the experiment it
+        executes, if any. claim (optional): the sentence this result lets you assert — written in the same call,
+        derived from the result, its numbers bound to these values; answers: the question code it answers; scope:
+        under which conditions it holds. The result counts toward your order by itself; a claim settles a question."""
         try:
             links = [{"rel": "executes", "to": record.resolve(experiment, inv)}] if experiment.strip() else []
-            r = record.create(author=me, type="run", inv=inv, links=links, fields={
-                "kind": "agent", "name": name[:300], "state": "succeeded", "note": code[:1500]})
+            rfields: dict[str, Any] = {"kind": "agent", "name": name[:300], "state": "succeeded", "note": code[:1500]}
+            if code.strip():
+                rfields["config"] = {"source": code[:18000], "language": "python"}
+            r = record.create(author=me, type="run", inv=inv, links=links, fields=rfields)
             rf: dict[str, Any] = {"summary": result_summary, "values": values or {}, "kind": "computed"}
             if outcome:
                 rf["outcome"] = outcome
@@ -77,7 +83,26 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter)
                                 links=[{"rel": "produced", "from": r["id"]}])
         except (GraphError, KeyError) as e:
             return _err(e)
-        return f"run {r['code']} → result {res['code']}" + _tail(res, meter)
+        out = f"run {r['code']} → result {res['code']}"
+        if claim.strip():
+            cf: dict[str, Any] = {"statement": claim, "scope": scope or result_summary}
+            if claim_kind:
+                cf["kind"] = claim_kind
+            cl_links: list[dict[str, Any]] = [{"rel": "derived_from", "to": res["id"]},
+                                              {"rel": "supports", "from": res["id"],
+                                               "why": "the result this claim's numbers come from"}]
+            if answers.strip():
+                try:
+                    cl_links.append({"rel": "answers", "to": record.resolve(answers, inv)})
+                except (GraphError, KeyError) as e:
+                    return out + f"\n  claim not written: {e}" + _tail(res, meter)
+            try:
+                c = record.create(author=me, type="claim", inv=inv, fields=cf, links=cl_links)
+            except (GraphError, KeyError) as e:
+                return out + f"\n  claim refused: {e}" + _tail(res, meter)
+            out += f" → claim {c['code']} — {c['state']['sentence']}"
+            return out + _tail(c, meter)
+        return out + _tail(res, meter)
 
     def review(node: str, verdict: str, method: str, notes: str) -> str:
         """Review a claim or result: checked | pass | fail | objection | resolved | inconclusive | comment. Say how
