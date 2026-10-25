@@ -1,5 +1,6 @@
 """
     hypswarm run --task task.toml --seats seats.toml --record study.hypgraph [--budget-calls 150 --budget-usd 2]
+    hypswarm run --task task.toml --seats seats.toml --record-url http://127.0.0.1:8765   # hypgraph serve --writable
     hypswarm status --record study.hypgraph
     hypswarm report --record study.hypgraph
 
@@ -34,6 +35,7 @@ import os
 import sys
 import tomllib
 from pathlib import Path
+from typing import Any
 
 from . import __version__
 from .budget import Budget, Pricing
@@ -77,7 +79,11 @@ def cmd_run(a: argparse.Namespace) -> int:
         return cache[mid]
     pricing = Pricing(*map(float, a.pricing.split(","))) if a.pricing else None
     budget = Budget(max_calls=a.budget_calls, max_usd=a.budget_usd)
-    r = asyncio.run(run(task, seats, model_for, record=a.record, budget=budget, pricing=pricing))
+    record: Any = a.record
+    if a.record_url:
+        from .http_record import HttpRecord
+        record = HttpRecord(a.record_url)
+    r = asyncio.run(run(task, seats, model_for, record=record, budget=budget, pricing=pricing))
     print(r.report)
     print(f"\n--- {r.stopped} · {r.usage['calls']} calls · ${r.usage['usd']:.4f} · {r.seconds}s · record {r.record_path}",
           file=sys.stderr)
@@ -114,6 +120,7 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--task", required=True)
     r.add_argument("--seats", required=True)
     r.add_argument("--record", default="")
+    r.add_argument("--record-url", default="", help="a record served by `hypgraph serve --writable`")
     r.add_argument("--model", default="", help="default model id for seats without one")
     r.add_argument("--base-url", default="", help="OpenAI-compatible endpoint (default OPENAI_BASE_URL)")
     r.add_argument("--timeout", type=float, default=180.0)

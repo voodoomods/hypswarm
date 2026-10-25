@@ -86,20 +86,22 @@ def _model_for(models: ModelSpec, default: ChatModel | None) -> Callable[[Seat],
     return pick
 
 
-async def run(task: Task, seats: Sequence[Seat], models: ModelSpec, *, record: str | Path | None = None,
+async def run(task: Task, seats: Sequence[Seat], models: ModelSpec, *, record: str | Path | Any = None,
               budget: Budget | None = None, pricing: Pricing | None = None, data_tools: Sequence[Tool] = (),
               spend: Any = None, external_meter: Callable[[], float] | None = None,
               default_model: ChatModel | None = None,
               on_return: Callable[[Scheduler, int], None] | None = None, lease_minutes: int = 240,
               external_poll_s: float = 1.0, external_timeout_s: float | None = None) -> RunResult:
-    """Run ``task`` with ``seats`` on a record at ``record`` (a path, or in memory), under ``budget``.
+    """Run ``task`` with ``seats`` on a record at ``record`` — a path, in memory, or a record client such as
+    ``HttpRecord`` for a record served by ``hypgraph serve --writable`` — under ``budget``.
     ``models``: one model for every seat, a mapping by seat name / role / model id, or a function of the seat."""
     if not seats:
         raise ValueError("at least one seat")
     t0 = time.time()
     meter = Meter(budget or Budget(), pricing, external_meter)
-    rec = LocalRecord(record, seats, spend=spend)
-    inv = rec.start(task.title, task.mission, task.questions, success=task.success, files=task.files)
+    rec: Any = record if hasattr(record, "briefing") else LocalRecord(record, seats, spend=spend)
+    inv = rec.start(task.title, task.mission, task.questions, success=task.success, files=task.files,
+                    reviewers=[s.name for s in seats if s.role == "reviewer"])
     model_for = _model_for(models, default_model)
     from . import __version__
     config = {"hypswarm": __version__,
@@ -114,14 +116,14 @@ async def run(task: Task, seats: Sequence[Seat], models: ModelSpec, *, record: s
                       external_timeout_s=external_timeout_s)
     for s in seats:
         if s.external:
-            log.info("external seat %s: %s", s.name, s.mcp_hint(rec.g.path))
+            log.info("external seat %s: %s", s.name, s.mcp_hint(str(rec.path)))
     try:
         sr = await sched.run()
         rec.finish_run(rid, "succeeded" if sr.stopped == "settled" else "interrupted", sr.stopped)
     except Exception as e:
         rec.finish_run(rid, "failed", f"{type(e).__name__}: {e}")
         raise
-    out = RunResult(inv=inv, record_path=rec.g.path, stopped=sr.stopped, report=sr.report,
+    out = RunResult(inv=inv, record_path=str(rec.path), stopped=sr.stopped, report=sr.report,
                     report_accepted=sr.report_accepted, board=rec.question_board(inv), orders=rec.orders(inv),
                     usage=meter.summary(), scheduler=sr, seconds=round(time.time() - t0, 1), run_node=rid)
     log.info("run %s: %s in %d calls, $%.4f", inv, sr.stopped, meter.total.calls, meter.usd)

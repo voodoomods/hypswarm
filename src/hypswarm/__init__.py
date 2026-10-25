@@ -10,8 +10,9 @@ to judge exceptions. A solo scientist and an orchestrated swarm are the same pro
 """
 
 from .budget import Budget, Meter, Pricing
+from .http_record import HttpRecord
 from .run import RunResult, Task, run
 from .seats import Seat
 
 __version__ = "0.1.0a1"
-__all__ = ["Budget", "Meter", "Pricing", "RunResult", "Seat", "Task", "__version__", "run"]
+__all__ = ["Budget", "HttpRecord", "Meter", "Pricing", "RunResult", "Seat", "Task", "__version__", "run"]

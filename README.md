@@ -72,6 +72,20 @@ hypgraph --db study.hypgraph --as nicolas mcp     # in Claude Code, Cursor, or a
 The record can't tell a person from an agent except by name, and it holds them to the same rules. If the lease
 runs out the order is returned on the seat's behalf and the scheduler decides, as for any worker that stopped.
 
+## One record server, many workers
+
+Workers don't have to share a process. Serve the record and point the run at it:
+
+```bash
+hypgraph --db study.hypgraph serve --writable --no-browser        # the record server
+hypswarm run --task task.toml --seats seats.toml --record-url http://127.0.0.1:8765
+```
+
+In Python, `run(..., record=HttpRecord(url))`. Every write still goes through the record's checks, the file
+still verifies by hash, and workers on other processes or machines are stateless. The server authenticates
+nobody by itself: put it behind your own auth before exposing it beyond localhost, and pass what it needs as
+`HttpRecord(url, headers=...)`.
+
 ## Providers
 
 The core ships `OpenAICompatible` (DeepInfra, OpenAI, NVIDIA NIM, vLLM, Ollama, most gateways) and a scripted
