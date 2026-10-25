@@ -43,14 +43,15 @@ class Record(Protocol):
 
 class LocalRecord:
     """A HypGraph record in this process. Policy: the reviewer seats' verdicts count; ``instrument`` files
-    lab-recorded runs; the harness itself writes as ``harness`` — an ordinary author that owns the orders it
-    issues, held to the same rules as everyone (it writes no claims)."""
+    lab-recorded runs; the harness itself writes as ``harness`` — an author that owns the orders it issues, held
+    to the same rules as everyone (it writes no claims) and **reserved**, so no outside caller of a served copy
+    of this record can issue, cancel or settle orders in its name."""
 
     def __init__(self, path: str | Path | None, seats: Sequence[Seat], *, spend: Any = None,
                  max_creates_per_minute: int = 600):
         reviewers = frozenset(s.name for s in seats if s.role == "reviewer")
         self.policy = Policy(reviewers=reviewers, instrument=INSTRUMENT, operator="operator",
-                             max_creates_per_minute=max_creates_per_minute)
+                             max_creates_per_minute=max_creates_per_minute, extra_reserved=frozenset({HARNESS}))
         self.g = Graph(str(path) if path else None, policy=self.policy, spend=spend)
 
     # the surface

@@ -1,8 +1,10 @@
 """
 The record over HTTP: workers talk to ``hypgraph serve --writable`` instead of sharing one Graph in a process.
 One record server, many stateless workers — on other processes or machines — and the record is still the only
-shared state. The server authenticates nobody by itself; put it behind your own auth (a bearer, a reverse proxy)
-before exposing it beyond localhost, and pass that as ``headers``.
+shared state. Writes are bound to a bearer token when the server was started with ``--token``: pass it as
+``token=``. The swarm's own token must cover the harness and every seat it runs (``SECRET=harness,analyst,…``),
+because this one client writes as each of them; an outside seat gets a token bound to its own name only. A server
+without tokens authenticates nobody: keep it on localhost or behind your own auth (``headers=``).
 
 Same surface as LocalRecord (the ``Record`` protocol plus start / file_run / finish_run), so ``run(...,
 record=HttpRecord(url))`` is the only change.
@@ -21,12 +23,20 @@ from hypgraph import GraphError
 from .record import HARNESS
 
 
+class AuthError(GraphError):  # type: ignore[misc]  # hypgraph ships no py.typed yet: GraphError is Any here
+    """The record server refused the caller's identity (no token, an unknown token, or an author the token isn't
+    bound to) — not a refusal of the write's content."""
+
+
 class HttpRecord:
     def __init__(self, base_url: str, *, headers: Mapping[str, str] | None = None, timeout_s: float = 30.0,
-                 client: httpx.Client | None = None):
+                 client: httpx.Client | None = None, token: str = ""):
         self.base_url = base_url.rstrip("/")
         self.path = self.base_url                       # what the run's provenance and the MCP hint show
-        self._c = client or httpx.Client(base_url=self.base_url, headers=dict(headers or {}),
+        hdrs = dict(headers or {})
+        if token:
+            hdrs["Authorization"] = f"Bearer {token}"
+        self._c = client or httpx.Client(base_url=self.base_url, headers=hdrs,
                                          timeout=httpx.Timeout(timeout_s, connect=10.0))
 
     def close(self) -> None:
@@ -43,6 +53,8 @@ class HttpRecord:
             detail = r.text
         if r.status_code == 404:
             raise KeyError(detail)
+        if r.status_code == 401 or (r.status_code == 403 and "token" in str(detail)):
+            raise AuthError(f"{detail}")
         raise GraphError(f"{detail}")
 
     def _get(self, path: str, **params: Any) -> Any:
