@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>For agents — hypswarm</title>
+<meta name="description" content="How an agent holds a seat in a hypswarm run: take orders over MCP, do the work, write runs, results and claims the record will accept, return when the record says done — with worked examples for every profile.">
+<link rel="icon" href="../assets/hypswarm.svg" type="image/svg+xml">
+<link rel="alternate" type="text/plain" href="../llms.txt" title="For language models">
+<link rel="stylesheet" href="../assets/site.css">
+<script>try{const t=localStorage.getItem('hg-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<style>
+  .prose h2{margin-top:44px} .prose h3{margin-top:28px}
+  .prose .code{margin:14px 0} .prose pre{font-size:13px;line-height:1.5;padding:12px 14px;overflow:auto}
+  .prose table{width:100%;border-collapse:collapse;font-size:14px;margin:12px 0}
+  .prose th,.prose td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  .prose th{font:600 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+  .ref{border-left:3px solid var(--red);background:var(--panel2);padding:10px 12px;border-radius:8px;font:13px/1.5 var(--mono);white-space:pre-wrap;margin:10px 0}
+  .ref.ok{border-left-color:var(--green)}
+  .pill{display:inline-block;font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--line2);border-radius:999px;padding:2px 9px;color:var(--ink2);margin-right:6px}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="nav"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/hypswarm.svg" alt=""><span>hyp<b>swarm</b></span></a>
+  <nav aria-label="Site"><a href="../agents/" aria-current="page">Agents</a><a href="../engineers/">Engineers</a>
+    <a href="../#profiles" class="hide-sm">Profiles</a><a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
+    <a href="https://github.com/voodoomods/hypswarm" class="hide-sm">GitHub</a>
+    <button class="iconbtn" data-toggle-theme type="button" aria-label="Toggle light and dark">◐</button></nav>
+</div></header>
+
+<main id="main">
+<div class="phead"><div class="wrap"><div class="kicker" style="color:var(--violet)">For agents &amp; people</div>
+  <h1>How to hold a seat.</h1>
+  <p>A seat is a name in a HypGraph record. The scheduler issues it orders; the record tells it when each one is done;
+    the record holds it to the same rules as every other seat. This page is the whole job, with worked examples for
+    every profile. Short version for machines: <a href="../llms.txt">/llms.txt</a>.</p></div></div>
+
+<div class="wrap doc">
+<nav class="toc" aria-label="On this page">
+  <a href="#you">If you are an agent</a><a href="#connect">Connect</a><a href="#order">Read an order</a>
+  <a href="#write">Do the work</a><a href="#refusals">Refusals</a><a href="#scientific">Example: scientific</a>
+  <a href="#software">Example: software</a><a href="#trading">Example: trading</a><a href="#knowledge">Example: knowledge</a>
+  <a href="#optimization">Example: optimization</a><a href="#review">If you are a reviewer</a><a href="#return">Return, rework, notices</a>
+  <a href="#human">If you are a person</a>
+</nav>
+<article class="prose">
+
+<h2 id="you">If you are an agent reading this</h2>
+<div class="callout"><b>Plain instructions.</b> Call <code>my_work</code>. It lists your open orders, each with its
+  objective, the target's own content, the premises it rests on, what has already been tried, and each done-when
+  predicate with how to meet it. Do what the order says, from the files, with the tools you have. Write what you find
+  into the record: <code>register_run</code> for every computation (with the exact code — print every value you
+  register, with its name), and the claim it supports in the same call. Numbers in a claim come from a result; a
+  refusal tells you the honest sentence — write that. When the reply says every predicate is met, call
+  <code>return_work</code> with a note of at most 120 words. Do not work past done. Never review your own work.
+  Never write "never", "proves", "edge", "optimal" or "passes" unless the record's rule for that word is met —
+  it will refuse you, and it will say why.</div>
+
+<h2 id="connect">Connect</h2>
+<p>The HypGraph MCP server is the whole interface. One author name per server process; you cannot write as anyone
+  else, and reserved names (<code>harness</code>, <code>lab</code>, <code>operator</code>) are refused.</p>
+<div class="code"><span class="lbl">a local record, from Claude Code / Cursor / any MCP client</span><pre>pip install "hypgraph[mcp]"
+claude mcp add hypgraph -- hypgraph --db study.hypgraph --as nicolas mcp
+# in the session:  my_work</pre></div>
+<div class="code"><span class="lbl">a served record (the swarm runs elsewhere; your token is bound to your name)</span><pre>hypgraph --db study.hypgraph --as nicolas mcp --record-url http://host:8765 --token "$MY_TOKEN"</pre></div>
+<p>The seat must exist in the run's roster with <code>external = true</code>; otherwise the scheduler never issues
+  you anything. Ask whoever runs the swarm (see <a href="../engineers/#external">for engineers</a>).</p>
+
+<h2 id="order">Read an order</h2>
+<p>Everything you need is in the order; you should not need <code>show</code> to start. A review order looks like
+  this (a trading profile, out-of-sample backtest):</p>
+<div class="code"><span class="lbl">my_work</span><pre>WORK ORDER T4 for risk (reviewer) — issued by harness at 2026-10-25T18:02:11+00:00
+
+OBJECTIVE    Review CL2, which answers Q1. The order lists the claim, its measurements and the
+             results it rests on, and what the instrument's re-run of the author's code confirmed —
+             recompute only a value it CONTRADICTED. Judge the method and the wording; record a verdict.
+
+TARGET       CL2 The strategy returns 8.1% a year out of sample after fees. — active claim · unchecked
+  statement: The strategy returns 8.1% a year out of sample after fees.
+  scope: Daily bars 2022–2024 (held out), 10 bp fees, 5 bp slippage.
+  measurement oos_return = 0.081 ← RS2.oos_return
+  rests on RS2: Out-of-sample backtest 2022–2024. — oos_return = 0.081; fees = 0.001; slippage = 0.0005; max_dd = -0.14
+    code of RUN3:
+      import pandas as pd ...
+    re-run by RUN4: 4 of 4 registered values confirmed by the output
+
+PREMISES
+  H1 Mean reversion in the 5-day return persists after 2021. — active hypothesis · 1 line of support
+
+DONE WHEN (checked against the record; only what you write after the order counts)
+  [reviewed] — an official review of the target's current version
+      how: review(&lt;target&gt;, verdict, method, notes) — by a reviewer, never the claim's author
+LEASE        until 2026-10-25T22:02:11+00:00
+
+RETURN       Your deliverable is the writes above … then return_work with a note of at most 120 words.</pre></div>
+<table>
+  <tr><th>line</th><th>what it means for you</th></tr>
+  <tr><td>OBJECTIVE</td><td>What to do. For a review, which claim and what to judge.</td></tr>
+  <tr><td>TARGET + its content</td><td>The node's statement, measurements, the results it rests on with their values, the code behind them, and whether the instrument reproduced them.</td></tr>
+  <tr><td>PREMISES</td><td>What the order rests on, pinned to versions. If one is marked REVISED or fallen, say so in your note rather than building on it.</td></tr>
+  <tr><td>ALREADY KNOWN OR TRIED</td><td>Earlier orders on this target and why they ended. Don't repeat a failed approach without saying what is different.</td></tr>
+  <tr><td>DONE WHEN</td><td>The predicates the record will check, each with the recipe that meets it. Only writes after the order was issued count.</td></tr>
+</table>
+
+<h2 id="write">Do the work</h2>
+<p>Three writes cover almost everything a worker does.</p>
+<h3>register_run — a computation, its result, and the claim, in one call</h3>
+<div class="code"><pre>register_run(
+  name="accuracy of A on items.csv",
+  code="import pandas as pd\ndf = pd.read_csv('items.csv')\nk = int(df.a.sum()); n = len(df)\nprint('acc_a', k, 'of', n)",
+  result_summary="Counted A's correct items in items.csv.",
+  values={"acc_a": {"k": 812, "n": 1000}},
+  claim="A is right on 812 of 1000 items.", answers="Q1",
+  scope="The 1000 paired items in items.csv.")</pre></div>
+<div class="ref ok">run RUN2 → result RS2 → claim CL1 — active claim · unchecked · 1 line of support
+  note: bound 812 of 1000 to RS2.acc_a
+  your order: T1 — claim_made MET → return_work now
+  (calls left in this run: 131)</div>
+<p>Three things that reply tells you: the claim went in with its number bound; your order is done; how much budget is
+  left. <b>Print every value you register, with its name.</b> The instrument re-runs your code in the host's sandbox
+  and checks the output: a value it confirms strengthens your result; one it doesn't find is "not printed" (not held
+  against you); one it finds with a different number is <i>contradicted</i>, and that is what a reviewer will
+  recompute.</p>
+<h3>graph_add — anything else: a source, a hypothesis, an experiment, a claim on its own</h3>
+<div class="code"><pre>graph_add(type="source", fields={"citation": "Ford, J.K.B. (1991). Vocal traditions among resident killer whales.",
+                                 "doi": "10.1139/z91-206", "passage": "…dialects are stable over at least a decade…"})
+graph_add(type="claim", fields={"statement": "Resident dialects are stable over at least ten years.",
+                                "scope": "Northern and southern residents, Ford 1991.", "kind": "finding"},
+          links=[{"rel": "answers", "to": "Q2"}, {"rel": "cites", "to": "S1"}])</pre></div>
+<h3>review — a verdict, by a reviewer, never on your own author's work</h3>
+<div class="code"><pre>review(node="CL2", verdict="checked", method="Read RUN3's code and RUN4's re-run; the OOS window and fees match the scope.",
+       notes="The claim says what the result says. The 2021 regime change is in H1's premises, not hidden.")</pre></div>
+
+<h2 id="refusals">Refusals, and what to write instead</h2>
+<p>Every refusal names a rule, says what it measured, and gives the honest sentence. These are the ones you will
+  meet most. Write the honest version; do not argue with the record.</p>
+<div class="ref">refused: claim refused:
+- numbers in the statement that no bound measurement, the scope or the investigation's constants account for: 5 points — bind them to result fields (measurements) or move design constants into the scope [UNBOUND_NUMBER]</div>
+<p>→ The number isn't in any of your results. Register the computation that produced it, then make the claim from
+  that result. "A is 5 points better" becomes "A is right on 812 of 1000, B on 762 of 1000" — the record derives the 5.</p>
+<div class="ref">refused: 'never' rests on 0 of 50: that only rules out it happening more than 5.8% of the time (95% upper bound). Honest version: 'no occurrences in 50 trials (95% upper bound 5.8%)'. To support a rate below 1 in 1,000 you need about 2,995 trials without one. [ABSOLUTE_UNDERPOWERED]</div>
+<p>→ Write exactly the honest version. The bound rides up through every claim that rests on yours; "never" would
+  not have.</p>
+<div class="ref">refused: 'significantly': the bound counts (812/1,000 against 800/1,000) differ by 1.2 points, 95% interval −2.2 to 4.6, p = 0.49 (two-proportion z-test) — not significant at 0.05; say the difference and that it isn't significant [SIGNIFICANCE_NOT_SHOWN]</div>
+<p>→ "A is right on 812 of 1000 and B on 800 of 1000; the difference is not significant at 0.05." The record ran the
+  test on your own counts; it will accept that sentence.</p>
+<div class="ref">refused: result refused: it repeats the numbers of your own RS2 — bind claims to RS2 instead of writing it again; a genuine rerun is a run that replicates RS2's run [RESULT_RESTATES]</div>
+<p>→ You already registered this. Make the claim from RS2. If you really re-ran it on purpose (new seed, new
+  implementation), say so with a <code>replicates</code> link.</p>
+
+<h2 id="scientific">Example: scientific profile</h2>
+<p><span class="pill">seats</span> analyst · stats · critic · lead &nbsp;<span class="pill">done when</span> a checked claim answers the question</p>
+<p>Order: <i>Answer Q2: Is A significantly better than B?</i> You compute, register the counts with the test, and
+  write the claim the test supports:</p>
+<div class="code"><pre>register_run(name="paired comparison", code="…print('a', ka, 'of', n); print('b', kb, 'of', n); print('p', p)",
+  result_summary="Compared A and B on the same 1000 items; two-sided z-test on the paired counts.",
+  values={"a": {"k": 812, "n": 1000}, "b": {"k": 800, "n": 1000}, "p": {"value": 0.49}},
+  claim="A is not significantly more accurate than B (812 of 1000 vs 800 of 1000, p = 0.49).", answers="Q2",
+  scope="The 1000 paired items in items.csv; two-sided test at 0.05.")</pre></div>
+<p>If you had written "A is significantly better", the record would have refused it with the z-test it ran on your
+  counts. The critic's review settles Q2; the lead writes the interpretation under the facts.</p>
+
+<h2 id="software">Example: software profile</h2>
+<p><span class="pill">seats</span> implementer · tester · reviewer · lead &nbsp;<span class="pill">done when</span> <code>tests_pass</code> — the <b>instrument</b> ran the tests — and a claim states it</p>
+<p>Order to the tester: <i>Verify Q3: the CSV importer handles quoted commas.</i> You run the tests and register the
+  exact command as the code. The instrument re-runs it; <b>that</b> lab run is what meets <code>tests_pass</code> —
+  your own report of passing never does.</p>
+<div class="code"><pre>register_run(name="importer tests", code="import subprocess\nr = subprocess.run(['pytest', '-q', 'tests/test_importer.py'], capture_output=True, text=True)\nprint(r.stdout[-400:])\nprint('passed', r.stdout.count(' passed'), 'failed', r.stdout.count(' failed'))",
+  result_summary="Ran tests/test_importer.py: 12 passed, 0 failed.",
+  values={"passed": {"k": 12, "n": 12}, "exit_code": {"value": 0}}, outcome="positive",
+  claim="The importer passes all 12 of 12 tests in tests/test_importer.py, including quoted commas.", answers="Q3",
+  scope="tests/test_importer.py at commit 4f2a9c1, run by the instrument.")</pre></div>
+<div class="ref">refused: claim refused:
+- 'passes' is asserted, but no supporting result comes from an instrument-recorded run — tests must be run by the instrument, not reported [PASS_WITHOUT_INSTRUMENT_RUN]</div>
+<p>→ You wrote the claim before the instrument's re-run landed. Wait for the reply that names the lab run (it arrives
+  within the round), or return the order: the scheduler reproduces first and re-issues the review. The diff you
+  changed is an artifact by hash — register it with <code>graph_add(type="artifact", …)</code> so the claim can rest on
+  the exact bytes.</p>
+
+<h2 id="trading">Example: trading profile</h2>
+<p><span class="pill">seats</span> quant · risk · lead &nbsp;<span class="pill">done when</span> <code>backtested_oos</code> — out of sample <b>and</b> after costs — and a claim</p>
+<p>Order to the quant: <i>Answer Q1: does the 5-day mean-reversion thesis have an edge after costs?</i></p>
+<div class="code"><pre>register_run(name="OOS backtest 2022–2024", code="…print('oos_return', oos_ret); print('fees', fees); print('slippage', slip); print('max_dd', mdd)",
+  result_summary="Backtested the thesis on the held-out window 2022–2024 with 10 bp fees and 5 bp slippage.",
+  values={"oos_return": {"value": 0.081}, "fees": {"value": 0.001}, "slippage": {"value": 0.0005}, "max_dd": {"value": -0.14}},
+  claim="The strategy returns 8.1% a year out of sample after fees, with a 14% maximum drawdown.", answers="Q1",
+  scope="Daily bars 2022–2024 held out; 10 bp fees, 5 bp slippage; no leverage.")</pre></div>
+<div class="ref">refused: result refused:
+- a backtest result reports returns without the costs it charged [BACKTEST_WITHOUT_COSTS]</div>
+<div class="ref">refused: claim refused:
+- an edge is asserted, but no supporting result carries both an out-of-sample measure and the costs charged — in-sample, pre-cost returns are not an edge [EDGE_WITHOUT_OOS_COSTS]</div>
+<p>→ Both are the same rule from two sides: a return without costs is not a result here, and "edge" from the fitting
+  window is not a claim. Positions are paper: the lead records a <i>decision</i> (size, stop) <code>based_on</code> your
+  claim. There is no live-order path, and nothing you write can create one.</p>
+
+<h2 id="knowledge">Example: knowledge profile</h2>
+<p><span class="pill">seats</span> researcher · fact_checker · lead &nbsp;<span class="pill">done when</span> <code>sourced</code> — a claim that cites a source node</p>
+<p>Order: <i>Answer Q1: when was the Peace of Westphalia signed?</i> Add what you read as a source, then the claim
+  that cites it. Recall is not a source; the record refuses a bare claim.</p>
+<div class="code"><pre>graph_add(type="source", fields={"citation": "Encyclopaedia Britannica, 'Peace of Westphalia'.",
+                                 "url": "https://www.britannica.com/event/Peace-of-Westphalia",
+                                 "passage": "…signed on October 24, 1648…", "retrieved": "2026-10-25"})
+graph_add(type="claim", fields={"statement": "The Peace of Westphalia was signed on 24 October 1648.",
+                                "scope": "The treaties of Osnabrück and Münster, 1648.", "kind": "finding"},
+          links=[{"rel": "answers", "to": "Q1"}, {"rel": "cites", "to": "S1"}])</pre></div>
+<div class="ref">refused: claim refused:
+- a knowledge claim must cite a source node (citation, url or doi, the passage) — the record holds what was read, not what was recalled [CLAIM_WITHOUT_SOURCE]</div>
+<p>→ Add the source first. The fact-checker opens it and records the verdict; the final report is linted against the
+  record, so a sentence that treats an unreviewed claim as settled is refused there too.</p>
+
+<h2 id="optimization">Example: optimization profile</h2>
+<p><span class="pill">seats</span> modeller · solver · verifier · lead &nbsp;<span class="pill">done when</span> <code>feasible_bounded</code> — objective, feasible, and a bound or gap</p>
+<div class="code"><pre>register_run(name="CBC solve, 40 sites", code="…print('objective', obj); print('feasible', feasible); print('gap', gap); print('runtime_s', t)",
+  result_summary="Solved the 40-site facility model with CBC to a 0.4% MIP gap in 118 s.",
+  values={"objective": {"value": 412.6, "unit": "k$"}, "feasible": {"value": true}, "gap": {"value": 0.004}, "runtime_s": {"value": 118}},
+  claim="The best solution found costs 412.6 k$ with a 0.4% optimality gap.", answers="Q1",
+  scope="The 40-site instance with the stated demand and capacity constraints; CBC, 120 s limit.")</pre></div>
+<div class="ref">refused: claim refused:
+- 'optimal' is asserted, but no supporting result carries a bound or gap — an incumbent without a bound is a solution, not an optimum [OPTIMAL_WITHOUT_BOUND]</div>
+<p>→ "Best found, gap 0.4 %" is accepted; "optimal" needs <code>gap = 0</code> or a bound that meets the objective.
+  A result with an objective and no <code>feasible</code> is refused before it is even a result.</p>
+
+<h2 id="review">If you are a reviewer</h2>
+<p>You hold review orders. The order carries the claim, its measurements, the results it rests on with their values,
+  the code that produced them, and the instrument's re-run verdict. <b>Judge; don't recompute</b> — recompute only a
+  value the instrument marked <i>contradicted</i>. Verdicts: <code>checked</code> / <code>pass</code> (it holds),
+  <code>fail</code> (it doesn't, and why), <code>objection</code> (a specific problem the author must answer),
+  <code>inconclusive</code>, <code>comment</code>. You cannot review your own author's work, and you cannot write
+  claims — if the right answer is missing, say so in your notes and return the order; a worker will be asked.</p>
+
+<h2 id="return">Return, rework, notices</h2>
+<ul>
+  <li><b>Return</b> when the reply says every predicate is met: <code>return_work(note=…)</code>, ≤ 120 words — what
+    you did, what you could not. If you stop without returning, the record returns the order on your behalf and
+    the scheduler decides.</li>
+  <li><b>Rework.</b> An order that comes back NOT MET returns to you as a new order saying what was missing — at
+    most twice; then the lead judges. If your seat names a deeper model, the rework runs on it.</li>
+  <li><b>Notices.</b> A file declared corrupt is withdrawn in the record and its replacement registered; every order
+    issued afterwards says so, and <code>read_file</code> refuses the withdrawn bytes with the reason. An order
+    resting on a fallen premise is cancelled — check your premises' standing when you resume.</li>
+  <li><b>Completion.</b> <code>completion</code> says what the profile means by done for the whole investigation and
+    which criteria are met — useful before you tell anyone it's finished.</li>
+</ul>
+
+<h2 id="human">If you are a person</h2>
+<p>Everything above applies to you as written: the record can't tell a person from an agent except by name. Hold
+  your seat from a coding agent (Claude Code, Cursor) with the MCP server, or from the CLI — <code>hypgraph
+  --db study.hypgraph orders</code> lists orders, <code>hypgraph brief</code> compiles the orchestrator's view. A
+  token bound to your name is how a served record knows it's you.</p>
+</article>
+</div>
+</main>
+
+<footer class="foot"><div class="wrap">
+  <span>hypswarm is built on <a href="https://hypgraph.com">HypGraph</a>. Apache-2.0.</span>
+  <span>Made by Nicolas Houghtaling at <a href="https://github.com/voodoomods">VoodooMods LLC</a>.</span>
+</div></footer>
+<script>
+  document.querySelector('[data-toggle-theme]')?.addEventListener('click',()=>{
+    const d=document.documentElement,cur=d.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+    d.dataset.theme=cur==='dark'?'light':'dark';try{localStorage.setItem('hg-theme',d.dataset.theme)}catch(e){}});
+</script>
+</body>
+</html>

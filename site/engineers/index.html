@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>For engineers — hypswarm</title>
+<meta name="description" content="Run a hypswarm: install, write a task and pick a profile, register your toolkits, run against a local or served record, let the instrument reproduce, resume and escalate — with a worked setup for every profile.">
+<link rel="icon" href="../assets/hypswarm.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/site.css">
+<script>try{const t=localStorage.getItem('hg-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<style>
+  .prose h2{margin-top:44px} .prose h3{margin-top:28px}
+  .prose .code{margin:14px 0} .prose pre{font-size:13px;line-height:1.5;padding:12px 14px;overflow:auto}
+  .prose table{width:100%;border-collapse:collapse;font-size:14px;margin:12px 0}
+  .prose th,.prose td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  .prose th{font:600 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+  .pill{display:inline-block;font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--line2);border-radius:999px;padding:2px 9px;color:var(--ink2);margin-right:6px}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="nav"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/hypswarm.svg" alt=""><span>hyp<b>swarm</b></span></a>
+  <nav aria-label="Site"><a href="../agents/">Agents</a><a href="../engineers/" aria-current="page">Engineers</a>
+    <a href="../#profiles" class="hide-sm">Profiles</a><a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
+    <a href="https://github.com/voodoomods/hypswarm" class="hide-sm">GitHub</a>
+    <button class="iconbtn" data-toggle-theme type="button" aria-label="Toggle light and dark">◐</button></nav>
+</div></header>
+
+<main id="main">
+<div class="phead"><div class="wrap"><div class="kicker">For engineers</div>
+  <h1>How to run a swarm.</h1>
+  <p>A task, a profile, a budget, your tools. This page goes from install to a served record with people and agents
+    holding seats, and ends with a worked setup for each of the five profiles.</p></div></div>
+
+<div class="wrap doc">
+<nav class="toc" aria-label="On this page">
+  <a href="#install">Install</a><a href="#task">Write the task</a><a href="#profile">Pick a profile</a><a href="#tools">Register your tools</a>
+  <a href="#run">Run</a><a href="#reproduce">The instrument</a><a href="#server">A served record</a><a href="#external">People &amp; outside agents</a>
+  <a href="#resilience">Resume, escalation, notices</a><a href="#read">Read the result</a><a href="#examples">Worked setups</a><a href="#ops">Operating notes</a>
+</nav>
+<article class="prose">
+
+<h2 id="install">Install</h2>
+<p>hypswarm needs HypGraph's coordination layer, which ships with hypgraph 0.4. Until it is on PyPI, install the
+  engine from its branch:</p>
+<div class="code"><pre>python -m venv .venv && . .venv/bin/activate        # .venv\Scripts\activate on Windows
+pip install "hypgraph @ git+https://github.com/voodoomods/hypgraph@harmony-study"
+pip install git+https://github.com/voodoomods/hypswarm          # or: "hypswarm[anthropic]"
+hypswarm profiles                                               # the five rosters</pre></div>
+<p>Any OpenAI-compatible endpoint is the model (<code>OPENAI_BASE_URL</code>, <code>OPENAI_API_KEY</code>);
+  <code>hypswarm[anthropic]</code> adds the Messages API. Nothing in the box executes code or reaches a network on its
+  own — those are tools you register (below).</p>
+
+<h2 id="task">Write the task</h2>
+<div class="code"><span class="lbl">task.toml</span><pre>title   = "Does the importer handle quoted commas"
+mission = "The CSV importer in src/importer.py mis-parses quoted commas (issue #412). Fix it and prove it."
+profile = "software"
+files   = ["src/importer.py", "tests/test_importer.py", "fixtures/quoted.csv"]
+success = "Every requirement verified by a test the instrument ran."
+
+[[questions]]
+code = "Q1"
+text = "Does the importer parse fixtures/quoted.csv into 3 rows with the comma kept inside the quoted field?"
+
+[[questions]]
+code = "Q2"
+text = "Do all existing importer tests still pass after the fix?"</pre></div>
+<p>Questions are what the run must settle; keep them checkable (a number, a yes/no, a choice). Files are registered as
+  artifacts by hash and reach every worker's folder; the record's <code>read_file</code> only trusts bytes that match.</p>
+
+<h2 id="profile">Pick a profile</h2>
+<p>The profile is the record's rule-set for the discipline, pinned on the investigation and versioned. It brings a
+  roster, a paragraph of rules every seat reads, the predicates orders must meet, and what "complete" means.</p>
+<table>
+  <tr><th>profile</th><th>roster</th><th>an order is done when</th><th>the record refuses</th></tr>
+  <tr><td><code>scientific</code></td><td>analyst, stats, critic, lead</td><td>a checked claim answers the question</td><td>unbound numbers; "never" without the count; "significant" without the test</td></tr>
+  <tr><td><code>software</code></td><td>implementer, tester, reviewer, lead</td><td>the instrument ran the tests (<code>tests_pass</code>)</td><td>"passes" without an instrument run</td></tr>
+  <tr><td><code>trading</code></td><td>quant, risk, lead</td><td>out-of-sample and after costs (<code>backtested_oos</code>)</td><td>costless backtests; in-sample "edge"; any live order</td></tr>
+  <tr><td><code>knowledge</code></td><td>researcher, fact_checker, lead</td><td>a claim cites a source node (<code>sourced</code>)</td><td>claims from recall</td></tr>
+  <tr><td><code>optimization</code></td><td>modeller, solver, verifier, lead</td><td>objective + feasible + bound/gap (<code>feasible_bounded</code>)</td><td>objectives without feasibility; "optimal" without a bound</td></tr>
+</table>
+<p>Override the roster with your own <code>seats.toml</code> whenever you like; the profile's rules still apply.</p>
+<div class="code"><span class="lbl">seats.toml (optional)</span><pre>[[seats]]
+name = "implementer"
+role = "worker"
+model = "deepseek-ai/DeepSeek-V4.1-Flash"
+escalate_to = "deepseek-ai/DeepSeek-V4-Pro"        # used from the first NOT MET on this seat's work
+takes = ["implement", "fix", "importer", "parse"]
+
+[[seats]]
+name = "tester"
+role = "worker"
+takes = ["test", "verify", "regression"]
+
+[[seats]]
+name = "reviewer"
+role = "reviewer"
+
+[[seats]]
+name = "lead"
+role = "lead"
+model = "deepseek-ai/DeepSeek-V4-Pro"</pre></div>
+
+<h2 id="tools">Register your tools</h2>
+<p>Tools are named bundles from a registry. hypswarm ships <code>files</code>; a profile asks for it by default. A
+  sandbox that runs code is yours to provide — here is the shape the harmony study uses, as a subprocess in the
+  working folder, as an unprivileged user, with a kill that really kills:</p>
+<div class="code"><span class="lbl">tools.py</span><pre>import subprocess, sys
+from hypswarm import toolkits
+from hypswarm.messages import Tool
+
+def make_python(ctx):                       # ctx: record, inv, folder
+    def python(code: str) -> str:
+        """Run python 3 in your working folder (the data files are there). Print what you need; 90 s limit."""
+        p = subprocess.run(["timeout", "-s", "KILL", "90", sys.executable, "-I", "-c", code],
+                           cwd=ctx.folder, capture_output=True, text=True, timeout=100,
+                           env={"PATH": "/usr/bin:/bin", "HOME": str(ctx.folder)})
+        return (p.stdout + ("\n[stderr]\n" + p.stderr if p.stderr.strip() else ""))[:8000] or "(no output)"
+    return [Tool.from_function(python)]
+
+toolkits.register("python", make_python, "python in the run's working folder, 90 s, unprivileged")</pre></div>
+<p>A bundle a profile asks for that you haven't registered fails loudly at <code>run()</code> — the swarm never runs
+  without a tool it was promised. Seats can be restricted to named tools (<code>tools = ["files"]</code>).</p>
+
+<h2 id="run">Run</h2>
+<div class="code"><span class="lbl">shell</span><pre>export OPENAI_BASE_URL=https://api.deepinfra.com/v1/openai OPENAI_API_KEY=…
+hypswarm run --task task.toml --profile software --record issue-412.hypgraph --folder work/ \
+             --model deepseek-ai/DeepSeek-V4.1-Flash --budget-calls 150 --budget-usd 1.00 --pricing 0.2,0.006,0.6</pre></div>
+<div class="code"><span class="lbl">python</span><pre>import asyncio, tools                                  # tools.py registers "python"
+from hypswarm import Task, Budget, run
+from hypswarm.providers import OpenAICompatible
+
+task = Task(title="Quoted commas", mission=open("mission.md").read(), profile="software",
+            questions=[("Q1", "Does the importer parse fixtures/quoted.csv into 3 rows …?"),
+                       ("Q2", "Do all existing importer tests still pass?")],
+            files={p: open(p, "rb").read() for p in ("src/importer.py", "tests/test_importer.py", "fixtures/quoted.csv")})
+model = OpenAICompatible("deepseek-ai/DeepSeek-V4.1-Flash", base_url="https://api.deepinfra.com/v1/openai")
+res = asyncio.run(run(task, None, model, record="issue-412.hypgraph", folder="work/",
+                      toolkits=["files", "python"], reproducer=tools.reproducer,
+                      budget=Budget(max_calls=150, max_usd=1.0, per_order_calls=40)))
+print(res.stopped, res.usage, res.answers())
+print(res.report)</pre></div>
+<p>The budget is a rule: calls and dollars per run and per order, counted including calls in flight, shown to every
+  seat in every reply. The run ends <code>settled</code> (every question settled and the profile's completion
+  criteria met), <code>budget</code>, or <code>stuck</code> (nothing left to issue; the report says what's open).</p>
+
+<h2 id="reproduce">The instrument: reproduce, don't recompute</h2>
+<p>Pass a <code>reproducer(source) -&gt; stdout</code> — usually the same sandbox your python tool uses. Every result an
+  author registers with its code is re-run once, before any review, and the record files a <code>kind=lab</code> run
+  that <i>replicates</i> the author's run: values <b>confirmed</b>, <b>not printed</b>, or <b>contradicted</b>. The review
+  order says which, and tells the reviewer to recompute only a contradiction. In the software profile this is also
+  what <code>tests_pass</code> means: the instrument's run, not the tester's word.</p>
+<div class="code"><pre>def reproducer(source: str) -> str:            # same sandbox, same folder, same user, same limits
+    return make_python(ctx)[0].fn(source)</pre></div>
+
+<h2 id="server">A served record</h2>
+<p>Workers don't have to share a process. Serve the record, bind writes to tokens, and point runs at it. The swarm's
+  token covers the harness and its seats (one client writes as each); an outside seat's token covers its own name only.
+  The harness name is reserved — no token's wildcard includes it.</p>
+<div class="code"><pre>hypgraph --db issue-412.hypgraph serve --writable --no-browser \
+  --token "$SWARM_TOKEN=harness,implementer,tester,reviewer,lead" \
+  --token "$NIC_TOKEN=nicolas"
+hypswarm run --task task.toml --profile software --record-url http://127.0.0.1:8765      # HYPSWARM_TOKEN or HttpRecord(token=)</pre></div>
+<p>Keep the server on localhost or behind your own TLS/reverse proxy; reads are open (the Atlas needs them), writes
+  are 401 without a known token and 403 for an author the token isn't bound to.</p>
+
+<h2 id="external">People and outside agents as seats</h2>
+<p>Add a seat with <code>external = true</code>. The scheduler issues it orders like any other and waits (up to the
+  lease); whoever holds the name works the order over MCP and returns it. If the lease runs out the record returns
+  the order on their behalf and the scheduler decides, exactly as for a worker that stopped.</p>
+<div class="code"><pre>[[seats]]
+name = "nicolas"
+role = "reviewer"
+external = true
+# nicolas, elsewhere:  hypgraph --db issue-412.hypgraph --as nicolas mcp  (or --record-url … --token "$NIC_TOKEN")</pre></div>
+<p>Send them to <a href="../agents/">the agents page</a>: it is the whole job from their side.</p>
+
+<h2 id="resilience">Resume, escalation, notices</h2>
+<ul>
+  <li><b>Resume.</b> A run that died left open orders and leases in the record. <code>run(..., resume=inv)</code> adopts
+    them: open orders are re-dispatched to their seats, rework chains are read back from the record, an order whose
+    seat is gone is cancelled with the reason, and a new run node records that it resumed.</li>
+  <li><b>Escalation.</b> <code>escalate_to</code> on a seat names a deeper model, used from the first time the record
+    sends that seat's work back NOT MET. The cheap model gets the first attempt; the record's verdict — not the
+    model's confidence — moves it up.</li>
+  <li><b>Notices.</b> The world can interrupt: <code>scheduler.notify("site_b.csv was exported in µg/L", stale=["site_b.csv"],
+    add_files={"site_b_fixed.csv": data})</code> withdraws the artifact with the reason, registers the fix, reaches
+    every order issued from then on, and cancels exactly the open orders that rested on it. Workers' <code>read_file</code>
+    refuses the stale bytes.</li>
+</ul>
+
+<h2 id="read">Read the result</h2>
+<ul>
+  <li><code>res.report</code> — the facts generated from the record, the lead's interpretation under them, the
+    answers block; <code>res.answers()</code> parses it; <code>res.scheduler.events</code> is the timeline (dispatch,
+    returned, reproduced, settled, rework, escalate, notice, report_missing with the refusal texts).</li>
+  <li><code>hypgraph --db issue-412.hypgraph serve</code> — the Atlas: the graph, claims with their standing,
+    provenance, the work map, the refusal log ("overclaims caught"). <code>hypgraph brief</code> compiles the
+    orchestrator's view; <code>hypgraph orders</code> lists orders; <code>hypgraph check report.md</code> lints a
+    write-up against the record.</li>
+  <li><code>GET /api/graph/completion?inv=…</code> — the profile's criteria and whether each is met; the record
+    verifies by hash (<code>hypgraph verify</code>).</li>
+</ul>
+
+<h2 id="examples">Worked setups, one per profile</h2>
+<h3>Software — CI as the instrument</h3>
+<p><span class="pill">profile</span> software &nbsp;<span class="pill">tools</span> files, python (pytest in a checkout)</p>
+<p>Mission: fix an issue and prove it. Questions are requirements. The tester registers <code>pytest</code> commands as
+  code; the reproducer runs them in a clean checkout; <code>tests_pass</code> is met only by that run. The implementer's
+  diff is an artifact by hash; the reviewer judges the method against the code the order carries. Completion:
+  every requirement's claim rests on a passing instrument run. Hook the reproducer to your CI runner and the record
+  holds the same evidence your pipeline does — by hash.</p>
+<h3>Trading — a paper desk</h3>
+<p><span class="pill">profile</span> trading &nbsp;<span class="pill">tools</span> files, python (pandas), a read-only market-data tool you register</p>
+<p>Mission: does a thesis have an edge after costs? The quant registers backtests whose values name the window and
+  the costs; the record refuses a costless result and an in-sample "edge"; the risk seat reviews against the code;
+  the lead records a <i>decision</i> — size, stop, review date — <code>based_on</code> the claim. Completion:
+  questions settled and a position recorded. There is no order-placement tool to register, and the profile's notes
+  say so to every seat; keep it that way.</p>
+<h3>Knowledge — a sourced brief</h3>
+<p><span class="pill">profile</span> knowledge &nbsp;<span class="pill">tools</span> files, a fetch tool you register (allowlisted hosts, read-only)</p>
+<p>Mission: answer questions from sources. Researchers add source nodes (citation, URL/DOI, the passage) and claims
+  that cite them; the fact-checker opens the sources; the report is linted so no sentence treats an unreviewed claim
+  as settled. Completion: every claim cites a source. Point the fetch tool at the sources you trust; the record
+  keeps what was actually read.</p>
+<h3>Optimization — a solve with a bound</h3>
+<p><span class="pill">profile</span> optimization &nbsp;<span class="pill">tools</span> files, python (OR-Tools / PuLP / scipy)</p>
+<p>Mission: minimise cost under constraints. The modeller writes the model as a hypothesis-with-predictions and an
+  experiment (the solve configuration); the solver registers runs whose values carry objective, feasible, gap and
+  runtime; the verifier checks feasibility against the constraints in the order; "optimal" is accepted only with
+  a bound that meets the objective. Completion: a feasible incumbent with a bound.</p>
+<h3>Scientific — an eval report that holds up</h3>
+<p><span class="pill">profile</span> scientific &nbsp;<span class="pill">tools</span> files, python</p>
+<p>Mission: does model A beat model B on an item set? Analysts register counts; the record runs the test on bound
+  counts before it lets "significantly" through; the critic settles each question; the lead writes under the facts.
+  This is the setup the harmony study uses, and the one every scheduler path is tested on.</p>
+
+<h2 id="ops">Operating notes</h2>
+<ul>
+  <li><b>Per-order budget.</b> <code>per_order_calls</code> (default 40) stops one order eating the run; the lead's
+    exception turns are their own unit.</li>
+  <li><b>Lease.</b> <code>lease_minutes</code> (default 240) is how long a seat holds a target before the record
+    returns the order on its behalf.</li>
+  <li><b>Providers that stall.</b> Keep per-call timeouts short on the provider and let the scheduler's returns do
+    the rest; a worker that stops without returning is returned by the record.</li>
+  <li><b>Prompt prefixes.</b> <code>Task(header="[run <id>]")</code> puts one line first in every system prompt, so no
+    two runs share a cached prefix with a provider.</li>
+  <li><b>Capture.</b> <code>OpenAICompatible(on_request=…)</code> sees every request body before it is sent — for
+    replaying a refusal or a hang exactly.</li>
+  <li><b>Tests.</b> <code>pytest</code> runs every scheduler path on scripted models in seconds; <code>bench/stub_bench.py</code>
+    reports calls, rounds and wall time per run so a change is measured before it is described.</li>
+</ul>
+</article>
+</div>
+</main>
+
+<footer class="foot"><div class="wrap">
+  <span>hypswarm is built on <a href="https://hypgraph.com">HypGraph</a>. Apache-2.0.</span>
+  <span>Made by Nicolas Houghtaling at <a href="https://github.com/voodoomods">VoodooMods LLC</a>.</span>
+</div></footer>
+<script>
+  document.querySelector('[data-toggle-theme]')?.addEventListener('click',()=>{
+    const d=document.documentElement,cur=d.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+    d.dataset.theme=cur==='dark'?'light':'dark';try{localStorage.setItem('hg-theme',d.dataset.theme)}catch(e){}});
+</script>
+</body>
+</html>

@@ -37,7 +37,7 @@
 <a class="skip" href="#main">Skip to content</a>
 <header class="nav"><div class="wrap">
   <a class="brand" href="./"><img src="assets/hypswarm.svg" alt=""><span>hyp<b>swarm</b></span></a>
-  <nav aria-label="Site"><a href="#profiles">Profiles</a><a href="#agents">Agents</a><a href="#engineers">Engineers</a>
+  <nav aria-label="Site"><a href="#profiles">Profiles</a><a href="agents/">Agents</a><a href="engineers/">Engineers</a>
     <a href="#seats" class="hide-sm">Seats</a>
     <a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
     <a href="https://github.com/voodoomods/hypswarm" class="hide-sm">GitHub</a>
@@ -56,7 +56,7 @@
       and what counts as done is the record's rule, not a line in a prompt.</p>
 
     <div class="door" role="group" aria-label="Choose your way in">
-      <a class="portal agent" href="#agents">
+      <a class="portal agent" href="agents/">
         <div class="who">For agents &amp; people</div>
         <h2>Take a seat</h2>
         <p>A seat is a name in the record. Hold it over MCP from Claude Code, Cursor or any client: the scheduler
@@ -64,9 +64,9 @@
           as every other seat — a person or a model, it can't tell. Machine-readable: <code>/llms.txt</code>.</p>
         <pre>hypgraph --db study.hypgraph --as nicolas mcp
 # my_work → do it → return_work</pre>
-        <span class="go">How a seat works</span>
+        <span class="go">The how-to for agents &amp; people</span>
       </a>
-      <a class="portal human" href="#engineers">
+      <a class="portal human" href="engineers/">
         <div class="who">For engineers</div>
         <h2>Run a swarm</h2>
         <p>A task, a profile, a budget. The roster comes with the profile, the tools from a registry you control, the
@@ -74,7 +74,7 @@
           hash. Any OpenAI-compatible endpoint or Anthropic as the model.</p>
         <pre>pip install hypswarm
 hypswarm run --task task.toml --profile trading --record desk.hypgraph</pre>
-        <span class="go">Set it up</span>
+        <span class="go">The how-to for engineers</span>
       </a>
     </div>
   </div>
@@ -214,6 +214,7 @@ hypswarm run --task task.toml --profile trading --record desk.hypgraph</pre>
         objective, the target's own content, premises with their standing, what's already been tried, each predicate
         with how to meet it. You register runs with their code, record results, make claims; every reply tells you
         whether the order is done; you return it. <code>completion</code> tells you what the profile means by done.</p>
+      <p class="sub"><a class="btn" href="agents/">The full how-to: orders, writes, refusals, an example per profile</a></p>
       <div class="callout"><b>If you are an agent reading this.</b> Call <code>my_work</code>. Do what the order says,
         from the files, with the tools you have. Register the exact code you ran and print every value you register,
         with its name — the instrument re-runs it. Write a claim's numbers from a result; a refusal tells you the honest
@@ -247,7 +248,7 @@ hypgraph --db study.hypgraph serve --writable --token "$HYPGRAPH_TOKEN"</pre></d
         with token-bound writes — one record server, stateless workers anywhere, and the file still verifies. A run
         that died resumes from the record. The OpenAI-compatible adapter covers DeepInfra, OpenAI, NVIDIA NIM, vLLM,
         Ollama and most gateways; <code>hypswarm[anthropic]</code> adds the Messages API.</p>
-      <div class="row"><a class="btn primary" href="https://github.com/voodoomods/hypswarm">Source &amp; README</a>
+      <div class="row"><a class="btn primary" href="engineers/">The full how-to</a><a class="btn" href="https://github.com/voodoomods/hypswarm">Source &amp; README</a>
         <a class="btn" href="https://github.com/voodoomods/hypswarm/blob/main/docs/DESIGN.md">The design</a>
         <a class="btn" href="https://github.com/voodoomods/hypswarm/tree/main/docs/decisions">Decisions</a></div>
     </div>
