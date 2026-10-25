@@ -25,8 +25,11 @@ class OpenAICompatible:
     def __init__(self, model: str, *, base_url: str = "", api_key: str = "", timeout_s: float = 180.0,
                  max_retries: int = 3, max_tokens: int | None = None, reasoning_effort: str = "",
                  headers: Callable[[str], dict[str, str]] | None = None, client: httpx.AsyncClient | None = None,
-                 extra_body: dict[str, Any] | None = None):
+                 extra_body: dict[str, Any] | None = None, on_request: Callable[[dict[str, Any]], None] | None = None):
+        """``on_request(body)`` sees every request body before it is sent — for capture and replay (a hang or a
+        refusal can then be reproduced from exactly what was sent). It must not mutate the body."""
         self.name = model
+        self.on_request = on_request
         self.base_url = (base_url or os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
         self.timeout_s = timeout_s
@@ -52,6 +55,8 @@ class OpenAICompatible:
         hdr = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         if self.headers:
             hdr.update(self.headers(unit))
+        if self.on_request:
+            self.on_request(body)
         last: Exception | None = None
         for attempt in range(self.max_retries + 1):
             try:
