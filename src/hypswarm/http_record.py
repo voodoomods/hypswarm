@@ -166,13 +166,13 @@ class HttpRecord:
     # ── seeding a task (same as LocalRecord) ─────────────────
     def start(self, title: str, objective: str, questions: Iterable[tuple[str, str]], *, success: str = "",
               strict: bool = True, files: Mapping[str, bytes] | None = None,
-              reviewers: Iterable[str] = ()) -> str:
+              reviewers: Iterable[str] = (), profile: str = "") -> str:
         """Seed the task. ``reviewers`` go on the investigation itself, so their verdicts count wherever the record
         is opened — a served record's process knows nothing of the seats."""
         inv = str(self.create(author=HARNESS, type="investigation", fields={
             "title": title[:200], "objective": objective, "success_criteria": success or
             "Every question answered from the evidence, with the evidence in the record.", "strict_claims": strict,
-            "reviewers": sorted(set(reviewers))})["id"])
+            "reviewers": sorted(set(reviewers)), **({"profile": profile} if profile else {})})["id"])
         for code, text in questions:
             self.create(author=HARNESS, type="question", inv=inv, code=code, fields={"text": text})
         for name, data in (files or {}).items():

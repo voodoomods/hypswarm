@@ -18,7 +18,7 @@ SEATS = [Seat("analyst", "worker", takes=("accuracy",)), Seat("stats", "worker",
 def eager_reviewer(messages, tools):
     """A reviewer that tries to write the answer itself before reviewing."""
     done = calls_made(messages)
-    outs = tool_outputs(messages)
+    tool_outputs(messages)
     if "graph_add" not in done:
         return ("graph_add", {"type": "claim", "fields": {"statement": "A is right on 812 of 1000 items.",
                                                           "scope": "The 1000 paired items."},
@@ -61,7 +61,7 @@ def test_an_unreviewable_answer_is_reissued_to_a_worker(tmp_path):
 
 def planning_lead(messages, tools):
     """A lead that would rather plan than report: it tries add / rework / cancel, then reports."""
-    done = calls_made(messages)
+    calls_made(messages)
     names = {t.name for t in tools}
     assert not names & {"add", "rework", "cancel_work"}, f"planning tools in the report phase: {names}"
     return lead_script(messages, tools)

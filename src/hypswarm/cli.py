@@ -47,7 +47,7 @@ def _load_task(path: str) -> Task:
     d = tomllib.loads(Path(path).read_text(encoding="utf-8"))
     files = {Path(p).name: Path(p).read_bytes() for p in d.get("files", [])}
     return Task(title=d["title"], mission=d["mission"], questions=[(q["code"], q["text"]) for q in d["questions"]],
-                files=files, success=d.get("success", ""), notes=d.get("notes", ""))
+                files=files, success=d.get("success", ""), notes=d.get("notes", ""), profile=d.get("profile", ""))
 
 
 def _load_seats(path: str) -> list[Seat]:
@@ -60,14 +60,19 @@ def _load_seats(path: str) -> list[Seat]:
 
 def cmd_run(a: argparse.Namespace) -> int:
     from .providers.openai_compat import OpenAICompatible
-    task, seats = _load_task(a.task), _load_seats(a.seats)
+    task = _load_task(a.task)
+    if a.profile:
+        task = Task(**{**task.__dict__, "profile": a.profile})
+    seats = _load_seats(a.seats) if a.seats else None      # None: the profile's roster
+    if seats is None and not task.profile:
+        raise SystemExit("give --seats, or a task/--profile whose roster to use")
     default = a.model or os.environ.get("HYPSWARM_MODEL", "")
     cache: dict[str, OpenAICompatible] = {}
 
-    for s in seats:
+    for s in seats or []:
         if s.external:
             print(f"seat {s.name} is external — take it with:\n  {s.mcp_hint(a.record or ':memory:')}", file=sys.stderr)
-    if any(s.external for s in seats) and not a.record:
+    if any(s.external for s in (seats or [])) and not a.record:
         raise SystemExit("external seats need --record (a file both sides can open)")
 
     def model_for(seat: Seat) -> OpenAICompatible:
@@ -83,11 +88,22 @@ def cmd_run(a: argparse.Namespace) -> int:
     if a.record_url:
         from .http_record import HttpRecord
         record = HttpRecord(a.record_url)
-    r = asyncio.run(run(task, seats, model_for, record=record, budget=budget, pricing=pricing))
+    r = asyncio.run(run(task, seats, model_for, record=record, budget=budget, pricing=pricing,
+                        folder=a.folder or None))
     print(r.report)
     print(f"\n--- {r.stopped} · {r.usage['calls']} calls · ${r.usage['usd']:.4f} · {r.seconds}s · record {r.record_path}",
           file=sys.stderr)
     return 0 if r.stopped == "settled" else 1
+
+
+def cmd_profiles(a: argparse.Namespace) -> int:
+    from .profiles import PROFILES, names
+    for pid in names():
+        sp = PROFILES[pid]
+        seats = ", ".join(f"{s.name} ({s.role})" for s in sp.seats)
+        kits = ", ".join(sp.toolkits) or "-"
+        print(f"{pid}: {sp.about}\n  seats: {seats}\n  toolkits: {kits}")
+    return 0
 
 
 def cmd_status(a: argparse.Namespace) -> int:
@@ -118,7 +134,9 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run", help="run a task with seats on a record")
     r.add_argument("--task", required=True)
-    r.add_argument("--seats", required=True)
+    r.add_argument("--seats", default="", help="seats.toml; omit to use the profile's roster")
+    r.add_argument("--profile", default="", help="scientific | software | trading | knowledge | optimization")
+    r.add_argument("--folder", default="", help="working folder for the files toolkit")
     r.add_argument("--record", default="")
     r.add_argument("--record-url", default="", help="a record served by `hypgraph serve --writable`")
     r.add_argument("--model", default="", help="default model id for seats without one")
@@ -134,6 +152,8 @@ def main(argv: list[str] | None = None) -> int:
     rp = sub.add_parser("report", help="the facts of each investigation, from the record")
     rp.add_argument("--record", required=True)
     rp.set_defaults(fn=cmd_report)
+    pf = sub.add_parser("profiles", help="the governance profiles and their rosters")
+    pf.set_defaults(fn=cmd_profiles)
     a = p.parse_args(argv)
     return int(a.fn(a))
 
