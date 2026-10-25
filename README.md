@@ -142,12 +142,10 @@ Messages API, prompt-cache reads counted. Any object with `async complete(messag
 
 ## Installing, today
 
-hypswarm needs HypGraph's coordination layer, which releases with hypgraph 0.4; until then install the engine from
-its branch:
+hypswarm needs HypGraph's coordination layer, which ships with hypgraph 0.4:
 
 ```bash
-pip install "hypgraph @ git+https://github.com/voodoomods/hypgraph@harmony-study"
-pip install git+https://github.com/voodoomods/hypswarm
+pip install --pre hypswarm                 # pulls hypgraph>=0.4; --pre while it is an alpha
 ```
 
 ## Status

@@ -27,8 +27,8 @@ A seat is an author name in the record. You hold it through the HypGraph MCP ser
 
 ## If you are an engineer
 
-    pip install hypswarm                     # core: hypgraph + httpx
-    pip install "hypswarm[anthropic]"        # + the Anthropic adapter
+    pip install --pre hypswarm               # core: hypgraph>=0.4 + httpx (--pre while it is an alpha)
+    pip install --pre "hypswarm[anthropic]"  # + the Anthropic adapter
     hypswarm run --task task.toml --profile software --record study.hypgraph
     hypswarm run --task task.toml --seats seats.toml --record-url http://127.0.0.1:8765      # against `hypgraph serve --writable --token ...`
     hypswarm profiles

@@ -42,11 +42,9 @@
 <article class="prose">
 
 <h2 id="install">Install</h2>
-<p>hypswarm needs HypGraph's coordination layer, which ships with hypgraph 0.4. Until it is on PyPI, install the
-  engine from its branch:</p>
+<p>hypswarm needs HypGraph's coordination layer, which ships with hypgraph 0.4:</p>
 <div class="code"><pre>python -m venv .venv && . .venv/bin/activate        # .venv\Scripts\activate on Windows
-pip install "hypgraph @ git+https://github.com/voodoomods/hypgraph@harmony-study"
-pip install git+https://github.com/voodoomods/hypswarm          # or: "hypswarm[anthropic]"
+pip install --pre hypswarm                                      # pulls hypgraph>=0.4; or: "hypswarm[anthropic]"
 hypswarm profiles                                               # the five rosters</pre></div>
 <p>Any OpenAI-compatible endpoint is the model (<code>OPENAI_BASE_URL</code>, <code>OPENAI_API_KEY</code>);
   <code>hypswarm[anthropic]</code> adds the Messages API. Nothing in the box executes code or reaches a network on its
