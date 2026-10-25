@@ -271,11 +271,15 @@ class Scheduler:
         by = {t.name: t for t in tools}
         for _ in range(turns):
             try:
-                self.meter.check(unit)
+                self.meter.reserve(unit)
             except BudgetExhausted:
                 return
             t0 = time.time()
-            reply = await model.complete(messages, tools, temperature=self.lead.temperature, unit=unit)
+            try:
+                reply = await model.complete(messages, tools, temperature=self.lead.temperature, unit=unit)
+            except Exception:
+                self.meter.release(unit)
+                raise
             self.meter.add(unit, reply.input_tokens, reply.cached_tokens, reply.output_tokens)
             self.res.lead_calls += 1
             self.res.lead_log.append({"t": round(t0, 3), "s": round(time.time() - t0, 3), "unit": unit,

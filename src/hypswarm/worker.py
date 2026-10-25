@@ -51,7 +51,7 @@ async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, orde
                 Message("user", record.order_text(order))]
     for _turn in range(seat.max_turns):
         try:
-            meter.check(code)
+            meter.reserve(code)                     # the claim on the budget is made before the call, not after
         except BudgetExhausted as e:
             res.stopped = f"budget: {e}"
             break
@@ -59,6 +59,7 @@ async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, orde
         try:
             reply = await model.complete(messages, tools, temperature=seat.temperature, unit=code)
         except Exception as e:  # noqa: BLE001 — a provider failure ends the order, never the run
+            meter.release(code)
             res.stopped = f"error: {type(e).__name__}: {str(e)[:200]}"
             log.warning("worker %s on %s: model error %s", seat.name, code, e)
             break
