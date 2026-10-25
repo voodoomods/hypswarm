@@ -91,3 +91,19 @@ def test_an_agent_is_never_started_past_the_budget():
     models = {"reviewer": StubModel(reviewer_script), "lead": StubModel(lead_script)}
     r = asyncio.run(run(TASK, seats, models, record=None, budget=Budget(max_calls=1)))
     assert r.stopped.startswith("budget") and len(started) <= 1
+
+
+def test_an_agent_may_report_tool_arguments_as_a_string():
+    """PydanticAI reports ToolCallPart.args as JSON text; the seat's log must not choke on it (found in the first
+    real mixed-swarm run: the stats seat did its work, then the bridge crashed building the log)."""
+    async def stringy(order: AgentOrder):
+        out = await _tool(order, "register_run").call({"name": "c", "result_summary": "Counted.", "values": {"acc_a": {"k": 812, "n": 1000}},
+                                                        "claim": "A is right on 812 of 1000 items.", "answers": "Q1", "scope": "The 1000 paired items."})
+        if "return_work now" in out:
+            await _tool(order, "return_work").call({"note": "done"})
+        return AgentOutcome(note="done", calls=1, log=[{"tool": "register_run", "args": '{"name": "c"}'}])
+    seats = [Seat("analyst", "worker", agent=stringy), Seat("critic", "reviewer"), Seat("lead", "lead")]
+    models = {"reviewer": StubModel(reviewer_script), "lead": StubModel(lead_script)}
+    r = asyncio.run(run(TASK, seats, models, record=None, budget=Budget(max_calls=30)))
+    w = next(w for w in r.scheduler.workers if w.seat == "analyst")
+    assert not w.stopped and w.returned and w.tool_log[0]["args"].startswith('{"_raw"')

@@ -130,7 +130,7 @@ async def run_agent_order(seat: Seat, record: Record, inv: str, order: str, *, m
             res.call_log.append({"t": round(t0, 3), "s": round(time.time() - t0, 3), "unit": code, "agent": seat.name,
                                  "in": out.input_tokens, "cached": out.cached_tokens, "out": out.output_tokens,
                                  "calls": n})
-            res.tool_log = [{"turn": i + 1, "tool": str(x.get("tool")), "args": _short(dict(x.get("args") or {})),
+            res.tool_log = [{"turn": i + 1, "tool": str(x.get("tool")), "args": _short(x["args"] if isinstance(x.get("args"), dict) else {"_raw": str(x.get("args") or "")}),
                              "out": "", "s": 0.0} for i, x in enumerate(out.log)]
             if state["returned"]:
                 res.returned = True
