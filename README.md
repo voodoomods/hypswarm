@@ -89,8 +89,9 @@ nobody by itself: put it behind your own auth before exposing it beyond localhos
 ## Providers
 
 The core ships `OpenAICompatible` (DeepInfra, OpenAI, NVIDIA NIM, vLLM, Ollama, most gateways) and a scripted
-`StubModel` for tests. Any object with `async complete(messages, tools) -> Reply` is a model. Anthropic and
-LangChain adapters are planned as extras.
+`StubModel` for tests. `pip install "hypswarm[anthropic]"` adds `Anthropic("claude-sonnet-5-5")` over the
+Messages API, prompt-cache reads counted. Any object with `async complete(messages, tools) -> Reply` is a model.
+A LangChain adapter is planned as an extra.
 
 ## Status
 
