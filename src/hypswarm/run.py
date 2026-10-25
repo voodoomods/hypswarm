@@ -90,7 +90,8 @@ async def run(task: Task, seats: Sequence[Seat], models: ModelSpec, *, record: s
               budget: Budget | None = None, pricing: Pricing | None = None, data_tools: Sequence[Tool] = (),
               spend: Any = None, external_meter: Callable[[], float] | None = None,
               default_model: ChatModel | None = None,
-              on_return: Callable[[Scheduler, int], None] | None = None) -> RunResult:
+              on_return: Callable[[Scheduler, int], None] | None = None, lease_minutes: int = 240,
+              external_poll_s: float = 1.0, external_timeout_s: float | None = None) -> RunResult:
     """Run ``task`` with ``seats`` on a record at ``record`` (a path, or in memory), under ``budget``.
     ``models``: one model for every seat, a mapping by seat name / role / model id, or a function of the seat."""
     if not seats:
@@ -101,14 +102,19 @@ async def run(task: Task, seats: Sequence[Seat], models: ModelSpec, *, record: s
     inv = rec.start(task.title, task.mission, task.questions, success=task.success, files=task.files)
     model_for = _model_for(models, default_model)
     from . import __version__
-    config = {"hypswarm": __version__, "seats": [{"name": s.name, "role": s.role, "model": model_for(s).name}
-                                                 for s in seats],
+    config = {"hypswarm": __version__,
+              "seats": [{"name": s.name, "role": s.role, "model": "external (MCP)" if s.external else model_for(s).name}
+                        for s in seats],
               "budget": {"max_calls": meter.budget.max_calls, "max_usd": meter.budget.max_usd},
               "preamble_sha256": hashlib.sha256(task.preamble().encode()).hexdigest(),
               "data_tools": [t.name for t in data_tools]}
     rid = rec.file_run(inv, config)
     sched = Scheduler(rec, inv, seats, model_for, meter, data_tools=data_tools, preamble=task.preamble(),
-                      on_return=on_return)
+                      on_return=on_return, lease_minutes=lease_minutes, external_poll_s=external_poll_s,
+                      external_timeout_s=external_timeout_s)
+    for s in seats:
+        if s.external:
+            log.info("external seat %s: %s", s.name, s.mcp_hint(rec.g.path))
     try:
         sr = await sched.run()
         rec.finish_run(rid, "succeeded" if sr.stopped == "settled" else "interrupted", sr.stopped)

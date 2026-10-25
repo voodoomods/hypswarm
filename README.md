@@ -52,6 +52,26 @@ Or from the shell: `hypswarm run --task task.toml --seats seats.toml --record st
 | instrument | a job runner (CI, a lab) filing lab-recorded runs | no |
 | operator | a person, reached through the record | no |
 
+## People and other agents as seats
+
+A seat can be **external**: no model behind it, just a name in the record. The scheduler issues it orders like
+any other seat and waits; whoever holds that name works the order through the HypGraph MCP server and returns it:
+
+```toml
+[[seats]]
+name = "nicolas"
+role = "worker"
+external = true
+```
+
+```bash
+hypgraph --db study.hypgraph --as nicolas mcp     # in Claude Code, Cursor, or any MCP client
+# my_work → the order; register_run / add / review → the writes; return_work when the reply says every predicate is met
+```
+
+The record can't tell a person from an agent except by name, and it holds them to the same rules. If the lease
+runs out the order is returned on the seat's behalf and the scheduler decides, as for any worker that stopped.
+
 ## Providers
 
 The core ships `OpenAICompatible` (DeepInfra, OpenAI, NVIDIA NIM, vLLM, Ollama, most gateways) and a scripted

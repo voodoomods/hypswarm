@@ -17,6 +17,11 @@ seats.toml:
     role = "worker"                           # worker | reviewer | lead
     model = "deepseek-ai/DeepSeek-V4.1-Flash"  # provider model id (OPENAI_BASE_URL / OPENAI_API_KEY)
     takes = ["accuracy", "counts", "question"]
+    [[seats]]
+    name = "nicolas"
+    role = "worker"
+    external = true                           # a person (or another agent) takes its orders over MCP:
+                                              #   hypgraph --db study.hypgraph --as nicolas mcp  → my_work
 
 The CLI uses the OpenAI-compatible provider; the Python API takes any ChatModel.
 """
@@ -46,7 +51,8 @@ def _load_task(path: str) -> Task:
 def _load_seats(path: str) -> list[Seat]:
     d = tomllib.loads(Path(path).read_text(encoding="utf-8"))
     return [Seat(name=s["name"], role=s.get("role", "worker"), model=s.get("model", ""), takes=tuple(s.get("takes", [])),
-                 about=s.get("about", ""), temperature=s.get("temperature"), max_turns=int(s.get("max_turns", 14)))
+                 about=s.get("about", ""), temperature=s.get("temperature"), max_turns=int(s.get("max_turns", 14)),
+                 external=bool(s.get("external", False)))
             for s in d["seats"]]
 
 
@@ -55,6 +61,12 @@ def cmd_run(a: argparse.Namespace) -> int:
     task, seats = _load_task(a.task), _load_seats(a.seats)
     default = a.model or os.environ.get("HYPSWARM_MODEL", "")
     cache: dict[str, OpenAICompatible] = {}
+
+    for s in seats:
+        if s.external:
+            print(f"seat {s.name} is external — take it with:\n  {s.mcp_hint(a.record or ':memory:')}", file=sys.stderr)
+    if any(s.external for s in seats) and not a.record:
+        raise SystemExit("external seats need --record (a file both sides can open)")
 
     def model_for(seat: Seat) -> OpenAICompatible:
         mid = seat.model or default

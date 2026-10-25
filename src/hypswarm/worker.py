@@ -6,6 +6,7 @@ stopped without returning, the order is returned on its behalf, so the scheduler
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import Sequence
@@ -87,6 +88,32 @@ async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, orde
             res.returned_by_record = True
         except GraphError as e:
             log.warning("could not return %s on %s's behalf: %s", code, seat.name, e)
+    return res
+
+
+async def await_external(seat: Seat, record: Record, inv: str, order: str, *, timeout_s: float,
+                         poll_s: float = 1.0) -> WorkerResult:
+    """An external seat works its order through the record (MCP, HTTP, a person): the scheduler only waits for
+    the order to leave 'open'. If the lease runs out first, the order is returned on the seat's behalf so the
+    scheduler can decide, exactly as for a worker that stopped without returning."""
+    code = record.get(order)["code"]
+    res = WorkerResult(order=order, code=code, seat=seat.name)
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        st = next((o["status"] for o in record.orders(inv) if o["id"] == order), "")
+        if st == "returned":
+            res.returned = True
+            return res
+        if st in ("cancelled", "moot", "reworked", "accepted"):
+            res.stopped = st
+            return res
+        await asyncio.sleep(poll_s)
+    res.stopped = "lease"
+    try:
+        record.return_work(author=seat.name, order=order, note="(returned by the record: the lease ran out)")
+        res.returned_by_record = True
+    except GraphError as e:
+        log.warning("could not return %s for external seat %s: %s", code, seat.name, e)
     return res
 
 

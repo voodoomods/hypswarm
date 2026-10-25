@@ -23,7 +23,7 @@ from .providers.base import ChatModel
 from .record import HARNESS, LocalRecord
 from .seats import Seat, fit
 from .tools import lead_tools
-from .worker import WorkerResult, run_order
+from .worker import WorkerResult, await_external, run_order
 
 log = logging.getLogger("hypswarm.scheduler")
 
@@ -48,7 +48,8 @@ class Scheduler:
     def __init__(self, record: LocalRecord, inv: str, seats: Sequence[Seat], model_for: Callable[[Seat], ChatModel],
                  meter: Meter, *, data_tools: Sequence[Tool] = (), preamble: str = "", max_reworks: int = 2,
                  lease_minutes: int = 240, lead_turns: int = 6,
-                 on_return: Callable[[Scheduler, int], None] | None = None):
+                 on_return: Callable[[Scheduler, int], None] | None = None, external_poll_s: float = 1.0,
+                 external_timeout_s: float | None = None):
         self.r, self.inv, self.seats = record, inv, list(seats)
         self.model_for, self.meter = model_for, meter
         self.data_tools, self.preamble = list(data_tools), preamble
@@ -65,6 +66,8 @@ class Scheduler:
         self._stop = False
         self._pending_lead: list[tuple[dict[str, Any], str]] = []
         self.on_return = on_return                          # host hook after each worker return (count so far)
+        self.external_poll_s = external_poll_s
+        self.external_timeout_s = external_timeout_s if external_timeout_s is not None else lease_minutes * 60.0
         self.returns = 0
         self.notices: list[str] = []
 
@@ -115,10 +118,14 @@ class Scheduler:
 
     def _dispatch(self, seat: Seat, order: str) -> None:
         self.busy[seat.name] = order
-        task = asyncio.create_task(run_order(seat, self.model_for(seat), self.r, self.inv, order, meter=self.meter,
-                                             data_tools=self.data_tools, preamble=self._preamble()))
+        if seat.external:
+            task = asyncio.create_task(await_external(seat, self.r, self.inv, order, timeout_s=self.external_timeout_s,
+                                                      poll_s=self.external_poll_s))
+        else:
+            task = asyncio.create_task(run_order(seat, self.model_for(seat), self.r, self.inv, order, meter=self.meter,
+                                                 data_tools=self.data_tools, preamble=self._preamble()))
         self.inflight[task] = (seat, order)
-        self._ev("dispatch", seat=seat.name, order=self.r.get(order)["code"])
+        self._ev("dispatch", seat=seat.name, order=self.r.get(order)["code"], external=seat.external)
 
     def _issue(self, seat: Seat, target: str, objective: str, done_when: list[Any] | None = None) -> bool:
         try:

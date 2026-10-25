@@ -28,6 +28,7 @@ class Seat:
     temperature: float | None = None
     max_turns: int = 14            # per order
     tools: tuple[str, ...] = ("*",)  # names of the host's data tools it may use ("*" = all)
+    external: bool = False         # no model here: a person or another agent works its orders through MCP
     extra: dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -37,6 +38,11 @@ class Seat:
             raise ValueError(f"seat name {self.name!r} is reserved")
         if self.role not in ROLES:
             raise ValueError(f"role must be one of {', '.join(ROLES)}")
+
+    def mcp_hint(self, record_path: str) -> str:
+        """How an outside agent (or a person's coding agent) takes this seat."""
+        return (f"hypgraph --db {record_path} --as {self.name} mcp   # then call my_work; write to the record; "
+                "return_work when the reply says every predicate is met")
 
     def may_use(self, tool_name: str) -> bool:
         return "*" in self.tools or tool_name in self.tools
