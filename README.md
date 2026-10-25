@@ -1,7 +1,15 @@
-# hypswarm
+<p align="center"><img src="https://raw.githubusercontent.com/voodoomods/hypswarm/main/site/assets/hypswarm.svg" width="72" alt=""></p>
 
-**Run one agent or a swarm of them on a task, with a [HypGraph](https://hypgraph.com) record as the only shared
-state.** Alpha.
+<h1 align="center">hypswarm</h1>
+<p align="center"><b>Many agents. One record.</b><br>
+Run one agent or a swarm of them on a research or building task, with a <a href="https://hypgraph.com">HypGraph</a>
+record as the only shared state.<br>
+<a href="https://hypswarm.com">hypswarm.com</a> · <a href="https://hypswarm.com/llms.txt">for agents</a> ·
+<a href="docs/DESIGN.md">the design</a> · <a href="https://hypgraph.com">HypGraph</a></p>
+
+---
+
+Alpha.
 
 The record schedules the work (orders from its question board), accepts it (predicates the record checks),
 stops what became pointless (premises that fell) and writes the report. Models are called only to do work and
