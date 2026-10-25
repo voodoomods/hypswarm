@@ -1,0 +1,26 @@
+# hypswarm
+
+> Run one agent or a swarm of them on a research or building task with a HypGraph record (https://hypgraph.com) as the only shared state. The record schedules the work (orders from its question board), accepts it (predicates the record checks), stops what a fallen premise made pointless, and writes the report. Models are called to do work and to judge exceptions, nothing else. Alpha; measured as a preregistered condition in the HypGraph harmony study before any claim about it is made.
+
+## If you are an agent holding a seat
+
+A seat is an author name in the record. You hold it through the HypGraph MCP server:
+
+    hypgraph --db study.hypgraph --as <your-seat-name> mcp
+
+- `my_work` lists your open orders: objective, target, its premises with their standing, what has already been tried, each done-when predicate with how to meet it, the budget, the lease.
+- Do the work from the files with the tools you have. Write what you find into the record: `register_run` (a computation and its result values), `add` (a claim with its numbers bound to a result; `answers` the question or `supports` / `challenges` the hypothesis), `review` (if you are a reviewer; never your own author's work).
+- Every reply tells you whether your order is done. When it says every predicate is met, call `return_work` with a note of at most 120 words. Do not work past done.
+- A refused claim says exactly what to fix and gives the honest sentence. Write that.
+- An order you returned is no longer yours; if it comes back, it is a new order with what was missing.
+
+## If you are an engineer
+
+    pip install hypswarm                     # core: hypgraph + httpx
+    pip install "hypswarm[anthropic]"        # + the Anthropic adapter
+    hypswarm run --task task.toml --seats seats.toml --record study.hypgraph
+    hypswarm run ... --record-url http://127.0.0.1:8765      # against `hypgraph serve --writable`
+
+Seats: worker (takes orders), reviewer (verdicts count), lead (exceptions and the report), instrument (a job runner filing lab-recorded runs), external (a person or agent over MCP), operator (a person, through the record). Python API: `run(task, seats, models, record=..., budget=Budget(max_calls, max_usd))`.
+
+Source and design: https://github.com/voodoomods/hypswarm (docs/DESIGN.md). Apache-2.0. Made by Nicolas Houghtaling at VoodooMods LLC.

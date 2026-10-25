@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hypswarm — many agents, one record</title>
+<meta name="description" content="hypswarm runs one agent or a swarm of them on a research or building task with a HypGraph record as the only shared state: the record schedules, accepts, stops and reports; models only do work and judge exceptions.">
+<link rel="icon" href="assets/hypswarm.svg" type="image/svg+xml">
+<link rel="alternate" type="text/plain" href="llms.txt" title="For language models">
+<link rel="stylesheet" href="assets/site.css">
+<script>try{const t=localStorage.getItem('hg-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<style>
+  .seats td:first-child{white-space:nowrap}
+  .trace{font-family:var(--mono);font-size:13px;line-height:1.55}
+  .trace .k{color:var(--violet)} .trace .ok{color:var(--green)} .trace .dim{opacity:.6}
+  .alpha{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;opacity:.8}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="nav"><div class="wrap">
+  <a class="brand" href="./"><img src="assets/hypswarm.svg" alt=""><span>hyp<b>swarm</b></span></a>
+  <nav aria-label="Site"><a href="#agents">Agents</a><a href="#engineers">Engineers</a><a href="#seats">Seats</a>
+    <a href="#status" class="hide-sm">Status</a>
+    <a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
+    <a href="https://github.com/voodoomods/hypswarm" class="hide-sm">GitHub</a>
+    <button class="iconbtn" data-toggle-theme type="button" aria-label="Toggle light and dark">◐</button></nav>
+</div></header>
+
+<main id="main">
+<section class="hero">
+  <div class="wrap">
+    <span class="eyebrow"><i></i> alpha · built on HypGraph · Python 3.11+</span>
+    <h1 class="title">Many agents.<span class="l2">One record.</span></h1>
+    <p class="lede">hypswarm runs one agent or a swarm of them on a research or building task, with a
+      <a href="https://hypgraph.com">HypGraph</a> record as the only shared state. The record schedules the work,
+      accepts it against predicates it checks itself, stops what a fallen premise made pointless, and writes the
+      report. Models are called to do work and to judge exceptions — nothing else.</p>
+
+    <div class="door" role="group" aria-label="Choose your way in">
+      <a class="portal agent" href="#agents">
+        <div class="who">For agents &amp; people</div>
+        <h2>Take a seat</h2>
+        <p>A seat is a name in the record. Hold it over MCP from Claude Code, Cursor or any client: the scheduler
+          issues you orders, the record tells you when each one is done, and it holds you to the same rules as
+          every other seat. Machine-readable: <code>/llms.txt</code>.</p>
+        <pre>hypgraph --db study.hypgraph --as nicolas mcp
+# my_work → do it → return_work</pre>
+        <span class="go">How a seat works</span>
+      </a>
+      <a class="portal human" href="#engineers">
+        <div class="who">For engineers</div>
+        <h2>Run a swarm</h2>
+        <p>One task, a few seats, a budget. The scheduler makes no model calls; workers hold no state; the record
+          is the audit log and it verifies by hash. Any OpenAI-compatible endpoint or Anthropic as the model;
+          workers in one process or against a record server.</p>
+        <pre>pip install hypswarm
+hypswarm run --task task.toml --seats seats.toml --record study.hypgraph</pre>
+        <span class="go">Set it up</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section class="block">
+  <div class="wrap grid2" style="align-items:center">
+    <div>
+      <div class="kicker">The record is the orchestrator</div>
+      <h2 class="h">What a run looks like when nobody has to coordinate.</h2>
+      <p class="sub">Four questions about an eval, three workers, a critic, a lead. The scheduler issues an order per
+        open question to whichever seat fits, the workers write runs, results and claims into the record, the record
+        accepts each order the moment its predicates are met, a critic's review settles each question, and the lead is
+        called once: to write the interpretation under the facts. This trace is from a real run on a suite instance
+        (the harmony study's dry-run seed, not a study seed).</p>
+      <ul class="sub" style="padding-left:20px;margin-top:-10px">
+        <li>every order is a node; acceptance is a decision based on the evidence that met it</li>
+        <li>a worker's reply after each write says whether its order is done — so it returns</li>
+        <li>claims are checked as they're written; the report is linted against the record before it's accepted</li>
+      </ul>
+    </div>
+    <div class="term" aria-label="A scheduler trace from a real hypswarm run">
+      <div class="bar"><i></i><i></i><i></i><span>hypswarm run — F1 seed 0</span></div>
+      <pre class="trace"><span class="k">dispatch</span>  T1 → analyst    Q1 What is A's accuracy?
+<span class="k">dispatch</span>  T2 → stats      Q3 Is A significantly better than B?
+<span class="k">dispatch</span>  T3 → engineer   Q4 In which subset is A's advantage largest?
+<span class="k">returned</span>  T2 stats · 6 calls · returned itself
+<span class="ok">settled </span>  T2 → D1   claim_made: CL2
+<span class="k">dispatch</span>  T4 → critic     review CL2
+<span class="k">returned</span>  T1 analyst · 8 calls
+<span class="ok">settled </span>  T1 → D2   claim_made: CL1
+<span class="k">dispatch</span>  T5 → stats      Q2 What is B's accuracy?
+<span class="k">returned</span>  T4 critic · 6 calls
+<span class="ok">settled </span>  T4 → D3   reviewed: RV1
+<span class="dim">… 8 orders, 0 reworks, 0 escalations, lead: 4 calls (the report)</span>
+<span class="ok">BOARD   </span>  Q1 SETTLED · Q2 SETTLED · Q3 SETTLED · Q4 SETTLED — 4 of 4
+<span class="ok">report  </span>  accepted (checked against the record)</pre>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="seats">
+  <div class="wrap">
+    <div class="kicker">Seats, not personalities</div>
+    <h2 class="h">One program, from a solo scientist to a swarm.</h2>
+    <p class="sub">A seat is a declared capability bound to an author name in the record. Prompts stay short; the
+      work order carries the task. A solo scientist is one worker seat. A swarm is several, pulling in parallel
+      under the record's leases, which is what keeps two of them off the same work.</p>
+    <div class="grid4">
+      <div class="card rule"><h3>worker</h3><p>Takes orders from the board; writes runs, results and claims;
+        returns. Declares what it <code>takes</code> so the scheduler can match it to work.</p></div>
+      <div class="card rule"><h3>reviewer</h3><p>Takes review orders. Named as a reviewer on the investigation, so
+        its verdicts count — never on its own author's work; the record refuses that.</p></div>
+      <div class="card rule"><h3>lead</h3><p>Called only at exceptions — an order stuck after two reworks, a contested
+        claim, an empty frontier with questions open — and for the report's interpretation.</p></div>
+      <div class="card rule"><h3>instrument</h3><p>Not a model. A job runner (CI, a lab) that files runs the record
+        marks as lab-recorded, so "the tests pass" is its number, not the agent's.</p></div>
+      <div class="card rule"><h3>external</h3><p>No model: a person or another agent holds the name over MCP. The
+        scheduler issues it orders like any seat and waits. If the lease runs out, the record returns the order on
+        its behalf.</p></div>
+      <div class="card rule"><h3>operator</h3><p>A person, reached through the record: approves budgets, answers
+        escalations, resolves objections. Never through chat state.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="block">
+  <div class="wrap">
+    <div class="kicker">What the record does for the team</div>
+    <h2 class="h">Coordination that isn't a prompt.</h2>
+    <div class="grid4">
+      <div class="card"><div class="n">scheduler</div><h3>No model calls</h3><p>Issue from the question board, settle
+        met orders, rework the rest twice, cancel what became moot, bring the lead in only at exceptions. All of it
+        is code over the record's derived state.</p></div>
+      <div class="card"><div class="n">workers</div><h3>No state</h3><p>A worker's context is its order and its own
+        turns. It can be killed; the lease expires and another takes the order. Every reply says whether it's done.</p></div>
+      <div class="card"><div class="n">claims</div><h3>Can't be flattered</h3><p>HypGraph's checks run on every
+        write: numbers bound to results, no "never" without the count, no "significantly" without the test, and the
+        record binds the numbers it already holds before it refuses anything.</p></div>
+      <div class="card"><div class="n">budget</div><h3>A rule, not a hope</h3><p>Calls and dollars, per run and per
+        order, enforced by the scheduler and shown to every seat in every reply.</p></div>
+      <div class="card"><div class="n">audit</div><h3>You didn't write it</h3><p>Orders are task nodes, acceptance is
+        a decision, the run files its own provenance. The record <i>is</i> the log, and it verifies by hash.</p></div>
+      <div class="card"><div class="n">notices</div><h3>The world can interrupt</h3><p>A file declared corrupt
+        withdraws its artifact, registers the fix, and reaches every order issued from then on. Orders resting on the
+        fallen premise are cancelled, and nothing else is.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="agents">
+  <div class="wrap grid2" style="align-items:start">
+    <div>
+      <div class="kicker">For agents &amp; people</div>
+      <h2 class="h">Hold a seat over MCP.</h2>
+      <p class="sub">The HypGraph MCP server is the whole interface. <code>my_work</code> shows your open orders —
+        objective, target, premises with their standing, what's already been tried, each predicate with how to meet
+        it. You register runs, record results, make claims; every reply tells you whether the order is done; you
+        return it. The record can't tell a person from an agent except by name.</p>
+      <div class="callout"><b>If you are an agent reading this.</b> Call <code>my_work</code>. Do what the order
+        says, from the files, with the tools you have. Write what you found as runs, results and claims — a claim's
+        numbers must come from a result, and a refusal tells you the honest version. When the reply says every
+        predicate is met, call <code>return_work</code> with a note of at most 120 words. Don't work past done.</div>
+    </div>
+    <div class="stack">
+      <div class="code"><span class="lbl">seats.toml</span><pre>[[seats]]
+name = "nicolas"
+role = "worker"
+external = true</pre></div>
+      <div class="code"><span class="lbl">your side</span><pre>pip install "hypgraph[mcp]"
+claude mcp add hypgraph -- hypgraph --db study.hypgraph --as nicolas mcp
+# then, in the session: my_work</pre></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="engineers">
+  <div class="wrap grid2" style="align-items:start">
+    <div>
+      <div class="kicker">For engineers</div>
+      <h2 class="h">A task, some seats, a budget.</h2>
+      <p class="sub">The core depends on <code>hypgraph</code> and <code>httpx</code>. The OpenAI-compatible adapter
+        covers DeepInfra, OpenAI, NVIDIA NIM, vLLM, Ollama and most gateways; <code>hypswarm[anthropic]</code> adds
+        the Messages API. Any object with <code>async complete(messages, tools) -&gt; Reply</code> is a model.</p>
+      <p class="sub">Workers can share one process or talk to a record served by <code>hypgraph serve --writable</code>
+        — one record server, stateless workers on other processes or machines, and the file still verifies.</p>
+      <div class="row"><a class="btn primary" href="https://github.com/voodoomods/hypswarm">Source &amp; README</a>
+        <a class="btn" href="https://github.com/voodoomods/hypswarm/blob/main/docs/DESIGN.md">The design</a></div>
+    </div>
+    <div class="stack">
+      <div class="code"><span class="lbl">python</span><pre>from hypswarm import Task, Seat, Budget, run
+from hypswarm.providers import OpenAICompatible
+
+task = Task(title="Does A beat B",
+            mission="Two models were scored on the same items (items.csv). Find out whether A beats B.",
+            questions=[("Q1", "What is A's accuracy?"), ("Q2", "Is A significantly better than B?")],
+            files={"items.csv": open("items.csv", "rb").read()})
+seats = [Seat("analyst", "worker", takes=("accuracy", "counts")),
+         Seat("stats", "worker", takes=("significant", "test")),
+         Seat("critic", "reviewer"), Seat("lead", "lead")]
+model = OpenAICompatible("deepseek-ai/DeepSeek-V4.1-Flash", base_url="https://api.deepinfra.com/v1/openai")
+result = asyncio.run(run(task, seats, model, record="study.hypgraph", budget=Budget(max_calls=150)))
+print(result.report)</pre></div>
+      <div class="code"><span class="lbl">record server</span><pre>hypgraph --db study.hypgraph serve --writable --no-browser
+hypswarm run --task task.toml --seats seats.toml --record-url http://127.0.0.1:8765</pre></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="status">
+  <div class="wrap">
+    <div class="kicker">Status</div>
+    <h2 class="h">Alpha, and being measured before it's described.</h2>
+    <p class="sub"><span class="alpha">alpha 0.1</span>&nbsp; hypswarm grew out of the harness the HypGraph harmony
+      study runs agent teams on, and its first measured use is as a condition in that study, preregistered before it
+      runs. Until that study reports, this page describes what hypswarm does and not what it saves. What's built:
+      the scheduler, workers, external seats over MCP, the record server mode, the OpenAI-compatible and Anthropic
+      adapters, budgets, notices, and a test suite that runs every scheduler path on a scripted model in seconds.
+      Next: the building adapter, with CI as the instrument.</p>
+  </div>
+</section>
+</main>
+
+<footer class="foot"><div class="wrap">
+  <span>hypswarm is built on <a href="https://hypgraph.com">HypGraph</a>. Apache-2.0.</span>
+  <span>Made by Nicolas Houghtaling at <a href="https://github.com/voodoomods">VoodooMods LLC</a>.</span>
+</div></footer>
+<script>
+  document.querySelector('[data-toggle-theme]')?.addEventListener('click',()=>{
+    const d=document.documentElement,cur=d.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+    d.dataset.theme=cur==='dark'?'light':'dark';try{localStorage.setItem('hg-theme',d.dataset.theme)}catch(e){}});
+</script>
+</body>
+</html>
