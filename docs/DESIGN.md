@@ -170,3 +170,24 @@ Step 2 is the one that produces a number; everything after it is shaped by that 
 
 Not a chat framework, not a prompt library, not a place where state lives. If a feature needs the agents to
 remember something the record doesn't hold, the record is missing a node type, and that is where the fix goes.
+
+---
+
+## First real-model run (2026-10-24, plumbing, not a study result)
+
+`Pegasus/pod/dev/hypswarm_smoke_host.py`: harmony-suite family F1 on seed 0 (the dry-run seed), DeepSeek-V4.1-Flash
+for every seat, three workers + a critic + a lead, the study's sandboxed python tool, run inside the agent
+container through the proxy so every call was metered under its own label.
+
+| | hypswarm alpha | condition C in pilots 2–4 (same family, same model) |
+|---|---|---|
+| finished | yes, every question settled | 7 of 8 runs |
+| calls | **59** (lead 4: the report only) | 92–150 (lead 11–26) |
+| metered $ | **0.019** (priced and ledger agree to the cent) | 0.029–0.050 |
+| orders | 8: 4 answers + 4 reviews, 0 reworks, all accepted by the record | 5–12, 1–5 reworks |
+| workers returned on their own | 8 of 8 | about half |
+| score | 4 of 4, no trap | — |
+| wall | 67 s (3 workers in parallel) | 4–11 min |
+
+One run on one seed, unpreregistered, so it proves the plumbing and sizes the expectation, nothing more. The
+measured comparison is condition E in the harmony study, preregistered first.
