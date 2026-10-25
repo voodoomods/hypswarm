@@ -34,6 +34,7 @@ class WorkerResult:
     returned_by_record: bool = False
     stopped: str = ""                       # "" | "turns" | "budget" | "error"
     tool_log: list[dict[str, Any]] = field(default_factory=list)
+    call_log: list[dict[str, Any]] = field(default_factory=list)   # one row per model call: t, s, in, cached, out
 
 
 async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, order: str, *, meter: Meter,
@@ -62,6 +63,8 @@ async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, orde
         meter.add(code, reply.input_tokens, reply.cached_tokens, reply.output_tokens)
         res.calls += 1
         res.turns += 1
+        res.call_log.append({"t": round(t0, 3), "s": round(time.time() - t0, 3), "unit": code, "agent": seat.name,
+                             "in": reply.input_tokens, "cached": reply.cached_tokens, "out": reply.output_tokens})
         messages.append(reply.as_message())
         if not reply.tool_calls:
             break

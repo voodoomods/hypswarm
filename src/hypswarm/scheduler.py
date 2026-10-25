@@ -39,12 +39,15 @@ class SchedulerResult:
     report_accepted: bool = False
     workers: list[WorkerResult] = field(default_factory=list)
     events: list[dict[str, Any]] = field(default_factory=list)
+    lead_log: list[dict[str, Any]] = field(default_factory=list)   # one row per lead model call
+    notices: list[dict[str, Any]] = field(default_factory=list)
 
 
 class Scheduler:
     def __init__(self, record: LocalRecord, inv: str, seats: Sequence[Seat], model_for: Callable[[Seat], ChatModel],
                  meter: Meter, *, data_tools: Sequence[Tool] = (), preamble: str = "", max_reworks: int = 2,
-                 lease_minutes: int = 240, lead_turns: int = 6):
+                 lease_minutes: int = 240, lead_turns: int = 6,
+                 on_return: Callable[["Scheduler", int], None] | None = None):
         self.r, self.inv, self.seats = record, inv, list(seats)
         self.model_for, self.meter = model_for, meter
         self.data_tools, self.preamble = list(data_tools), preamble
@@ -60,6 +63,37 @@ class Scheduler:
         self.res = SchedulerResult()
         self._stop = False
         self._pending_lead: list[tuple[dict[str, Any], str]] = []
+        self.on_return = on_return                          # host hook after each worker return (count so far)
+        self.returns = 0
+        self.notices: list[str] = []
+
+    # ── notices: something the world tells the team mid-run ──
+    def notify(self, text: str, *, stale: Sequence[str] = (), add_files: dict[str, bytes] | None = None) -> None:
+        """A notice from outside (a data file declared corrupt, a corrected file): the stale artifacts are
+        withdrawn in the record with the notice as the reason, new files are registered, and the text reaches every
+        order issued from now on and the lead's prompts. Orders already in flight learn of it through the record
+        (their premises fall) and through cancel_moot."""
+        import hashlib
+        for name in stale:
+            for a in self.r.search(name, type="artifact", inv=self.inv):
+                if a.get("title", "").strip() == name:
+                    try:
+                        self.r.withdraw(author=HARNESS, node=a["id"], why=text[:900])
+                    except GraphError as e:
+                        self._ev("notice_withdraw_failed", artifact=name, why=str(e)[:120])
+        for name, data in (add_files or {}).items():
+            self.r.create(author=HARNESS, type="artifact", inv=self.inv, fields={
+                "sha256": hashlib.sha256(data).hexdigest(), "path": name, "size": len(data),
+                "format": name.rsplit(".", 1)[-1] if "." in name else ""})
+        self.notices.append(text)
+        self.res.notices.append({"t": round(time.time(), 3), "text": text, "stale": list(stale),
+                                 "added": sorted(add_files or {}), "after_calls": self.meter.total.calls})
+        self._ev("notice", stale=list(stale), added=sorted(add_files or {}))
+
+    def _preamble(self) -> str:
+        if not self.notices:
+            return self.preamble
+        return self.preamble + "\n\nNOTICES (read before anything else)\n" + "\n".join(f"- {n}" for n in self.notices)
 
     # ── events ───────────────────────────────────────────────
     def _ev(self, kind: str, **kw: Any) -> None:
@@ -81,7 +115,7 @@ class Scheduler:
     def _dispatch(self, seat: Seat, order: str) -> None:
         self.busy[seat.name] = order
         task = asyncio.create_task(run_order(seat, self.model_for(seat), self.r, self.inv, order, meter=self.meter,
-                                             data_tools=self.data_tools, preamble=self.preamble))
+                                             data_tools=self.data_tools, preamble=self._preamble()))
         self.inflight[task] = (seat, order)
         self._ev("dispatch", seat=seat.name, order=self.r.get(order)["code"])
 
@@ -211,6 +245,12 @@ class Scheduler:
                 self.res.workers.append(wr)
                 self._ev("returned", seat=seat.name, order=wr.code, calls=wr.calls, returned=wr.returned,
                          by_record=wr.returned_by_record, stopped=wr.stopped)
+                self.returns += 1
+                if self.on_return:
+                    try:
+                        self.on_return(self, self.returns)
+                    except Exception as e:  # noqa: BLE001 — a host hook never ends the run
+                        self._ev("hook_error", why=str(e)[:200])
         for t in list(self.inflight):                       # drain anything still running (budget stop)
             t.cancel()
         self.res.report, self.res.report_accepted = await self._report()
@@ -220,16 +260,20 @@ class Scheduler:
     async def _lead_turns(self, user: str, tools: list[Tool], unit: str, turns: int) -> None:
         assert self.lead
         model = self.model_for(self.lead)
-        messages = [Message("system", self.lead.prompt() + "\n\n" + self.preamble), Message("user", user)]
+        messages = [Message("system", self.lead.prompt() + "\n\n" + self._preamble()), Message("user", user)]
         by = {t.name: t for t in tools}
         for _ in range(turns):
             try:
                 self.meter.check(unit)
             except BudgetExhausted:
                 return
+            t0 = time.time()
             reply = await model.complete(messages, tools, temperature=self.lead.temperature, unit=unit)
             self.meter.add(unit, reply.input_tokens, reply.cached_tokens, reply.output_tokens)
             self.res.lead_calls += 1
+            self.res.lead_log.append({"t": round(t0, 3), "s": round(time.time() - t0, 3), "unit": unit,
+                                      "agent": self.lead.name, "in": reply.input_tokens,
+                                      "cached": reply.cached_tokens, "out": reply.output_tokens})
             messages.append(reply.as_message())
             if not reply.tool_calls:
                 return

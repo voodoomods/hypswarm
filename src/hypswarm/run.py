@@ -86,7 +86,8 @@ def _model_for(models: ModelSpec, default: ChatModel | None) -> Callable[[Seat],
 async def run(task: Task, seats: Sequence[Seat], models: ModelSpec, *, record: str | Path | None = None,
               budget: Budget | None = None, pricing: Pricing | None = None, data_tools: Sequence[Tool] = (),
               spend: Any = None, external_meter: Callable[[], float] | None = None,
-              default_model: ChatModel | None = None) -> RunResult:
+              default_model: ChatModel | None = None,
+              on_return: Callable[[Scheduler, int], None] | None = None) -> RunResult:
     """Run ``task`` with ``seats`` on a record at ``record`` (a path, or in memory), under ``budget``.
     ``models``: one model for every seat, a mapping by seat name / role / model id, or a function of the seat."""
     if not seats:
@@ -103,7 +104,8 @@ async def run(task: Task, seats: Sequence[Seat], models: ModelSpec, *, record: s
               "preamble_sha256": hashlib.sha256(task.preamble().encode()).hexdigest(),
               "data_tools": [t.name for t in data_tools]}
     rid = rec.file_run(inv, config)
-    sched = Scheduler(rec, inv, seats, model_for, meter, data_tools=data_tools, preamble=task.preamble())
+    sched = Scheduler(rec, inv, seats, model_for, meter, data_tools=data_tools, preamble=task.preamble(),
+                      on_return=on_return)
     try:
         sr = await sched.run()
         rec.finish_run(rid, "succeeded" if sr.stopped == "settled" else "interrupted", sr.stopped)

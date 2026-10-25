@@ -179,3 +179,28 @@ def test_data_tools_reach_workers_the_seat_allows(tmp_path):
              Seat("critic", "reviewer"), Seat("lead", "lead")]
     r = asyncio.run(run(TASK, seats, models, budget=Budget(max_calls=60), data_tools=[Tool.from_function(read_file)]))
     assert r.stopped == "settled" and seen == ["items.csv"]                # only the analyst was allowed the tool
+
+
+def test_a_notice_withdraws_the_stale_file_and_reaches_later_orders():
+    seen: list[str] = []
+
+    def peek(messages, tools):
+        sys_ = messages[0].content
+        if "NOTICES" in sys_ and "corrupt" in sys_:
+            seen.append(_order_code(messages))
+        return worker_script(messages, tools)
+
+    def hook(sched, n):
+        if n == 1:
+            sched.notify("NOTICE: items.csv was corrupt; use items_fixed.csv.", stale=["items.csv"],
+                         add_files={"items_fixed.csv": b"item,a,b\n1,1,1\n"})
+    models = {"worker": StubModel(peek), "reviewer": StubModel(reviewer_script), "lead": StubModel(lead_script)}
+    seats = [Seat("analyst", "worker"), Seat("critic", "reviewer"), Seat("lead", "lead")]   # one worker: orders are sequential
+    r = asyncio.run(run(TASK, seats, models, budget=Budget(max_calls=80), on_return=hook))
+    assert r.stopped == "settled"
+    assert [n["stale"] for n in r.scheduler.notices] == [["items.csv"]]
+    kinds = [e["kind"] for e in r.scheduler.events]
+    assert "notice" in kinds and kinds.index("notice") > kinds.index("returned")
+    assert seen and all(code != "T1" for code in seen)                      # every order after the first saw it
+    assert all(w.call_log and w.call_log[0]["in"] > 0 for w in r.scheduler.workers)
+    assert len(r.scheduler.lead_log) == r.scheduler.lead_calls == 2
