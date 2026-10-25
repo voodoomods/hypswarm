@@ -373,7 +373,9 @@ class Scheduler:
             self.res.lead_calls += 1
             self.res.lead_log.append({"t": round(t0, 3), "s": round(time.time() - t0, 3), "unit": unit,
                                       "agent": self.lead.name, "in": reply.input_tokens,
-                                      "cached": reply.cached_tokens, "out": reply.output_tokens})
+                                      "cached": reply.cached_tokens, "out": reply.output_tokens,
+                                      "tools": [tc.name for tc in reply.tool_calls],      # a lost report shows why
+                                      "said": (reply.content or "")[:300]})
             messages.append(reply.as_message())
             if not reply.tool_calls:
                 return
