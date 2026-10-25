@@ -61,3 +61,7 @@ ignore_missing_imports = true
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+
+[tool.ruff.lint.isort]
+known-third-party = ["hypgraph", "httpx", "fastmcp", "anthropic"]   # CI checks hypgraph out beside src/, which would
+known-first-party = ["hypswarm"]                                      # otherwise make it look first-party there
