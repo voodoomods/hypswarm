@@ -17,5 +17,5 @@ from .http_record import HttpRecord
 from .run import RunResult, Task, run
 from .seats import Seat
 
-__version__ = "0.1.0a2"
+__version__ = "0.1.0a3"
 __all__ = ["AgentOrder", "AgentOutcome", "Budget", "HttpRecord", "Meter", "Pricing", "RunResult", "Seat", "Task", "__version__", "agents", "bridges", "file_tools", "profiles", "run", "toolkits"]

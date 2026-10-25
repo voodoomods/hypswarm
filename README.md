@@ -1,11 +1,12 @@
-<p align="center"><img src="https://raw.githubusercontent.com/voodoomods/hypswarm/main/site/assets/hypswarm.svg" width="72" alt=""></p>
+<p align="center"><img src="https://hypswarm.com/assets/hypswarm.svg" width="72" alt=""></p>
 
 <h1 align="center">HypSwarm</h1>
 <p align="center"><b>Many agents. One record.</b><br>
 Run one agent or a swarm of them on a research, engineering, trading, knowledge or optimisation task, with a
 <a href="https://hypgraph.com">HypGraph</a> record as the only shared state.<br>
-<a href="https://hypswarm.com">hypswarm.com</a> · <a href="https://hypswarm.com/llms.txt">for agents</a> ·
-<a href="docs/DESIGN.md">the design</a> · <a href="docs/decisions/">decisions</a> · <a href="https://hypgraph.com">HypGraph</a></p>
+<a href="https://hypswarm.com">hypswarm.com</a> · <a href="https://hypswarm.com/agents/">for agents</a> ·
+<a href="https://hypswarm.com/engineers/">for engineers</a> · <a href="https://hypswarm.com/examples/">examples</a> ·
+<a href="https://github.com/voodoomods/hypswarm/blob/main/docs/DESIGN.md">the design</a> · <a href="https://github.com/voodoomods/hypswarm/tree/main/docs/decisions">decisions</a> · <a href="https://hypgraph.com">HypGraph</a></p>
 
 ---
 
