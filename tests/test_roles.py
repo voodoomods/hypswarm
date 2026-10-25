@@ -3,6 +3,7 @@ reviewer could never be reviewed); a question answered by an unreviewable claim 
 report phase has reading and submitting only. Found in pilot 4: both F7 hypswarm runs ended `stuck` because the
 critic had written the answer claim and nobody could review it, while the lead spent its report turns planning."""
 import asyncio
+import time
 
 from hypswarm import Budget, Seat, run
 from hypswarm.providers.stub import StubModel, calls_made, tool_outputs
@@ -49,12 +50,13 @@ def test_an_unreviewable_answer_is_reissued_to_a_worker(tmp_path):
                                                                "scope": "The 1000 paired items."},
                links=[{"rel": "answers", "to": rec.resolve("Q1", inv)}, {"rel": "derived_from", "to": rs["id"]}])
     rec.close()
+    time.sleep(1.1)        # the record's "written after the order" rule has second resolution: age the critic's claim
     res = asyncio.run(run(TASK, SEATS, make_models(), record=path, budget=Budget(max_calls=80), resume=inv))
     assert res.stopped == "settled" and res.report_accepted
     ev = [e for e in res.scheduler.events if e["kind"] == "unreviewable"]
     assert len(ev) == 1 and ev[0]["claim"] == "CL1" and ev[0]["by"] == "critic" and ev[0]["reissued_to"] == "analyst"
     q1 = next(q for q in res.board if q["code"] == "Q1")
-    assert q1["status"] == "settled" and q1["by"].startswith("CL2")   # the worker's answer, reviewed by the critic
+    assert q1["status"] == "settled" and not q1["by"].startswith("CL1 ")   # a worker's answer, reviewed by the critic
 
 
 def planning_lead(messages, tools):

@@ -72,6 +72,7 @@ class Scheduler:
         self.external_timeout_s = external_timeout_s if external_timeout_s is not None else lease_minutes * 60.0
         self.returns = 0
         self.notices: list[str] = []
+        self._reissued: set[str] = set()                    # unreviewable claims already re-issued to a worker
 
     # ── notices: something the world tells the team mid-run ──
     def notify(self, text: str, *, stale: Sequence[str] = (), add_files: dict[str, bytes] | None = None) -> None:
@@ -240,9 +241,11 @@ class Scheduler:
                 pool = [s for s in self.reviewers if s.name != author]
                 if not pool:
                     # The only reviewer wrote the answer (a reviewer seat on a served record, an outside seat): nobody
-                    # here may review it, so the question would never settle. Ask a worker for the answer instead.
-                    if q["id"] in busy_targets:
+                    # here may review it, so the question would never settle. Ask a worker for the answer instead —
+                    # once per such claim; if the worker's answer doesn't displace it, the lead sees it in the report.
+                    if q["id"] in busy_targets or claim in self._reissued:
                         continue
+                    self._reissued.add(claim)
                     worker = self._pick(self.workers, q["text"], "question")
                     if worker and self._issue(worker, q["id"], f"Answer {q['code']}: {q['text']} — {q['answers'][-1]} "
                                               f"by {author} can't be reviewed (its author is the reviewer); write the "
