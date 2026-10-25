@@ -129,7 +129,7 @@ def lead_tools(record: Record, seat: Seat, inv: str, meter: Meter, *, report_box
         """Your context, compiled from the record: the question board, exceptions, orders in flight and returned."""
         b = record.briefing(inv, roster=roster, since_seq=seq["n"])
         seq["n"] = b["seq"]
-        return b["text"] + f"\n(calls left in this run: {meter.calls_left()})"
+        return str(b["text"]) + f"\n(calls left in this run: {meter.calls_left()})"
 
     def add(type: str, fields: dict[str, Any], links: list[dict[str, Any]] | None = None) -> str:
         """Plan: a hypothesis {statement, predictions[]} or an experiment {aim, protocol, success_criteria} with
