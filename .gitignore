@@ -12,3 +12,4 @@ build/
 .env
 .venv/
 examples/*/work/
+studies/discovery/runs/
