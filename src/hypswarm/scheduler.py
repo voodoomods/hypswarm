@@ -12,7 +12,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from hypgraph import GraphError
@@ -34,7 +34,9 @@ class SchedulerResult:
     rounds: int = 0
     orders_issued: int = 0
     reworks: int = 0
-    escalations: int = 0
+    escalations: int = 0                    # orders the lead had to judge
+    model_escalations: int = 0              # dispatches on a seat's deeper model (after a NOT MET)
+    adopted: int = 0                        # orders taken over from a previous run (resume)
     lead_calls: int = 0
     report: str = ""
     report_accepted: bool = False
@@ -116,16 +118,57 @@ class Scheduler:
         idle = self._idle(pool)
         return max(idle, key=lambda s: (fit(s, text, ttype), -self.seats.index(s))) if idle else None
 
-    def _dispatch(self, seat: Seat, order: str) -> None:
+    def _model(self, seat: Seat, escalate: bool) -> ChatModel:
+        """The seat's model — or, when the record has sent its work back once already and the seat names a deeper
+        model, that one. Escalation is decided by the record's NOT MET, never by the model's own say-so."""
+        if escalate and seat.escalate_to and seat.escalate_to != seat.model:
+            return self.model_for(replace(seat, model=seat.escalate_to))
+        return self.model_for(seat)
+
+    def _dispatch(self, seat: Seat, order: str, escalate: bool = False) -> None:
         self.busy[seat.name] = order
         if seat.external:
             task = asyncio.create_task(await_external(seat, self.r, self.inv, order, timeout_s=self.external_timeout_s,
                                                       poll_s=self.external_poll_s))
+            model_name = "external"
         else:
-            task = asyncio.create_task(run_order(seat, self.model_for(seat), self.r, self.inv, order, meter=self.meter,
+            model = self._model(seat, escalate)
+            model_name = getattr(model, "name", "?")
+            task = asyncio.create_task(run_order(seat, model, self.r, self.inv, order, meter=self.meter,
                                                  data_tools=self.data_tools, preamble=self._preamble()))
         self.inflight[task] = (seat, order)
-        self._ev("dispatch", seat=seat.name, order=self.r.get(order)["code"], external=seat.external)
+        escalated = bool(escalate and seat.escalate_to and seat.escalate_to != seat.model and not seat.external)
+        if escalated:
+            self.res.model_escalations += 1
+        self._ev("dispatch", seat=seat.name, order=self.r.get(order)["code"], external=seat.external,
+                 model=model_name, escalated=escalated)
+
+    def _adopt(self) -> None:
+        """Resume: take over the orders a previous run of this investigation left open. An open or overdue order
+        assigned to one of our seats is dispatched again (its earlier writes are in the record and still count);
+        one assigned to nobody here is cancelled with the reason. Rework chains are read back from the record's
+        ``supersedes`` links, so the rework cap and escalation carry over."""
+        for o in self.r.orders(self.inv):
+            if o["status"] not in ("open", "overdue"):
+                continue
+            root, depth = o["id"], 0
+            while True:                                 # follow supersedes to the first order of the chain
+                older = [e["dst"] for e in self.r.get(root).get("out", []) if e["rel"] == "supersedes"]
+                if not older:
+                    break
+                root, depth = older[0], depth + 1
+            self.chain[o["id"]] = root
+            self.reworked[root] = max(self.reworked.get(root, 0), depth)
+            seat = next((s for s in self.seats if s.name == o["assignee"]), None)
+            if seat is None:
+                self.r.cancel_work(author=HARNESS, order=o["id"], why=f"resumed without a seat named {o['assignee']!r}")
+                self._ev("cancelled", order=o["code"], why="no such seat on resume")
+                continue
+            if seat.name in self.busy:
+                continue                                # one order per seat; the other stays open for a later round
+            self.res.adopted += 1
+            self._ev("adopt", seat=seat.name, order=o["code"], reworks=depth)
+            self._dispatch(seat, o["id"], escalate=depth > 0)
 
     def _issue(self, seat: Seat, target: str, objective: str, done_when: list[Any] | None = None) -> bool:
         try:
@@ -163,7 +206,7 @@ class Scheduler:
                 self.res.reworks += 1
                 self.chain[rw["order"]] = root
                 self._ev("rework", order=o["code"], as_=rw["code"], missing=missing[:200])
-                self._dispatch(seat, rw["order"])
+                self._dispatch(seat, rw["order"], escalate=True)
             elif seat and seat.name in self.busy:
                 continue                                    # decide once the seat is free
             else:
@@ -223,7 +266,9 @@ class Scheduler:
         return ""
 
     # ── the loop ─────────────────────────────────────────────
-    async def run(self) -> SchedulerResult:
+    async def run(self, *, adopt: bool = False) -> SchedulerResult:
+        if adopt:
+            self._adopt()
         while not self._stop:
             self.res.rounds += 1
             try:

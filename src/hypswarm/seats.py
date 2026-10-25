@@ -29,6 +29,8 @@ class Seat:
     max_turns: int = 14            # per order
     tools: tuple[str, ...] = ("*",)  # names of the host's data tools it may use ("*" = all)
     external: bool = False         # no model here: a person or another agent works its orders through MCP
+    escalate_to: str = ""          # a deeper model id, used from the first rework of an order onward (the cheap
+                                   # model gets the first attempt; the record's NOT MET is what escalates it)
     extra: dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
