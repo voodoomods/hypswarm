@@ -50,7 +50,12 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter)
         {statement, scope, kind, measurements: [{name, result, key, k, n | value}]} · hypothesis {statement,
         predictions[]} · experiment {aim, protocol, success_criteria}. links: [{"rel": "answers", "to": "Q1"},
         {"rel": "derived_from", "to": "RS1"}, {"rel": "supports", "to": "H1", "why": …}]. A claim's numbers are
-        bound to your own results when the record can find them; a refused claim says exactly what to fix."""
+        bound to your own results when the record can find them; a refused claim says exactly what to fix.
+        A reviewer writes reviews, not claims: a claim by the only reviewer could never be reviewed."""
+        if seat.role == "reviewer" and type == "claim":
+            return ("refused: you are a reviewer — record a verdict on the claim you were asked to check (review); if "
+                    "the right answer is missing, say so in your review notes and return the order, and a worker "
+                    "will be asked to write it")
         try:
             n = record.create(author=me, type=type, inv=inv, fields=fields, links=_links(links))
         except (GraphError, KeyError) as e:
@@ -170,6 +175,8 @@ def lead_tools(record: Record, seat: Seat, inv: str, meter: Meter, *, report_box
         r = record.check_text(text, inv)
         errs = [f for f in r["findings"] if f["level"] == "error"]
         if errs:
+            report_box["refusals"] = int(report_box.get("refusals", 0)) + 1
+            report_box.setdefault("refused", []).append([f"{f['code']}: {f['excerpt'][:100]}" for f in errs[:6]])
             return "report refused: " + "; ".join(f"line {f['line']} {f['code']}: {f['excerpt'][:100]}"
                                                   for f in errs[:6]) + " — fix these and submit again"
         report_box["text"] = text

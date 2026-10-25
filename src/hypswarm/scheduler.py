@@ -238,6 +238,18 @@ class Scheduler:
                     continue
                 author = self.r.get(claim)["by"]
                 pool = [s for s in self.reviewers if s.name != author]
+                if not pool:
+                    # The only reviewer wrote the answer (a reviewer seat on a served record, an outside seat): nobody
+                    # here may review it, so the question would never settle. Ask a worker for the answer instead.
+                    if q["id"] in busy_targets:
+                        continue
+                    worker = self._pick(self.workers, q["text"], "question")
+                    if worker and self._issue(worker, q["id"], f"Answer {q['code']}: {q['text']} — {q['answers'][-1]} "
+                                              f"by {author} can't be reviewed (its author is the reviewer); write the "
+                                              "answer as your own claim, from the files."):
+                        self._ev("unreviewable", claim=q["answers"][-1], by=author, reissued_to=worker.name)
+                        busy_targets.add(q["id"])
+                    continue
                 seat = self._pick(pool, q["text"], "claim")
                 if seat and self._issue(seat, claim, f"Review {q['answers'][-1]}, which answers {q['code']}: check its "
                                                      "numbers and reasoning against the files and the record.",
@@ -365,15 +377,20 @@ class Scheduler:
         if not self.lead:
             return facts, False
         box: dict[str, Any] = {}
-        tools = lead_tools(self.r, self.lead, self.inv, self.meter, report_box=box, roster=self.roster,
-                           order_author=HARNESS)
+        # The run is ending: the report phase gets reading and submitting only. Planning tools (add, rework,
+        # cancel) belong to exceptions — a lead that spent its report turns adding questions nobody will work left
+        # the run without a report (F7-907, pilot 4).
+        tools = [t for t in lead_tools(self.r, self.lead, self.inv, self.meter, report_box=box, roster=self.roster,
+                                       order_author=HARNESS) if t.name in ("briefing", "report_facts", "submit_report",
+                                                                             "show")]
         user = ("Write the final report. Call report_facts and start from it; write your interpretation under the "
                 "facts; end with the answers in the format the task asks for; submit_report. If it is refused, fix "
-                "exactly what it names and submit again.")
+                "exactly what it names and submit again. Nothing else can be done now: the run is ending.")
         try:
             await self._lead_turns(user, tools, "report", self.lead_turns)
         except Exception as e:  # noqa: BLE001
             self._ev("report_error", why=str(e)[:200])
         if box.get("text"):
             return str(box["text"]), True
+        self._ev("report_missing", refusals=box.get("refusals", 0))
         return facts + "\n\n*(The lead did not submit an interpretation that passed the record's check.)*", False
