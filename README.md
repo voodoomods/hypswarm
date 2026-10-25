@@ -93,6 +93,16 @@ The core ships `OpenAICompatible` (DeepInfra, OpenAI, NVIDIA NIM, vLLM, Ollama, 
 Messages API, prompt-cache reads counted. Any object with `async complete(messages, tools) -> Reply` is a model.
 A LangChain adapter is planned as an extra.
 
+## Installing, today
+
+hypswarm needs HypGraph's coordination layer, which isn't on PyPI yet; until it releases, install the engine from
+its branch:
+
+```bash
+pip install "hypgraph @ git+https://github.com/voodoomods/hypgraph@harmony-study"
+pip install git+https://github.com/voodoomods/hypswarm
+```
+
 ## Status
 
 Alpha. Built from the harness the HypGraph harmony study ran agent teams on; its first measured use is as a
