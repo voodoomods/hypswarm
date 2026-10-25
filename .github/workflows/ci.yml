@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: voodoomods/hypgraph
-          ref: main
+          ref: harmony-study            # the coordination layer lives here until it merges and releases
           path: hypgraph
       - uses: actions/setup-python@v5
         with:
