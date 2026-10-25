@@ -24,7 +24,13 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - run: python -c "import re,sys;s=open('site/index.html').read();bad=re.findall(r'(?:href|src)=\"/(?!/)',s);sys.exit('root-absolute paths: %d'%len(bad) if bad else 0)"
+      - name: no root-absolute paths (the page must also work under /hypswarm/ on github.io)
+        shell: python
+        run: |
+          import re, sys
+          s = open("site/index.html", encoding="utf-8").read()
+          bad = re.findall(r'(?:href|src)="/(?!/)', s)
+          sys.exit(f"root-absolute paths: {len(bad)}" if bad else 0)
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
