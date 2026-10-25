@@ -3,7 +3,8 @@ conversation so far that returns the next reply — text, or a tool call."""
 
 from __future__ import annotations
 
-from typing import Any, Callable, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from ..messages import Message, Reply, Tool, ToolCall
 
@@ -20,11 +21,12 @@ class StubModel:
                        unit: str = "") -> Reply:
         self.calls += 1
         out = self.script(messages, tools)
-        usage = {"input_tokens": 100 + 10 * len(messages), "cached_tokens": 50, "output_tokens": 20}
+        inp, cached, outp = 100 + 10 * len(messages), 50, 20
         if out is None or isinstance(out, str):
-            return Reply(content=out or "done", **usage)
+            return Reply(content=out or "done", input_tokens=inp, cached_tokens=cached, output_tokens=outp)
         name, args = out
-        return Reply(content="", tool_calls=(ToolCall(f"c{self.calls}", name, args),), **usage)
+        return Reply(content="", tool_calls=(ToolCall(f"c{self.calls}", name, args),), input_tokens=inp,
+                     cached_tokens=cached, output_tokens=outp)
 
 
 def tool_outputs(messages: Sequence[Message]) -> list[str]:

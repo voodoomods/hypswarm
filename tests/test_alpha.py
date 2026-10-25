@@ -3,12 +3,11 @@ record and return when it says they're done, a reviewer settles each question, t
 passes the record's check — and no model is ever called for anything mechanical."""
 import asyncio
 import json
-from typing import Any
 
 import pytest
 
 from hypswarm import Budget, Pricing, Seat, Task, run
-from hypswarm.messages import Message, Tool
+from hypswarm.messages import Tool
 from hypswarm.providers.stub import StubModel, calls_made, tool_outputs
 
 TASK = Task(title="Does A beat B", mission="Two models were scored on the same items. Find out whether A beats B.",

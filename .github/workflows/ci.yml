@@ -20,7 +20,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: pip install -e ".[dev]" --no-deps && pip install httpx pytest
+      - run: pip install -e ".[dev]" --no-deps && pip install httpx pytest mypy ruff
+      - run: python -m ruff check src tests
+      - run: python -m mypy --strict src/hypswarm
+        env:
+          MYPYPATH: ${{ github.workspace }}/hypgraph/src
       - run: python -m pytest -q
         env:
           HYPGRAPH_SRC: ${{ github.workspace }}/hypgraph/src

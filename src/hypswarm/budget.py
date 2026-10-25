@@ -6,8 +6,8 @@ has one (a proxy ledger), else from the provider's usage fields priced by a tabl
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 
 class BudgetExhausted(RuntimeError):

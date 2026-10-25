@@ -10,3 +10,4 @@ build/
 *.hypgraph-journal
 .claude/
 .env
+.venv/

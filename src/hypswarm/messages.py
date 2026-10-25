@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 import inspect
 import json
 import typing
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 _JSON = {str: "string", int: "integer", float: "number", bool: "boolean", list: "array", dict: "object"}
 
@@ -75,7 +75,7 @@ class Tool:
     fn: Callable[..., Any]
 
     @classmethod
-    def from_function(cls, fn: Callable[..., Any], name: str = "", description: str = "") -> "Tool":
+    def from_function(cls, fn: Callable[..., Any], name: str = "", description: str = "") -> Tool:
         sig = inspect.signature(fn)
         hints = typing.get_type_hints(fn) if hasattr(fn, "__annotations__") else {}
         props, required = {}, []

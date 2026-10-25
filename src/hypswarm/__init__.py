@@ -14,4 +14,4 @@ from .run import RunResult, Task, run
 from .seats import Seat
 
 __version__ = "0.1.0a1"
-__all__ = ["Budget", "Meter", "Pricing", "RunResult", "Seat", "Task", "run", "__version__"]
+__all__ = ["Budget", "Meter", "Pricing", "RunResult", "Seat", "Task", "__version__", "run"]

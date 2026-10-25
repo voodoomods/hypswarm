@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import os
 import sys
 import tomllib
@@ -95,7 +94,7 @@ def cmd_report(a: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        sys.stdout.reconfigure(encoding="utf-8")
     p = argparse.ArgumentParser(prog="hypswarm", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--version", action="version", version=f"hypswarm {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)

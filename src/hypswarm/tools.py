@@ -97,8 +97,8 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter)
     def find(text: str = "", type: str = "") -> str:
         """Nodes in this investigation matching words and/or a type."""
         rows = record.search(text, type, inv, 30)
-        return "\n".join(f"{r['code']} {r['type']} — {r['title'][:100]} — {r['state']['sentence'][:80]}"
-                         for r in rows) or "nothing matches"
+        return str("\n".join(f"{r['code']} {r['type']} — {r['title'][:100]} — {r['state']['sentence'][:80]}"
+                             for r in rows) or "nothing matches")
 
     def return_work(note: str = "") -> str:
         """Hand your order back with a note of at most 120 words: what you did, what you could not."""
@@ -162,7 +162,7 @@ def lead_tools(record: Record, seat: Seat, inv: str, meter: Meter, *, report_box
 
     def report_facts() -> str:
         """The facts of the investigation generated from the record. Start the report from them."""
-        return record.report(inv)["markdown"]
+        return str(record.report(inv)["markdown"])
 
     def submit_report(text: str) -> str:
         """Submit the final report: the facts plus your interpretation. It is checked against the record; errors

@@ -11,8 +11,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Callable, Sequence
+from typing import Any
 
 from hypgraph import GraphError
 
@@ -47,7 +48,7 @@ class Scheduler:
     def __init__(self, record: LocalRecord, inv: str, seats: Sequence[Seat], model_for: Callable[[Seat], ChatModel],
                  meter: Meter, *, data_tools: Sequence[Tool] = (), preamble: str = "", max_reworks: int = 2,
                  lease_minutes: int = 240, lead_turns: int = 6,
-                 on_return: Callable[["Scheduler", int], None] | None = None):
+                 on_return: Callable[[Scheduler, int], None] | None = None):
         self.r, self.inv, self.seats = record, inv, list(seats)
         self.model_for, self.meter = model_for, meter
         self.data_tools, self.preamble = list(data_tools), preamble
@@ -216,7 +217,6 @@ class Scheduler:
 
     # ── the loop ─────────────────────────────────────────────
     async def run(self) -> SchedulerResult:
-        self._pending_lead: list[tuple[dict[str, Any], str]] = []
         while not self._stop:
             self.res.rounds += 1
             try:

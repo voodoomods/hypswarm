@@ -53,6 +53,11 @@ strict = true
 packages = ["hypswarm"]
 mypy_path = "src"
 
+[[tool.mypy.overrides]]
+module = ["hypgraph", "hypgraph.*", "fastmcp", "fastmcp.*"]
+follow_imports = "skip"            # hypgraph ships no py.typed yet: its surface is Any here
+ignore_missing_imports = true
+
 [tool.ruff]
 line-length = 120
 target-version = "py311"

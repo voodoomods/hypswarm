@@ -6,9 +6,10 @@ import hashlib
 import json
 import logging
 import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
 
 from .budget import Budget, Meter, Pricing
 from .messages import Tool
@@ -56,24 +57,26 @@ class RunResult:
 
     def answers(self) -> dict[str, Any] | None:
         import re
-        m = re.findall(r"```answers\s*(\{.*?\})\s*```", self.report, re.S)
+        m = re.findall(r"```answers\s*(\{.*?\})\s*```", self.report, re.DOTALL)
         if not m:
             return None
         try:
-            return json.loads(m[-1])
+            d = json.loads(m[-1])
         except json.JSONDecodeError:
             return None
+        return d if isinstance(d, dict) else None
 
 
 ModelSpec = ChatModel | Mapping[str, ChatModel] | Callable[[Seat], ChatModel]
 
 
 def _model_for(models: ModelSpec, default: ChatModel | None) -> Callable[[Seat], ChatModel]:
-    if callable(models) and not hasattr(models, "complete"):
-        return models  # type: ignore[return-value]
     if hasattr(models, "complete"):
-        return lambda s: models  # type: ignore[return-value]
-    table: Mapping[str, ChatModel] = models  # type: ignore[assignment]
+        fixed: ChatModel = models  # type: ignore[assignment]
+        return lambda s: fixed
+    if callable(models):
+        return models
+    table: Mapping[str, ChatModel] = models
 
     def pick(seat: Seat) -> ChatModel:
         m = table.get(seat.name) or table.get(seat.model) or table.get(seat.role) or default or table.get("*")

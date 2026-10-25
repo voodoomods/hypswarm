@@ -11,7 +11,8 @@ import asyncio
 import json
 import os
 import random
-from typing import Any, Callable, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
 import httpx
 
@@ -74,7 +75,7 @@ class OpenAICompatible:
 def _parse(data: dict[str, Any]) -> Reply:
     choice = (data.get("choices") or [{}])[0]
     msg = choice.get("message") or {}
-    calls = []
+    calls: list[ToolCall] = []
     for tc in msg.get("tool_calls") or []:
         fn = tc.get("function") or {}
         try:

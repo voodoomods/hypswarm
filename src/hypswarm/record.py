@@ -7,8 +7,9 @@ file directly in server mode; here they share one Graph, which serialises writes
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Iterable, Protocol, Sequence
+from typing import Any, Protocol
 
 from hypgraph import Graph, GraphError, Policy
 
@@ -47,7 +48,7 @@ class LocalRecord:
 
     def __init__(self, path: str | Path | None, seats: Sequence[Seat], *, spend: Any = None,
                  max_creates_per_minute: int = 600):
-        reviewers = {s.name for s in seats if s.role == "reviewer"}
+        reviewers = frozenset(s.name for s in seats if s.role == "reviewer")
         self.policy = Policy(reviewers=reviewers, instrument=INSTRUMENT, operator="operator",
                              max_creates_per_minute=max_creates_per_minute)
         self.g = Graph(str(path) if path else None, policy=self.policy, spend=spend)
@@ -61,8 +62,8 @@ class LocalRecord:
 
     # seeding a task
     def start(self, title: str, objective: str, questions: Iterable[tuple[str, str]], *, success: str = "",
-              strict: bool = True, files: dict[str, bytes] | None = None) -> str:
-        inv = self.g.create(author=HARNESS, type="investigation", fields={
+              strict: bool = True, files: Mapping[str, bytes] | None = None) -> str:
+        inv: str = self.g.create(author=HARNESS, type="investigation", fields={
             "title": title[:200], "objective": objective, "success_criteria": success or
             "Every question answered from the evidence, with the evidence in the record.", "strict_claims": strict})["id"]
         for code, text in questions:
@@ -75,8 +76,9 @@ class LocalRecord:
 
     def file_run(self, inv: str, config: dict[str, Any]) -> str:
         """The run's own provenance: hypswarm version, seats and models, budget, prompt hashes."""
-        return self.g.create(author=HARNESS, type="run", inv=inv, fields={
+        rid: str = self.g.create(author=HARNESS, type="run", inv=inv, fields={
             "kind": "agent", "name": "hypswarm run", "state": "running", "config": config})["id"]
+        return rid
 
     def finish_run(self, rid: str, state: str, note: str = "") -> None:
         try:
