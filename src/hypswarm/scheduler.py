@@ -51,10 +51,10 @@ class Scheduler:
                  meter: Meter, *, data_tools: Sequence[Tool] = (), preamble: str = "", max_reworks: int = 2,
                  lease_minutes: int = 240, lead_turns: int = 6,
                  on_return: Callable[[Scheduler, int], None] | None = None, external_poll_s: float = 1.0,
-                 external_timeout_s: float | None = None):
+                 external_timeout_s: float | None = None, header: str = ""):
         self.r, self.inv, self.seats = record, inv, list(seats)
         self.model_for, self.meter = model_for, meter
-        self.data_tools, self.preamble = list(data_tools), preamble
+        self.data_tools, self.preamble, self.header = list(data_tools), preamble, header
         self.max_reworks, self.lease_minutes, self.lead_turns = max_reworks, lease_minutes, lead_turns
         self.workers = [s for s in seats if s.role == "worker"]
         self.reviewers = [s for s in seats if s.role == "reviewer"]
@@ -136,7 +136,8 @@ class Scheduler:
             model = self._model(seat, escalate)
             model_name = getattr(model, "name", "?")
             task = asyncio.create_task(run_order(seat, model, self.r, self.inv, order, meter=self.meter,
-                                                 data_tools=self.data_tools, preamble=self._preamble()))
+                                                 data_tools=self.data_tools, preamble=self._preamble(),
+                                                 header=self.header))
         self.inflight[task] = (seat, order)
         escalated = bool(escalate and seat.escalate_to and seat.escalate_to != seat.model and not seat.external)
         if escalated:
@@ -327,7 +328,8 @@ class Scheduler:
     async def _lead_turns(self, user: str, tools: list[Tool], unit: str, turns: int) -> None:
         assert self.lead
         model = self.model_for(self.lead)
-        messages = [Message("system", self.lead.prompt() + "\n\n" + self._preamble()), Message("user", user)]
+        messages = [Message("system", (self.header + "\n" if self.header else "") + self.lead.prompt() + "\n\n"
+                            + self._preamble()), Message("user", user)]
         by = {t.name: t for t in tools}
         for _ in range(turns):
             try:

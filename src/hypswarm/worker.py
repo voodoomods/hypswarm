@@ -40,14 +40,15 @@ class WorkerResult:
 
 
 async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, order: str, *, meter: Meter,
-                    data_tools: Sequence[Tool] = (), preamble: str = "") -> WorkerResult:
+                    data_tools: Sequence[Tool] = (), preamble: str = "", header: str = "") -> WorkerResult:
     code = record.get(order)["code"]
     res = WorkerResult(order=order, code=code, seat=seat.name)
     rtools = worker_tools(record, seat, inv, order, meter)
     state = rtools[-1].fn.__dict__["_state"]
     tools = [t for t in data_tools if seat.may_use(t.name)] + rtools
     by = {t.name: t for t in tools}
-    messages = [Message("system", seat.prompt() + ("\n\n" + preamble if preamble else "")),
+    messages = [Message("system", (header + "\n" if header else "") + seat.prompt()
+                        + ("\n\n" + preamble if preamble else "")),
                 Message("user", record.order_text(order))]
     for _turn in range(seat.max_turns):
         try:

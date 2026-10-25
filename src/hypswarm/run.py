@@ -33,6 +33,8 @@ class Task:
     success: str = ""
     answer_format: str = ANSWER_FORMAT
     notes: str = ""                               # anything every seat should know (tools, conventions)
+    header: str = ""                              # the first line of every seat's system prompt (e.g. a run id, so no
+                                                  # two runs share a prompt prefix with a provider's cache — pilot 4)
 
     def preamble(self) -> str:
         qs = "\n".join(f"- {c}: {t}" for c, t in self.questions)
@@ -121,7 +123,7 @@ async def run(task: Task, seats: Sequence[Seat], models: ModelSpec, *, record: s
     rid = rec.file_run(inv, config)
     sched = Scheduler(rec, inv, seats, model_for, meter, data_tools=data_tools, preamble=task.preamble(),
                       on_return=on_return, lease_minutes=lease_minutes, external_poll_s=external_poll_s,
-                      external_timeout_s=external_timeout_s)
+                      external_timeout_s=external_timeout_s, header=task.header)
     for s in seats:
         if s.external:
             log.info("external seat %s: %s", s.name, s.mcp_hint(str(rec.path)))
