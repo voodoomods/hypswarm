@@ -24,7 +24,7 @@ from .record import HARNESS, INSTRUMENT, LocalRecord
 from .reproduce import Reproducer, reproduce_result
 from .seats import Seat, fit
 from .tools import lead_tools
-from .worker import WorkerResult, await_external, run_order
+from .worker import WorkerResult, await_external, run_agent_order, run_order
 
 log = logging.getLogger("hypswarm.scheduler")
 
@@ -136,6 +136,11 @@ class Scheduler:
             task = asyncio.create_task(await_external(seat, self.r, self.inv, order, timeout_s=self.external_timeout_s,
                                                       poll_s=self.external_poll_s))
             model_name = "external"
+        elif seat.agent is not None:
+            task = asyncio.create_task(run_agent_order(seat, self.r, self.inv, order, meter=self.meter,
+                                                       data_tools=self.data_tools, preamble=self._preamble(),
+                                                       header=self.header))
+            model_name = "agent:" + str(getattr(seat.agent, "__name__", type(seat.agent).__name__))
         else:
             model = self._model(seat, escalate)
             model_name = getattr(model, "name", "?")
@@ -348,6 +353,8 @@ class Scheduler:
                         self._ev("hook_error", why=str(e)[:200])
         for t in list(self.inflight):                       # drain anything still running (budget stop)
             t.cancel()
+        if self._stop and not self.res.stopped:
+            self.res.stopped = "stopped"                    # the host called stop(); the record keeps the open orders
         self.res.report, self.res.report_accepted = await self._report()
         return self.res
 

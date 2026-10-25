@@ -9,12 +9,13 @@ to judge exceptions. A solo scientist and an orchestrated swarm are the same pro
     result = asyncio.run(run(Task(...), seats=[Seat(...), ...], record="study.hypgraph", budget=Budget(max_usd=2)))
 """
 
-from . import profiles, toolkits
+from . import agents, bridges, profiles, toolkits
+from .agents import AgentOrder, AgentOutcome
 from .budget import Budget, Meter, Pricing
 from .files import file_tools
 from .http_record import HttpRecord
 from .run import RunResult, Task, run
 from .seats import Seat
 
-__version__ = "0.1.0a1"
-__all__ = ["Budget", "HttpRecord", "Meter", "Pricing", "RunResult", "Seat", "Task", "__version__", "file_tools", "profiles", "run", "toolkits"]
+__version__ = "0.1.0a2"
+__all__ = ["AgentOrder", "AgentOutcome", "Budget", "HttpRecord", "Meter", "Pricing", "RunResult", "Seat", "Task", "__version__", "agents", "bridges", "file_tools", "profiles", "run", "toolkits"]

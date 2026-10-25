@@ -13,19 +13,26 @@ jobs:
         python: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: voodoomods/hypgraph
-          ref: harmony-study            # the coordination layer lives here until it merges and releases
-          path: hypgraph
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: pip install -e ".[dev]" --no-deps && pip install httpx pytest "mypy==2.4.0" "ruff==0.17.2" fastmcp anthropic
-      - run: python -m ruff check src tests --output-format=github
+      # hypgraph comes from PyPI (>= 0.4.1, the coordination layer); the bridges' frameworks so their tests run
+      - run: pip install -e ".[dev,anthropic,bedrock,langgraph,pydantic-ai,crewai]" "mypy==2.4.0" "ruff==0.17.2" fastmcp
+      - run: python -m ruff check src tests examples --output-format=github
       - run: python -m mypy --strict src/hypswarm
-        env:
-          MYPYPATH: ${{ github.workspace }}/hypgraph/src
       - run: python -m pytest -q
+      # the examples, on scripted models (no spend); 06 exercises every bridge, 08 serves a record, 09 resumes
+      - run: |
+          set -e
+          for d in 01-eval-report 02-software-tests 03-paper-trading 04-sourced-brief 05-optimal-with-bound 06-mixed-swarm 09-resume-and-notice 10-custom-seat-and-toolkit; do
+            (cd "examples/$d" && python run.py --fresh --quiet --budget-calls 60)
+          done
+          (cd examples/07-human-reviewer && python run.py --fresh --quiet --auto)
+          (cd examples/08-served-record && python run.py --fresh --quiet)
+        shell: bash
         env:
-          HYPGRAPH_SRC: ${{ github.workspace }}/hypgraph/src
+          CI: "1"
+          PYDANTIC_AI_NO_BANNER: "1"
+          CREWAI_TRACING_ENABLED: "false"
+          CREWAI_DISABLE_TELEMETRY: "true"
+          OTEL_SDK_DISABLED: "true"

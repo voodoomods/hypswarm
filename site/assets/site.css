@@ -205,3 +205,20 @@ footer { padding: 40px 0 56px; color: var(--ink3); font-size: 14px; }
 footer .wrap { display: flex; gap: 24px; flex-wrap: wrap; justify-content: space-between; }
 footer a { color: var(--ink2); }
 footer .slogan { font-family: var(--mono); color: var(--ink2); }
+
+/* ── workflows ── */
+.wf { margin: 22px 0 0; padding: 16px 18px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.wfh { display: flex; align-items: center; gap: 10px; font: 700 15px var(--mono); margin-bottom: 12px; }
+.wfh span { font: 12px var(--mono); color: var(--ink3); }
+.wfh i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.wfh i.sw { background: var(--violet, #8b7cff); } .wfh i.tr { background: var(--green, #39d98a); }
+.wfh i.kn { background: var(--amber, #ffc857); } .wfh i.op { background: var(--red, #ff6b6b); }
+.flow { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px 0; counter-reset: step; }
+.flow li { position: relative; flex: 1 1 150px; min-width: 150px; padding: 8px 22px 8px 10px; border-left: 2px solid var(--line2); }
+.flow li::after { content: "→"; position: absolute; right: 4px; top: 8px; color: var(--ink3); font: 14px var(--mono); }
+.flow li:last-child::after { content: ""; }
+.flow li b, .flow li em { display: block; font: 600 13px var(--mono); color: var(--ink); }
+.flow li em { font-style: italic; color: var(--ink2); }
+.flow li span { display: block; font-size: 12.5px; line-height: 1.45; color: var(--ink2); margin-top: 3px; }
+.wf .ref { margin-top: 10px; font: 12px var(--mono); }
+@media (max-width: 640px) { .flow li { flex-basis: 100%; } .flow li::after { content: "↓"; right: auto; left: 8px; top: auto; bottom: -14px; } }

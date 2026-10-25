@@ -109,3 +109,9 @@ def test_check_output_three_verdicts():
     assert c["contradicted"] == ["n_items"] and not c["ok"]
     assert check_output({"rate": {"value": 0.8125}}, "rate = 0.81")["contradicted"] == ["rate"]
     assert not check_output({}, "anything")["ok"]
+    # a traceback never confirms anything: "line 1" once confirmed a registered value of 1
+    tb = "\n[stderr]\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nModuleNotFoundError: No module named 'x'\n"
+    c = check_output({"comma_kept": {"value": 1}}, tb)
+    assert c["confirmed"] == [] and c["unprinted"] == ["comma_kept"] and not c["ok"] and "ModuleNotFoundError" in c["error"]
+    warn = "n 7\n[stderr]\nDeprecationWarning: 3 of 4\n"
+    assert check_output({"n": {"value": 7}}, warn)["confirmed"] == ["n"]   # warnings don't fail it

@@ -93,6 +93,65 @@ async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, orde
     return res
 
 
+async def run_agent_order(seat: Seat, record: Record, inv: str, order: str, *, meter: Meter,
+                          data_tools: Sequence[Tool] = (), preamble: str = "", header: str = "") -> WorkerResult:
+    """A seat held by an agent from another framework (``seat.agent``, see hypswarm.agents): it gets the same
+    order, prompt and tools a native seat gets, runs its own loop, and reports what it used. One call is reserved
+    before it starts (so a run at its budget never starts an agent); the calls it reports are counted when it
+    ends, and the order is returned with its note if it did not return it itself."""
+    from .agents import AgentOrder, call_agent
+    code = record.get(order)["code"]
+    res = WorkerResult(order=order, code=code, seat=seat.name)
+    rtools = worker_tools(record, seat, inv, order, meter)
+    state = rtools[-1].fn.__dict__["_state"]
+    tools = [t for t in data_tools if seat.may_use(t.name)] + rtools
+    system = (header + "\n" if header else "") + seat.prompt() + ("\n\n" + preamble if preamble else "")
+    try:
+        meter.reserve(code)
+    except BudgetExhausted as e:
+        res.stopped = f"budget: {e}"
+    else:
+        t0 = time.time()
+        ao = AgentOrder(seat=seat, code=code, order=order, text=record.order_text(order), system=system, tools=tools,
+                        calls_left=meter.calls_left(), record=record, inv=inv)
+        try:
+            out = await call_agent(seat.agent, ao)
+        except Exception as e:  # noqa: BLE001 — a framework failure ends the order, never the run
+            meter.release(code)
+            res.stopped = f"error: {type(e).__name__}: {str(e)[:200]}"
+            log.warning("agent seat %s on %s: %s", seat.name, code, e)
+        else:
+            n = max(1, out.calls)                   # the reservation becomes the first call; the rest are added
+            meter.add(code, out.input_tokens, out.cached_tokens, out.output_tokens)
+            for _ in range(n - 1):
+                meter.add(code, 0, 0, 0)
+            res.calls += n
+            res.turns = n
+            res.call_log.append({"t": round(t0, 3), "s": round(time.time() - t0, 3), "unit": code, "agent": seat.name,
+                                 "in": out.input_tokens, "cached": out.cached_tokens, "out": out.output_tokens,
+                                 "calls": n})
+            res.tool_log = [{"turn": i + 1, "tool": str(x.get("tool")), "args": _short(dict(x.get("args") or {})),
+                             "out": "", "s": 0.0} for i, x in enumerate(out.log)]
+            if state["returned"]:
+                res.returned = True
+            elif out.note.strip():
+                try:
+                    c = record.return_work(author=seat.name, order=order, note=out.note[:800])
+                    res.returned = True
+                    res.tool_log.append({"turn": n, "tool": "return_work", "args": _short({"note": out.note[:120]}),
+                                         "out": "returned by the bridge — " + ("every predicate met" if c["all_met"] else "NOT every predicate met"), "s": 0.0})
+                except GraphError as e:
+                    log.warning("could not return %s for agent seat %s: %s", code, seat.name, e)
+    if not state["returned"] and not res.returned:
+        try:
+            record.return_work(author=seat.name, order=order,
+                               note=f"(returned by the record: the agent stopped without returning — {res.stopped or 'no note'})")
+            res.returned_by_record = True
+        except GraphError as e:
+            log.warning("could not return %s on %s's behalf: %s", code, seat.name, e)
+    return res
+
+
 async def await_external(seat: Seat, record: Record, inv: str, order: str, *, timeout_s: float,
                          poll_s: float = 1.0) -> WorkerResult:
     """An external seat works its order through the record (MCP, HTTP, a person): the scheduler only waits for

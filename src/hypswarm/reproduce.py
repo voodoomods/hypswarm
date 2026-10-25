@@ -70,8 +70,18 @@ def check_output(values: dict[str, Any], stdout: str) -> dict[str, Any]:
                  sent reviewers recomputing more than before)
     contradicted the output prints a *different* number next to this value's name
 
-    ``ok`` is true when nothing is contradicted and at least one value is confirmed."""
-    printed = _numbers(stdout)
+    ``ok`` is true when nothing is contradicted and at least one value is confirmed. Only the program's own output
+    counts: a ``[stderr]`` section (as a host sandbox appends it) never confirms a value, and a traceback means the
+    re-run failed — nothing is confirmed and ``error`` says why (a "line 1" in a traceback once confirmed a
+    registered value of 1)."""
+    out_part, _, err_part = stdout.partition("\n[stderr]\n")
+    failed = "Traceback (most recent call last)" in err_part or stdout.lstrip().startswith("Traceback (most recent call last)")
+    if failed:
+        names = [n for n, v in (values or {}).items() if isinstance(v, (dict, int, float))]
+        last = (err_part or stdout).strip().splitlines()[-1][:200] if (err_part or stdout).strip() else "the re-run raised"
+        return {"confirmed": [], "unprinted": names, "contradicted": [], "found": [], "missing": names, "ok": False,
+                "error": last}
+    printed = _numbers(out_part)
     confirmed: list[str] = []
     unprinted: list[str] = []
     contradicted: list[str] = []
@@ -88,7 +98,7 @@ def check_output(values: dict[str, Any], stdout: str) -> dict[str, Any]:
             continue
         if all(_matches(w, printed) for w in want):
             confirmed.append(name)
-        elif any(not _matches(w, [x]) for w in want for x in _labelled(name, stdout)) and _labelled(name, stdout):
+        elif any(not _matches(w, [x]) for w in want for x in _labelled(name, out_part)) and _labelled(name, out_part):
             contradicted.append(name)
         else:
             unprinted.append(name)

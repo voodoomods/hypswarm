@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>hypswarm — many agents, one record</title>
+<title>HypSwarm — many agents, one record</title>
 <meta name="description" content="hypswarm runs one agent or a swarm of them on a research, engineering, trading, knowledge or optimisation task with a HypGraph record as the only shared state: the record schedules, accepts, reproduces, stops and reports; models only do work and judge exceptions.">
-<meta property="og:title" content="hypswarm — many agents, one record">
+<meta property="og:title" content="HypSwarm — many agents, one record">
 <meta property="og:description" content="Run one agent or a swarm on a task with a HypGraph record as the only shared state. Five disciplines, one record: the record decides what counts, the prompt doesn't have to.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://hypswarm.com/">
@@ -36,8 +36,8 @@
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <header class="nav"><div class="wrap">
-  <a class="brand" href="./"><img src="assets/hypswarm.svg" alt=""><span>hyp<b>swarm</b></span></a>
-  <nav aria-label="Site"><a href="#profiles">Profiles</a><a href="agents/">Agents</a><a href="engineers/">Engineers</a>
+  <a class="brand" href="./"><img src="assets/hypswarm.svg" alt=""><span>Hyp<b>Swarm</b></span></a>
+  <nav aria-label="Site"><a href="#profiles">Profiles</a><a href="#workflows" class="hide-sm">Workflows</a><a href="examples/">Examples</a><a href="agents/">Agents</a><a href="engineers/">Engineers</a>
     <a href="#seats" class="hide-sm">Seats</a>
     <a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
     <a href="https://github.com/voodoomods/hypswarm" class="hide-sm">GitHub</a>
@@ -46,10 +46,11 @@
 
 <main id="main">
 <section class="hero">
+  <canvas id="hero-graph" aria-hidden="true"></canvas>
   <div class="wrap">
     <span class="eyebrow"><i></i> alpha · built on HypGraph · five disciplines · Python 3.11+</span>
     <h1 class="title">Many agents.<span class="l2">One record.</span></h1>
-    <p class="lede">hypswarm runs one agent or a swarm of them on a research, engineering, trading, knowledge or
+    <p class="lede">HypSwarm runs one agent or a swarm of them on a research, engineering, trading, knowledge or
       optimisation task, with a <a href="https://hypgraph.com">HypGraph</a> record as the only shared state. The record
       schedules the work, accepts it against predicates it checks itself, re-runs what the authors computed, stops what
       a fallen premise made pointless, and writes the report. Models are called to do work and to judge exceptions —
@@ -113,6 +114,81 @@ hypswarm run --task task.toml --profile trading --record desk.hypgraph</pre>
           roster and its toolkits here. The scheduler doesn't change.</p>
         <div class="ref" style="color:var(--ink3)"><b>see</b> hypswarm profiles · /api/graph/profiles</div></div>
     </div>
+  </div>
+</section>
+
+<section class="block" id="workflows">
+  <div class="wrap">
+    <div class="kicker">Workflows</div>
+    <h2 class="h">What a run looks like, per profile.</h2>
+    <p class="sub">The scheduler is the same in every profile; what changes is what each order must produce before the record
+      calls it done, and what the record refuses on the way. Each strip is one run, left to right. <b>Bold</b> steps are
+      writes the record checks; <em>slanted</em> steps are mechanical — no model is called.</p>
+
+    <div class="wf"><div class="wfh"><i class="sci"></i>scientific <span>analyst · stats · critic · lead</span></div>
+      <ol class="flow">
+        <li><b>question</b><span>on the board; an order goes to the seat whose words match</span></li>
+        <li><b>register_run</b><span>run + result + claim in one write; numbers bound to the values</span></li>
+        <li><em>instrument re-runs the code</em><span>values confirmed, unprinted or contradicted</span></li>
+        <li><b>review</b><span>the critic's order carries claim, code and verdict; judges, doesn't recompute</span></li>
+        <li><em>question settled</em><span>one checked claim answers it</span></li>
+        <li><b>report</b><span>facts from the record, interpretation under them, linted before it's accepted</span></li>
+      </ol>
+      <div class="ref"><b>refused on the way</b> a number no result accounts for · "never" without the count · "significant" without the test the record ran</div>
+    </div>
+
+    <div class="wf"><div class="wfh"><i class="sw"></i>software <span>implementer · tester · reviewer · lead</span></div>
+      <ol class="flow">
+        <li><b>requirement</b><span>a question: the behaviour that must hold</span></li>
+        <li><b>change</b><span>the implementer's diff, an artifact by hash</span></li>
+        <li><b>register_run</b><span>the tester's exact test command as code; passed k of n, exit code</span></li>
+        <li><em>instrument runs the tests</em><span>a lab run that replicates the tester's — this is <code>tests_pass</code></span></li>
+        <li><b>claim "passes"</b><span>accepted only now: it rests on the instrument-backed result</span></li>
+        <li><b>review</b><span>method and wording against the code the order carries</span></li>
+        <li><em>requirement verified</em><span>completion: every requirement's claim rests on a lab run</span></li>
+      </ol>
+      <div class="ref"><b>refused on the way</b> "it passes" before the instrument has run · a diff that isn't an artifact by hash</div>
+    </div>
+
+    <div class="wf"><div class="wfh"><i class="tr"></i>trading <span>quant · risk · lead</span></div>
+      <ol class="flow">
+        <li><b>market question</b><span>does this thesis have an edge after costs?</span></li>
+        <li><b>hypothesis + experiment</b><span>the thesis and the move it predicts; the backtest preregistered: window, costs</span></li>
+        <li><b>register_run</b><span>oos_return, fees, slippage, drawdown, trades — <code>backtested_oos</code></span></li>
+        <li><em>instrument re-runs the backtest</em><span>every registered value checked</span></li>
+        <li><b>review</b><span>the risk seat judges the method against the code</span></li>
+        <li><b>decision</b><span>a paper position: size, stop, review date — <code>based_on</code> the claim</span></li>
+        <li><em>position recorded</em><span>completion; there is no live-order path to reach</span></li>
+      </ol>
+      <div class="ref"><b>refused on the way</b> a backtest without the costs it charged · "edge" from the fitting window · any live order</div>
+    </div>
+
+    <div class="wf"><div class="wfh"><i class="kn"></i>knowledge <span>researcher · fact_checker · lead</span></div>
+      <ol class="flow">
+        <li><b>question</b><span>what the reader wants to know</span></li>
+        <li><b>read</b><span>a page, a paper, a dataset — through a fetch tool the host allowlisted</span></li>
+        <li><b>source</b><span>citation, URL or DOI, the passage, the date — a node the record holds</span></li>
+        <li><b>claim that cites it</b><span><code>sourced</code>; the passage accounts for the numbers in the claim</span></li>
+        <li><b>review</b><span>the fact-checker opens the source and records a verdict</span></li>
+        <li><b>report</b><span>linted: no sentence treats an unreviewed claim as settled</span></li>
+        <li><em>all sourced</em><span>completion</span></li>
+      </ol>
+      <div class="ref"><b>refused on the way</b> a claim from recall · a settled-sounding sentence on an unreviewed claim</div>
+    </div>
+
+    <div class="wf"><div class="wfh"><i class="op"></i>optimization <span>modeller · solver · verifier · lead</span></div>
+      <ol class="flow">
+        <li><b>question</b><span>what to minimise or maximise, under which constraints</span></li>
+        <li><b>hypothesis + experiment</b><span>the modelling choice; the solve configuration</span></li>
+        <li><b>register_run</b><span>objective, feasible, bound or gap, runtime — <code>feasible_bounded</code></span></li>
+        <li><em>instrument re-runs the solve</em><span>objective and gap confirmed</span></li>
+        <li><b>review</b><span>the verifier checks feasibility against the constraints in the order</span></li>
+        <li><b>claim</b><span>"best found, gap x" — or "optimal", only with a bound that meets the objective</span></li>
+        <li><em>incumbent feasible</em><span>completion</span></li>
+      </ol>
+      <div class="ref"><b>refused on the way</b> an objective with no feasibility · "optimal" without a bound</div>
+    </div>
+    <p class="sub">Each strip is one of the <a href="examples/">examples</a>, runnable for free.</p>
   </div>
 </section>
 
@@ -279,7 +355,7 @@ hypswarm run --task task.toml --profile trading --record-url http://127.0.0.1:87
   <div class="wrap">
     <div class="kicker">Status</div>
     <h2 class="h">Alpha, measured as it's built.</h2>
-    <p class="sub"><span class="alpha">alpha 0.1</span>&nbsp; hypswarm grew out of the harness the HypGraph harmony
+    <p class="sub"><span class="alpha">alpha 0.1</span>&nbsp; HypSwarm grew out of the harness the HypGraph harmony
       study runs agent teams on, and it is measured there as a preregistered condition — every change to the
       scheduler is tried against a scripted-model benchmark and against real runs before it's described here. Built:
       the scheduler, workers, five profiles with rosters, the tool registry, external seats over MCP, the record server
@@ -291,7 +367,7 @@ hypswarm run --task task.toml --profile trading --record-url http://127.0.0.1:87
 </main>
 
 <footer class="foot"><div class="wrap">
-  <span>hypswarm is built on <a href="https://hypgraph.com">HypGraph</a>. Apache-2.0.</span>
+  <span>HypSwarm is built on <a href="https://hypgraph.com">HypGraph</a>. Apache-2.0.</span>
   <span>Made by Nicolas Houghtaling at <a href="https://github.com/voodoomods">VoodooMods LLC</a>.</span>
 </div></footer>
 <script>
@@ -299,5 +375,6 @@ hypswarm run --task task.toml --profile trading --record-url http://127.0.0.1:87
     const d=document.documentElement,cur=d.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
     d.dataset.theme=cur==='dark'?'light':'dark';try{localStorage.setItem('hg-theme',d.dataset.theme)}catch(e){}});
 </script>
+<script src="assets/site.js" defer></script>
 </body>
 </html>

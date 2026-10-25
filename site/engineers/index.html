@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>For engineers — hypswarm</title>
-<meta name="description" content="Run a hypswarm: install, write a task and pick a profile, register your toolkits, run against a local or served record, let the instrument reproduce, resume and escalate — with a worked setup for every profile.">
+<title>For engineers — HypSwarm</title>
+<meta name="description" content="Run a HypSwarm: install, write a task and pick a profile, register your toolkits, run against a local or served record, let the instrument reproduce, resume and escalate — with a worked setup for every profile.">
 <link rel="icon" href="../assets/hypswarm.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../assets/site.css">
 <script>try{const t=localStorage.getItem('hg-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
@@ -20,8 +20,8 @@
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <header class="nav"><div class="wrap">
-  <a class="brand" href="../"><img src="../assets/hypswarm.svg" alt=""><span>hyp<b>swarm</b></span></a>
-  <nav aria-label="Site"><a href="../agents/">Agents</a><a href="../engineers/" aria-current="page">Engineers</a>
+  <a class="brand" href="../"><img src="../assets/hypswarm.svg" alt=""><span>Hyp<b>Swarm</b></span></a>
+  <nav aria-label="Site"><a href="../agents/">Agents</a><a href="../examples/" class="hide-sm">Examples</a><a href="../engineers/" aria-current="page">Engineers</a>
     <a href="../#profiles" class="hide-sm">Profiles</a><a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
     <a href="https://github.com/voodoomods/hypswarm" class="hide-sm">GitHub</a>
     <button class="iconbtn" data-toggle-theme type="button" aria-label="Toggle light and dark">◐</button></nav>
@@ -42,7 +42,7 @@
 <article class="prose">
 
 <h2 id="install">Install</h2>
-<p>hypswarm needs HypGraph's coordination layer, which ships with hypgraph 0.4:</p>
+<p>HypSwarm needs HypGraph's coordination layer, which ships with hypgraph 0.4:</p>
 <div class="code"><pre>python -m venv .venv && . .venv/bin/activate        # .venv\Scripts\activate on Windows
 pip install --pre hypswarm                                      # pulls hypgraph>=0.4; or: "hypswarm[anthropic]"
 hypswarm profiles                                               # the five rosters</pre></div>
@@ -254,7 +254,7 @@ external = true
 </main>
 
 <footer class="foot"><div class="wrap">
-  <span>hypswarm is built on <a href="https://hypgraph.com">HypGraph</a>. Apache-2.0.</span>
+  <span>HypSwarm is built on <a href="https://hypgraph.com">HypGraph</a>. Apache-2.0.</span>
   <span>Made by Nicolas Houghtaling at <a href="https://github.com/voodoomods">VoodooMods LLC</a>.</span>
 </div></footer>
 <script>

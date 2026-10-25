@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Examples — HypSwarm</title>
+<meta name="description" content="Ten runnable HypSwarm examples: one per profile, the mixed swarm (LangChain, PydanticAI, CrewAI, Claude, Bedrock and a person on one record), a person as reviewer over MCP, a served record with tokens, stop-and-resume, and a custom seat and toolkit. Free on scripted models.">
+<link rel="icon" href="../assets/hypswarm.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/site.css">
+<script>try{const t=localStorage.getItem('hg-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<style>
+  .prose h2{margin-top:44px} .prose h3{margin-top:26px}
+  .prose .code{margin:14px 0} .prose pre{font-size:13px;line-height:1.5;padding:12px 14px;overflow:auto}
+  .prose table{width:100%;border-collapse:collapse;font-size:14px;margin:12px 0}
+  .prose th,.prose td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  .prose th{font:600 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+  .pill{display:inline-block;font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--line2);border-radius:999px;padding:2px 9px;color:var(--ink2);margin-right:6px}
+  .ref{border-left:3px solid var(--red);background:var(--panel2);padding:10px 12px;border-radius:8px;font:13px/1.5 var(--mono);white-space:pre-wrap;margin:10px 0}
+  .ref.ok{border-left-color:var(--green)}
+  .ex{display:grid;grid-template-columns:52px 1fr;gap:0 14px;align-items:start;padding:14px 0;border-bottom:1px solid var(--line)}
+  .ex .n{font:700 22px var(--mono);color:var(--ink3)} .ex h3{margin:2px 0 6px} .ex p{margin:6px 0}
+  .ex .meta{font:12px var(--mono);color:var(--ink3)}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="nav"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/hypswarm.svg" alt=""><span>Hyp<b>Swarm</b></span></a>
+  <nav aria-label="Site"><a href="../examples/" aria-current="page">Examples</a><a href="../agents/">Agents</a><a href="../engineers/">Engineers</a>
+    <a href="../#profiles" class="hide-sm">Profiles</a><a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
+    <a href="https://github.com/voodoomods/hypswarm" class="hide-sm">GitHub</a>
+    <button class="iconbtn" data-toggle-theme type="button" aria-label="Toggle light and dark">◐</button></nav>
+</div></header>
+
+<main id="main">
+<div class="phead"><div class="wrap"><div class="kicker">Examples</div>
+  <h1>Ten swarms you can run before lunch.</h1>
+  <p>Every example runs <b>for free</b> on scripted models and for <b>cents</b> on a real provider. The scripted
+    models answer from values the example computed itself, through the same record tools, the same scheduler and
+    the same refusals a real model meets — so what you see is the record's behaviour, not a mock of it. Several
+    make a deliberately wrong first write so the trace shows the refusal and the honest rewrite.</p>
+  <div class="code" style="margin-top:14px"><pre>pip install --pre hypswarm                                   # 01–05, 07–10
+pip install --pre "hypswarm[langgraph,pydantic-ai,crewai]"   # 06, the mixed swarm
+git clone https://github.com/voodoomods/hypswarm && cd hypswarm/examples/01-eval-report
+python run.py --fresh            # add --trace for every tool call and reply, --model &lt;id&gt; for a real provider</pre></div></div></div>
+
+<div class="wrap doc">
+<nav class="toc" aria-label="On this page">
+  <a href="#profiles">One per profile</a><a href="#mixed">The mixed swarm</a><a href="#people">People and processes</a>
+  <a href="#yours">Yours</a><a href="#common">What they share</a>
+</nav>
+<article class="prose">
+
+<h2 id="profiles">One per profile</h2>
+
+<div class="ex"><div class="n">01</div><div>
+  <h3><a href="https://github.com/voodoomods/hypswarm/tree/main/examples/01-eval-report">eval-report</a> <span class="pill">scientific</span></h3>
+  <p>Two models scored on the same 1,000 items — does A beat B? Two workers count and compare, the instrument
+    re-runs both and confirms every value, the critic settles each question, the lead's report is linted against
+    the record. "Significantly" gets through only because the record ran the z-test on the bound counts.</p>
+  <div class="ref">refused: 'significantly': the bound counts (812/1,000 against 800/1,000) differ by 1.2 points, 95% interval −2.2 to 4.6, p = 0.49 — not significant at 0.05 [SIGNIFICANCE_NOT_SHOWN]</div>
+</div></div>
+
+<div class="ex"><div class="n">02</div><div>
+  <h3><a href="https://github.com/voodoomods/hypswarm/tree/main/examples/02-software-tests">software-tests</a> <span class="pill">software</span></h3>
+  <p>A CSV importer must keep a comma inside a quoted field. The tester registers the exact <code>pytest</code>
+    command as its code; the instrument re-runs it and files a lab run; <code>tests_pass</code> is met by <i>that</i>
+    run. The tester's claim of "passes", written before the re-run, is refused, the order is reworked, and the
+    claim is accepted once the lab run has landed.</p>
+  <div class="ref">refused: 'passes' is asserted, but no supporting result comes from an instrument-recorded run — tests must be run by the instrument, not reported [PASS_WITHOUT_INSTRUMENT_RUN]</div>
+</div></div>
+
+<div class="ex"><div class="n">03</div><div>
+  <h3><a href="https://github.com/voodoomods/hypswarm/tree/main/examples/03-paper-trading">paper-trading</a> <span class="pill">trading</span></h3>
+  <p>A mean-reversion thesis backtested on a held-out window with fees and slippage. The quant's first result has
+    returns and no costs — refused before it is a result. The honest one carries out-of-sample return, in-sample
+    return, drawdown, trades, fees and slippage; "edge" is said only if the after-cost number is positive. No live
+    orders exist.</p>
+  <div class="ref">refused: result refused: a backtest result reports returns without the costs it charged [BACKTEST_WITHOUT_COSTS]</div>
+</div></div>
+
+<div class="ex"><div class="n">04</div><div>
+  <h3><a href="https://github.com/voodoomods/hypswarm/tree/main/examples/04-sourced-brief">sourced-brief</a> <span class="pill">knowledge</span></h3>
+  <p>Three facts. A claim from recall is refused; the researcher adds the source (citation, URL, the passage,
+    the date) and the claim that cites it. With <code>--model</code>, an allowlisted <code>fetch</code> tool lets
+    the model read the pages for itself; whatever it reads becomes a source node.</p>
+  <div class="ref">refused: a knowledge claim must cite a source node (citation, url or doi, the passage) — the record holds what was read, not what was recalled [CLAIM_WITHOUT_SOURCE]</div>
+</div></div>
+
+<div class="ex"><div class="n">05</div><div>
+  <h3><a href="https://github.com/voodoomods/hypswarm/tree/main/examples/05-optimal-with-bound">optimal-with-bound</a> <span class="pill">optimization</span></h3>
+  <p>Six customers, three depots, capacities. An objective without feasibility is refused; "optimal" needs a bound
+    that meets the objective. The instance is small enough to enumerate, so the bound is exact and the instrument
+    re-runs the enumeration.</p>
+  <div class="ref">refused: 'optimal' is asserted, but no supporting result carries a bound or gap — an incumbent without a bound is a solution, not an optimum [OPTIMAL_WITHOUT_BOUND]</div>
+</div></div>
+
+<h2 id="mixed">The mixed swarm</h2>
+
+<div class="ex"><div class="n">06</div><div>
+  <h3><a href="https://github.com/voodoomods/hypswarm/tree/main/examples/06-mixed-swarm">mixed-swarm</a> <span class="pill">LangChain</span><span class="pill">PydanticAI</span><span class="pill">CrewAI</span><span class="pill">Claude / Bedrock</span><span class="pill">a person</span></h3>
+  <p>Five frameworks hold five seats on one record. A LangChain / LangGraph agent counts; a PydanticAI agent runs the
+    test; a CrewAI crew reviews both through its own native tool-calling loop; the lead runs on Claude over the
+    Anthropic API or on any model over Amazon Bedrock; you can take a reviewer seat over MCP. None of them knows
+    about the others. The record refuses the same overclaims from each in the same words, the instrument re-runs
+    whatever they register, and the budget counts the calls each framework reports.</p>
+  <div class="code"><pre>seats = [Seat("analyst", "worker", agent=langchain_agent(lambda tools: create_react_agent(llm, tools))),
+         Seat("stats",   "worker", agent=pydantic_ai_agent(lambda tools: Agent(model, tools=tools))),
+         Seat("critic",  "reviewer", agent=crewai_agent(lambda tools, order: Crew(...))),
+         Seat("lead",    "lead"),                                  # Anthropic("claude-sonnet-5-5") or Bedrock("…")
+         Seat("nicolas", "reviewer", external=True)]               # hypgraph --db record.hypgraph --as nicolas mcp</pre></div>
+  <div class="ref ok">=== SETTLED in 12.7s — 14 calls ===
+  Q1   settled      CL1 (checked by critic)
+  Q2   settled      CL2 (checked by critic)
+seats and what held them:
+  analyst   worker    agent:langchain_agent
+  stats     worker    agent:pydantic_ai_agent
+  critic    reviewer  agent:crewai_agent</div>
+  <p class="meta">A bridge hands the agent the order, the seat's system prompt and the record's tools in the framework's own
+    tool shape, caps the framework's loop at the calls left in the run, and reports what it used. If the agent
+    doesn't call <code>return_work</code> itself, the order is returned with its final answer as the note.</p>
+</div></div>
+
+<h2 id="people">People and processes</h2>
+
+<div class="ex"><div class="n">07</div><div>
+  <h3><a href="https://github.com/voodoomods/hypswarm/tree/main/examples/07-human-reviewer">human-reviewer</a> <span class="pill">MCP</span></h3>
+  <p>The analyst answers; <b>you</b> review, from Claude Code, Cursor or the plain MCP server
+    (<code>hypgraph --db record.hypgraph --as nicolas mcp</code>). Your review order carries the claim, its
+    measurements, the code and the instrument's verdict, so you judge rather than recompute. <code>--auto</code>
+    plays you from a second process so the example runs unattended.</p>
+</div></div>
+
+<div class="ex"><div class="n">08</div><div>
+  <h3><a href="https://github.com/voodoomods/hypswarm/tree/main/examples/08-served-record">served-record</a> <span class="pill">tokens</span></h3>
+  <p>One <code>hypgraph serve --writable</code> with two tokens — the swarm's, bound to the harness and its seats, and
+    a person's, bound to one name. The swarm runs over HTTP; the Atlas is open on the same server. Two probes
+    before the run show the boundary: no token → 401; the person's token writing as the analyst → 403.</p>
+</div></div>
+
+<div class="ex"><div class="n">09</div><div>
+  <h3><a href="https://github.com/voodoomods/hypswarm/tree/main/examples/09-resume-and-notice">resume-and-notice</a> <span class="pill">resume</span><span class="pill">notice</span></h3>
+  <p>A run stopped with an order open; a second run resumes the investigation and adopts the order as it stands.
+    Then a file is declared corrupt mid-run: the record withdraws the artifact with the reason, every later order
+    carries the notice, a worker's <code>read_file</code> refuses the stale bytes, and whatever rested on the file
+    falls.</p>
+  <div class="ref">read_file('site_south.csv') → refused: site_south.csv matches A2, which the record withdrew — site_south.csv was exported in µg/L but labelled mg/L; use site_south_fixed.csv (mg/L).</div>
+</div></div>
+
+<h2 id="yours">Yours</h2>
+
+<div class="ex"><div class="n">10</div><div>
+  <h3><a href="https://github.com/voodoomods/hypswarm/tree/main/examples/10-custom-seat-and-toolkit">custom-seat-and-toolkit</a> <span class="pill">toolkits.register</span><span class="pill">Seat(agent=…)</span></h3>
+  <p>A toolkit is a factory over the run's folder; a seat is any <code>async (AgentOrder) -&gt; AgentOutcome</code>.
+    This one calls no model at all — forty lines of code hold the seat — and the record treats it exactly like a
+    seat held by a frontier model. The framework bridges are this function written three times; write a fourth
+    for yours.</p>
+</div></div>
+
+<h2 id="common">What they share</h2>
+<ul>
+  <li><b>Orders come from the record.</b> The scheduler reads the question board and issues work; seats are matched on
+    the words they take. A seat never picks its own work.</li>
+  <li><b>One write for a result and its claim.</b> <code>register_run</code> records the run, the result and the claim whose
+    numbers are bound to the result's values; the instrument re-runs the code before any review.</li>
+  <li><b>Done is the record's call.</b> Every reply says MET / NOT MET per predicate and "return_work now" when all
+    are; reworks say what was missing.</li>
+  <li><b>The budget is a rule</b>, counted with calls in flight and printed in every reply.</li>
+  <li><b>Afterwards</b>, <code>hypgraph --db record.hypgraph serve</code> opens the Atlas: claims and their standing,
+    provenance, the work map, the refusal log.</li>
+</ul>
+</article>
+</div>
+</main>
+
+<footer class="foot"><div class="wrap">
+  <span>HypSwarm is built on <a href="https://hypgraph.com">HypGraph</a>. Apache-2.0.</span>
+  <span>Made by Nicolas Houghtaling at <a href="https://github.com/voodoomods">VoodooMods LLC</a>.</span>
+</div></footer>
+<script>
+  document.querySelector('[data-toggle-theme]')?.addEventListener('click',()=>{
+    const d=document.documentElement,cur=d.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+    d.dataset.theme=cur==='dark'?'light':'dark';try{localStorage.setItem('hg-theme',d.dataset.theme)}catch(e){}});
+</script>
+</body>
+</html>

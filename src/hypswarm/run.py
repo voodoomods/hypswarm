@@ -139,7 +139,7 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
     model_for = _model_for(models, default_model)
     from . import __version__
     config = {"hypswarm": __version__,
-              "seats": [{"name": s.name, "role": s.role, "model": "external (MCP)" if s.external else model_for(s).name,
+              "seats": [{"name": s.name, "role": s.role, "model": "external (MCP)" if s.external else ("agent:" + str(getattr(s.agent, "__name__", type(s.agent).__name__)) if s.agent is not None else model_for(s).name),
                          **({"escalate_to": s.escalate_to} if s.escalate_to else {})} for s in seats],
               "budget": {"max_calls": meter.budget.max_calls, "max_usd": meter.budget.max_usd},
               "preamble_sha256": hashlib.sha256(task.preamble().encode()).hexdigest(),

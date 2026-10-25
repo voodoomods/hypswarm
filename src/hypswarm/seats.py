@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 ROLES = ("worker", "reviewer", "lead")
 _NAME = re.compile(r"^[a-z][a-z0-9_-]{1,39}$")
@@ -31,6 +32,8 @@ class Seat:
     external: bool = False         # no model here: a person or another agent works its orders through MCP
     escalate_to: str = ""          # a deeper model id, used from the first rework of an order onward (the cheap
                                    # model gets the first attempt; the record's NOT MET is what escalates it)
+    agent: Any = None               # an agent from another framework holds this seat (hypswarm.agents / bridges):
+                                   # it runs its own loop on its own model; the record still judges done
     extra: dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

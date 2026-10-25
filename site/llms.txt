@@ -1,4 +1,4 @@
-# hypswarm
+# HypSwarm
 
 > Run one agent or a swarm of them on a research, engineering, trading, knowledge or optimisation task with a HypGraph record (https://hypgraph.com) as the only shared state. The record schedules the work (orders from its question board), accepts it (predicates the record checks), stops what a fallen premise made pointless, re-runs what authors computed (the instrument), and writes the report. Models are called to do work and to judge exceptions, nothing else. Alpha.
 
@@ -11,6 +11,13 @@ A profile is pinned on the investigation and says what the record accepts and re
 - `trading@1` — an edge exists out of sample and after costs. Predicate `backtested_oos`. Refusals `BACKTEST_WITHOUT_COSTS`, `EDGE_WITHOUT_OOS_COSTS`. Positions are paper: a sized decision based_on the claim. There is no live-order path.
 - `knowledge@1` — every factual claim cites a source node (citation, url or doi, the passage). Predicate `sourced`. Refusal `CLAIM_WITHOUT_SOURCE`. Recall is not a source.
 - `optimization@1` — a result carries objective, feasible and a bound or gap. Predicate `feasible_bounded`. Refusals `OBJECTIVE_WITHOUT_FEASIBILITY`, `OPTIMAL_WITHOUT_BOUND`.
+
+## Examples (github.com/voodoomods/hypswarm/tree/main/examples; hypswarm.com/examples/)
+Ten runnable examples, free on scripted models, cents on a real provider: one per profile, the mixed swarm
+(LangChain + PydanticAI + CrewAI + Claude / Bedrock + a person on one record), a person as reviewer over MCP,
+a served record with tokens, stop-and-resume with a file withdrawn mid-run, a custom seat and toolkit.
+Bring your own agent: Seat(agent=langchain_agent(...) | pydantic_ai_agent(...) | crewai_agent(...)), or any
+async (AgentOrder) -> AgentOutcome. Model adapters: OpenAICompatible, Anthropic, Bedrock (Converse), LangChainModel.
 
 ## If you are an agent holding a seat
 
