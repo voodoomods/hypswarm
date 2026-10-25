@@ -73,11 +73,11 @@ def test_one_call_result_and_claim_then_instrument_reproduces(tmp_path):
     finally:
         g.close()
     review_orders = [o for o in res.orders if o["assignee"] == "critic"]
-    assert review_orders and all("reproduced" in o["objective"] for o in review_orders)
+    assert review_orders and all("re-run" in o["objective"] and "CONTRADICTED" in o["objective"] for o in review_orders)
     assert res.usage["calls"] <= 12                        # the same as the alpha task without any of this
 
 
-def test_a_wrong_number_is_not_reproduced(tmp_path):
+def test_a_wrong_number_is_contradicted(tmp_path):
     def liar(messages, tools):
         done = calls_made(messages); outs = tool_outputs(messages)
         if any("return_work now" in o for o in outs) and "return_work" not in done:
@@ -85,7 +85,8 @@ def test_a_wrong_number_is_not_reproduced(tmp_path):
         if "register_run" not in done:
             q = _target(messages)
             return ("register_run", {"name": "count", "result_summary": f"Counted for {q}.",
-                                     "values": {"acc": {"k": 900, "n": 1000}}, "code": CODE_Q1,   # code says 812
+                                     "values": {"acc": {"k": 900, "n": 1000}},                  # the code prints acc 812
+                                     "code": "k, n = 812, 1000\nprint('acc', k, 'of', n)\n",
                                      "claim": "A is right on 900 of 1000 items.", "answers": q,
                                      "scope": "The 1000 paired items in items.csv."})
         return None
@@ -94,11 +95,17 @@ def test_a_wrong_number_is_not_reproduced(tmp_path):
                           [Seat("analyst", "worker"), Seat("critic", "reviewer"), Seat("lead", "lead")], models,
                           record=None, budget=Budget(max_calls=40), reproducer=exec_reproducer))
     rep = [e for e in res.scheduler.events if e["kind"] == "reproduced"]
-    assert len(rep) == 1 and not rep[0]["ok"] and rep[0]["missing"] == ["acc"]
+    assert len(rep) == 1 and not rep[0]["ok"] and rep[0]["contradicted"] == ["acc"]
 
 
-def test_check_output_precision_and_percent():
-    assert check_output({"acc": {"k": 812, "n": 1000}}, "812 of 1000")["ok"]
+def test_check_output_three_verdicts():
+    assert check_output({"acc": {"k": 812, "n": 1000}}, "812 of 1000")["confirmed"] == ["acc"]
     assert check_output({"rate": {"value": 0.812}}, "rate = 81.2%")["ok"]
-    assert check_output({"rate": {"value": 0.8125}}, "rate = 0.81")["missing"] == ["rate"]
+    # computed but never printed: not evidence against, and not 'ok' on its own
+    c = check_output({"n_items": {"value": 1352}, "acc": {"value": 0.8328}}, "0.8328\n")
+    assert c["confirmed"] == ["acc"] and c["unprinted"] == ["n_items"] and c["contradicted"] == [] and c["ok"]
+    # a different number next to the value's own name: contradicted
+    c = check_output({"n_items": {"value": 1352}}, "n_items: 1350\n")
+    assert c["contradicted"] == ["n_items"] and not c["ok"]
+    assert check_output({"rate": {"value": 0.8125}}, "rate = 0.81")["contradicted"] == ["rate"]
     assert not check_output({}, "anything")["ok"]

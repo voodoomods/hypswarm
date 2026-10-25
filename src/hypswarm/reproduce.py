@@ -49,11 +49,32 @@ def _matches(value: float, printed: list[float]) -> bool:
     return False
 
 
+def _labelled(name: str, stdout: str) -> list[float]:
+    """Numbers the output prints next to this value's own name ('n_items: 1352', 'n_items = 1352', 'n_items 1352')."""
+    pat = re.compile(re.escape(name) + r"\s*[:=]?\s*(-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)", re.IGNORECASE)
+    out = []
+    for m in pat.finditer(stdout):
+        try:
+            out.append(float(m.group(1)))
+        except ValueError:
+            continue
+    return out
+
+
 def check_output(values: dict[str, Any], stdout: str) -> dict[str, Any]:
-    """Which registered values the output shows: {found: [...], missing: [...], ok: bool}."""
+    """What the re-run's output says about each registered value, kept apart because they mean different things:
+
+    confirmed    the value appears in the output (at its own precision, or as a percentage)
+    unprinted    the code computed it but printed nothing matching — not evidence against; the author should print
+                 what they register (E′, 2026-10-25: 116 of 258 'not reproduced' were this, and a false negative
+                 sent reviewers recomputing more than before)
+    contradicted the output prints a *different* number next to this value's name
+
+    ``ok`` is true when nothing is contradicted and at least one value is confirmed."""
     printed = _numbers(stdout)
-    found: list[str] = []
-    missing: list[str] = []
+    confirmed: list[str] = []
+    unprinted: list[str] = []
+    contradicted: list[str] = []
     for name, v in (values or {}).items():
         want: list[float] = []
         if isinstance(v, dict):
@@ -65,8 +86,15 @@ def check_output(values: dict[str, Any], stdout: str) -> dict[str, Any]:
             want = [float(v)]
         if not want:
             continue
-        (found if all(_matches(w, printed) for w in want) else missing).append(name)
-    return {"found": found, "missing": missing, "ok": not missing and bool(found)}
+        if all(_matches(w, printed) for w in want):
+            confirmed.append(name)
+        elif any(not _matches(w, [x]) for w in want for x in _labelled(name, stdout)) and _labelled(name, stdout):
+            contradicted.append(name)
+        else:
+            unprinted.append(name)
+    return {"confirmed": confirmed, "unprinted": unprinted, "contradicted": contradicted,
+            "found": confirmed, "missing": unprinted + contradicted,          # older names, kept
+            "ok": not contradicted and bool(confirmed)}
 
 
 async def reproduce_result(record: Record, inv: str, result_id: str, reproducer: Reproducer) -> dict[str, Any] | None:
@@ -89,22 +117,34 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
         err = ""
     except Exception as e:  # noqa: BLE001 — the failure is the finding
         stdout, err = "", f"{type(e).__name__}: {str(e)[:300]}"
-    chk: dict[str, Any] = check_output(values, stdout) if not err else {"found": [], "missing": list(values), "ok": False}
-    missing_txt = ", ".join(str(x) for x in chk["missing"])
+    if err:
+        chk: dict[str, Any] = {"confirmed": [], "unprinted": [], "contradicted": [], "found": [], "missing": list(values),
+                               "ok": False}
+    else:
+        chk = check_output(values, stdout)
+    n = len([k for k in values if k in chk["confirmed"] or k in chk["unprinted"] or k in chk["contradicted"]])
+    parts = [f"{len(chk['confirmed'])} of {n} registered values confirmed by the output"]
+    if chk["unprinted"]:
+        parts.append(f"not printed by the code (not evidence against): {', '.join(chk['unprinted'])}")
+    if chk["contradicted"]:
+        parts.append(f"CONTRADICTED by the output: {', '.join(chk['contradicted'])}")
+    if err:
+        parts.append(f"the code failed: {err}")
+    verdict = "; ".join(parts)
     state = "succeeded" if not err else "failed"
     lab = record.create(author=INSTRUMENT, type="run", inv=inv, fields={
         "kind": "lab", "name": f"re-execution of {run['code']}", "state": state,
-        "note": (f"re-ran {run['code']}'s registered code; " + ("every registered value appears in the output"
-                 if chk["ok"] else f"missing from the output: {missing_txt or 'all'}") + (f"; {err}" if err else ""))[:2000],
-        "config": {"reproduces": run["id"], "stdout_tail": stdout[-1500:]}},
+        "note": f"re-ran {run['code']}'s registered code: {verdict}"[:2000],
+        "config": {"reproduces": run["id"], "stdout_tail": stdout[-1500:], "confirmed": chk["confirmed"],
+                   "unprinted": chk["unprinted"], "contradicted": chk["contradicted"]}},
         links=[{"rel": "replicates", "to": run["id"], "data": {"differs": "same_code"}}])
-    summary = (f"Re-executed {run['code']}'s code: " + ("all registered values reproduced." if chk["ok"] else
-               f"not reproduced — missing {missing_txt or 'every value'}" + (f" ({err})" if err else "") + "."))
+    outcome = "negative" if chk["contradicted"] or err else ("positive" if chk["confirmed"] else "inconclusive")
     lab_res = record.create(author=INSTRUMENT, type="result", inv=inv, fields={
-        "summary": summary, "kind": "computed", "outcome": "positive" if chk["ok"] else "negative",
-        "values": values if chk["ok"] else {}},
+        "summary": f"Re-executed {run['code']}'s code: {verdict}.", "kind": "computed", "outcome": outcome,
+        "values": {k: v for k, v in values.items() if k in chk["confirmed"]}},
         links=[{"rel": "produced", "from": lab["id"]}])
-    return {"run": lab["code"], "result": lab_res["code"], "ok": chk["ok"], "missing": chk["missing"], "error": err}
+    return {"run": lab["code"], "result": lab_res["code"], "ok": chk["ok"], "confirmed": chk["confirmed"],
+            "unprinted": chk["unprinted"], "contradicted": chk["contradicted"], "missing": chk["missing"], "error": err}
 
 
 __all__ = ["Reproducer", "check_output", "reproduce_result"]

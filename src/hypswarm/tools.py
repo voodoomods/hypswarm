@@ -66,7 +66,8 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter)
                      experiment: str = "", code: str = "", claim: str = "", answers: str = "", scope: str = "",
                      claim_kind: str = "") -> str:
         """Record a computation you ran and the result it produced: values {name: {value, unit} | {k, n}}; code: the
-        exact code you ran (the instrument re-executes it, so a reviewer needn't). experiment: the experiment it
+        exact code you ran — the instrument re-executes it and checks that the output shows every value you register,
+        so PRINT each registered value with its name (print("n_items", n_items)). experiment: the experiment it
         executes, if any. claim (optional): the sentence this result lets you assert — written in the same call,
         derived from the result, its numbers bound to these values; answers: the question code it answers; scope:
         under which conditions it holds. The result counts toward your order by itself; a claim settles a question."""

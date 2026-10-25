@@ -205,7 +205,8 @@ class Scheduler:
                 continue
             if out:
                 self.res.reproductions += 1
-                self._ev("reproduced", result=r.get("code"), ok=out["ok"], run=out["run"], missing=out["missing"])
+                self._ev("reproduced", result=r.get("code"), ok=out["ok"], run=out["run"], confirmed=out["confirmed"],
+                         unprinted=out["unprinted"], contradicted=out["contradicted"], missing=out["missing"])
 
     def _settle_and_rework(self) -> None:
         moot = self.r.cancel_moot(author=HARNESS, inv=self.inv)
@@ -278,8 +279,9 @@ class Scheduler:
                     continue
                 seat = self._pick(pool, q["text"], "claim")
                 objective = (f"Review {q['answers'][-1]}, which answers {q['code']}. The order lists the claim, its "
-                             "measurements and the results it rests on" + (", and whether the instrument reproduced "
-                             "them — recompute only what is not reproduced" if self.reproducer else "") +
+                             "measurements and the results it rests on" + (", and what the instrument's re-run of the "
+                             "author's code confirmed — recompute only a value it CONTRADICTED; a value merely not "
+                             "printed is not evidence against" if self.reproducer else "") +
                              ". Judge the method and the wording against the question; record a verdict.")
                 if seat and self._issue(seat, claim, objective, [{"p": "reviewed"}]):
                     busy_targets.add(claim)
@@ -422,5 +424,5 @@ class Scheduler:
             self._ev("report_error", why=str(e)[:200])
         if box.get("text"):
             return str(box["text"]), True
-        self._ev("report_missing", refusals=box.get("refusals", 0))
+        self._ev("report_missing", refusals=box.get("refusals", 0), refused=(box.get("refused") or [])[-3:])
         return facts + "\n\n*(The lead did not submit an interpretation that passed the record's check.)*", False
