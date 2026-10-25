@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -e ".[dev]" --no-deps && pip install httpx pytest "mypy==2.4.0" "ruff==0.17.2" fastmcp anthropic
-      - run: python -m ruff check src tests
+      - run: python -c "import subprocess,sys;p=subprocess.run([sys.executable,'-m','ruff','check','src','tests'],capture_output=True,text=True);out=(p.stdout+p.stderr).strip();print(out);print('::error::ruff exit %d: %s'%(p.returncode,out.replace(chr(10),' | ')[:3000])) if p.returncode else None;sys.exit(p.returncode)"
       - run: python -m mypy --strict src/hypswarm
         env:
           MYPYPATH: ${{ github.workspace }}/hypgraph/src
