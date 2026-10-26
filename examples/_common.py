@@ -121,6 +121,13 @@ def _rework(messages: Any) -> bool:
     return any(m.role == "user" and "Rework of" in m.content for m in messages)
 
 
+def _noticed(messages: Any) -> bool:
+    """The world changed since the run began: the system prompt carries NOTICES (a file changed on disk, a new head,
+    a page that moved), or the order is a refresh of an answer whose evidence went stale."""
+    return any((m.role == "system" and "NOTICES" in m.content) or
+               (m.role == "user" and "rests on evidence that is now stale" in m.content) for m in messages)
+
+
 def _order_gates(messages: Any) -> list[str]:
     """The order's done-when predicates, in order, from the WORK ORDER text ("  [hypothesis_stated] — …")."""
     for m in messages:
@@ -156,7 +163,8 @@ def scripted(answers: dict[str, dict[str, Any]]) -> dict[str, Any]:
     ``hypothesis`` / ``prediction`` / ``expected`` (defaults are derived from the claim), ``artifact`` ({sha256, path,
     kind, meta} — the diff or the instance), ``position`` (a decision's fields; absent = kind=no_position);
     ``first_try`` = (tool, args) a deliberately wrong first write, so the trace shows the refusal the profile adds;
-    ``answer`` = what goes in the report's answers block. The worker reads which gates its order names and which the
+    ``answer`` = what goes in the report's answers block; ``after`` = the same keys as they are once the world has
+    changed (a corrected file, a new commit, an edited page) — used when the seat's prompt carries a notice of it. The worker reads which gates its order names and which the
     record has met, and writes the next one; it never writes what the order doesn't ask for."""
 
     def worker(messages: Any, tools: Any) -> Any:  # one scripted walk through every gate an order can name
@@ -167,6 +175,9 @@ def scripted(answers: dict[str, dict[str, Any]]) -> dict[str, Any]:
         a = answers.get(q)
         if a is None:
             return ("return_work", {"note": f"no scripted answer for {q}"}) if "return_work" not in done else None
+        moved = "after" in a and _noticed(messages)              # the world changed under this question: recompute
+        if moved:
+            a = {**a, **a["after"]}
         if any("return_work now" in o for o in outs) and "return_work" not in done:
             return ("return_work", {"note": a.get("note", "answered from the files")})
         rework = _rework(messages)
@@ -180,9 +191,9 @@ def scripted(answers: dict[str, dict[str, Any]]) -> dict[str, Any]:
         gates = _order_gates(messages) or ["claim_made"]
         status = _order_status(outs)
         H, X, A, S, RUN, RS, CL, D = (_codes(outs, p) for p in ("H", "X", "A", "S", "RUN", "RS", "CL", "D"))
-        if rework and "find" not in done:                           # a rework: see what earlier attempts left in the record
+        if rework and "find" not in done and not moved:             # a rework: see what earlier attempts left in the record
             return ("find", {"type": "result", "text": q})
-        if rework and not RS:
+        if rework and not RS and not moved:
             found = outs[done.index("find")] if "find" in done else ""
             RS = [c for c, title in re.findall(r"(RS\d+) result — (.*?) —", found) if q in title]
         claim_kind = a.get("claim_kind", "")
@@ -277,7 +288,9 @@ def scripted(answers: dict[str, dict[str, Any]]) -> dict[str, Any]:
             return ("report_facts", {})
         if "submit_report" not in done or (outs and outs[-1].startswith("report refused")):
             facts = next((o for o in outs if o.startswith("## Facts")), "")
-            ans = {q: a.get("answer") for q, a in answers.items()}
+            moved = _noticed(messages)
+            ans = {q: (a["after"].get("answer", a.get("answer")) if moved and "after" in a else a.get("answer"))
+                   for q, a in answers.items()}
             return ("submit_report", {"text": facts + "\n\n## Interpretation\n\nThe answers below are the claims the facts "
                                       "list, as the record holds them; nothing beyond the record is asserted.\n\n```answers\n"
                                       + json.dumps(ans) + "\n```"})

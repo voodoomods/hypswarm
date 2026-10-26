@@ -98,6 +98,20 @@ the solve.
 Each of these is one of the [examples](https://github.com/voodoomods/hypswarm/tree/main/examples), runnable for free;
 the trace shows every stage order and the refusals on the way.
 
+## When the world changes
+
+`run(..., watch=True)` keeps the record in step with the files and pages the run used, with no model call: a file
+whose bytes changed supersedes its artifact, a commit is a new head of the working tree, and (with `refetch=`) a page
+that no longer says what a source quotes makes the source stale. Results computed from the old state go STALE; the
+instrument re-runs them on the current files; the ones that still reproduce come back on their own, and only the
+answers whose evidence really moved are redone. Nobody has to tell the team that a teammate pushed a commit or the
+vendor corrected a file — the record holds the hashes.
+
+```python
+res = await run(task, None, model, record="desk.hypgraph", folder="work/", reproducer=my_sandbox,
+                watch=True, refetch=my_fetch)          # the change suite: studies/discovery/PLAN-CHANGE.md
+```
+
 ## What you get
 
 - **A scheduler that makes no model calls.** It issues orders to idle seats from the question board, settles every

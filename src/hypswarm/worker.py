@@ -20,7 +20,7 @@ from .messages import Message, Tool
 from .providers.base import ChatModel
 from .record import Record
 from .seats import Seat
-from .tools import worker_tools
+from .tools import OnWrite, worker_tools
 
 log = logging.getLogger("hypswarm.worker")
 
@@ -40,10 +40,11 @@ class WorkerResult:
 
 
 async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, order: str, *, meter: Meter,
-                    data_tools: Sequence[Tool] = (), preamble: str = "", header: str = "") -> WorkerResult:
+                    data_tools: Sequence[Tool] = (), preamble: str = "", header: str = "",
+                    on_write: OnWrite | None = None) -> WorkerResult:
     code = record.get(order)["code"]
     res = WorkerResult(order=order, code=code, seat=seat.name)
-    rtools = worker_tools(record, seat, inv, order, meter)
+    rtools = worker_tools(record, seat, inv, order, meter, on_write=on_write)
     state = rtools[-1].fn.__dict__["_state"]
     tools = [t for t in data_tools if seat.may_use(t.name)] + rtools
     by = {t.name: t for t in tools}
@@ -94,7 +95,8 @@ async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, orde
 
 
 async def run_agent_order(seat: Seat, record: Record, inv: str, order: str, *, meter: Meter,
-                          data_tools: Sequence[Tool] = (), preamble: str = "", header: str = "") -> WorkerResult:
+                          data_tools: Sequence[Tool] = (), preamble: str = "", header: str = "",
+                          on_write: OnWrite | None = None) -> WorkerResult:
     """A seat held by an agent from another framework (``seat.agent``, see hypswarm.agents): it gets the same
     order, prompt and tools a native seat gets, runs its own loop, and reports what it used. One call is reserved
     before it starts (so a run at its budget never starts an agent); the calls it reports are counted when it
@@ -102,7 +104,7 @@ async def run_agent_order(seat: Seat, record: Record, inv: str, order: str, *, m
     from .agents import AgentOrder, call_agent
     code = record.get(order)["code"]
     res = WorkerResult(order=order, code=code, seat=seat.name)
-    rtools = worker_tools(record, seat, inv, order, meter)
+    rtools = worker_tools(record, seat, inv, order, meter, on_write=on_write)
     state = rtools[-1].fn.__dict__["_state"]
     tools = [t for t in data_tools if seat.may_use(t.name)] + rtools
     system = (header + "\n" if header else "") + seat.prompt() + ("\n\n" + preamble if preamble else "")

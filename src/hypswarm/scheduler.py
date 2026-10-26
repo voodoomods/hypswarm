@@ -9,6 +9,12 @@ Under a profile with a workflow (hypgraph's ``@2`` profiles) the scheduler asks 
 question is in and issues that stage's order: the gates from the current stage up to the next review, as the
 order's done-when, to the seat the stage names; a review stage goes to a reviewer, on the node the previous gate
 produced. The question is complete when the record says so (``stages``), never when a seat says so.
+
+With a ``World`` (``run(..., watch=True)``) each round also starts by syncing the record with the world: a file whose
+bytes changed, a new head of the working tree, a page that no longer says what a source quotes (world.py). Results
+that went stale are re-run by the instrument on the current files (``reproduce_result(support_claims=True)``): when
+every value reproduces, the claims on them are fresh again with no model call; when a value moved, the answer's
+review stage becomes a *refresh* order to a worker — recompute from the current files, write the claim again.
 """
 
 from __future__ import annotations
@@ -29,12 +35,17 @@ from .providers.base import ChatModel
 from .record import HARNESS, INSTRUMENT, LocalRecord
 from .reproduce import Reproducer, reproduce_result
 from .seats import Seat, fit
-from .tools import lead_tools
+from .tools import OnWrite, lead_tools
 from .worker import WorkerResult, await_external, run_agent_order, run_order
+from .world import World
 
 log = logging.getLogger("hypswarm.scheduler")
 
 _REVIEW_GATES = {"reviewed": "CL", "result_reviewed": "RS"}    # a review gate → the code prefix of what it reviews
+# gates that produce a result, and so can be satisfied again by recomputing: a refresh order asks for a new result
+# and a new claim — whether the new result passes is the stage machinery's call (a failing suite is an answer too)
+_RESULT_GATES = {"result_exists", "tests_pass_current", "tests_pass", "backtested", "backtested_oos", "solved",
+                 "feasible_bounded", "run_registered"}
 
 
 @dataclass
@@ -47,6 +58,9 @@ class SchedulerResult:
     model_escalations: int = 0              # dispatches on a seat's deeper model (after a NOT MET)
     adopted: int = 0                        # orders taken over from a previous run (resume)
     reproductions: int = 0                  # results the instrument re-executed (no model calls)
+    world_changes: int = 0                  # changes the world watcher found (files, heads, pages)
+    reverifications: int = 0                # stale results the instrument re-ran on the current files
+    refreshes: int = 0                      # orders to recompute an answer whose evidence moved
     lead_calls: int = 0
     report: str = ""
     report_accepted: bool = False
@@ -61,12 +75,16 @@ class Scheduler:
                  meter: Meter, *, data_tools: Sequence[Tool] = (), preamble: str = "", max_reworks: int = 2,
                  lease_minutes: int = 240, lead_turns: int = 6,
                  on_return: Callable[[Scheduler, int], None] | None = None, external_poll_s: float = 1.0,
-                 external_timeout_s: float | None = None, header: str = "", reproducer: Reproducer | None = None):
+                 external_timeout_s: float | None = None, header: str = "", reproducer: Reproducer | None = None,
+                 world: World | None = None, on_write: OnWrite | None = None):
         self.r, self.inv, self.seats = record, inv, list(seats)
         self.model_for, self.meter = model_for, meter
         self.data_tools, self.preamble, self.header = list(data_tools), preamble, header
         self.reproducer = reproducer                        # host-supplied: re-executes registered code (no model)
         self._reproduced: set[str] = set()
+        self.world = world                                  # host-supplied: keeps the record in step with the files
+        self.on_write = on_write                            # host hook on every accepted write by a seat
+        self._reverified: set[tuple[str, str]] = set()      # (result, why it was stale) already re-run
         self.max_reworks, self.lease_minutes, self.lead_turns = max_reworks, lease_minutes, lead_turns
         self.workers = [s for s in seats if s.role == "worker"]
         self.reviewers = [s for s in seats if s.role == "reviewer"]
@@ -147,14 +165,14 @@ class Scheduler:
         elif seat.agent is not None:
             task = asyncio.create_task(run_agent_order(seat, self.r, self.inv, order, meter=self.meter,
                                                        data_tools=self.data_tools, preamble=self._preamble(),
-                                                       header=self.header))
+                                                       header=self.header, on_write=self.on_write))
             model_name = "agent:" + str(getattr(seat.agent, "__name__", type(seat.agent).__name__))
         else:
             model = self._model(seat, escalate)
             model_name = getattr(model, "name", "?")
             task = asyncio.create_task(run_order(seat, model, self.r, self.inv, order, meter=self.meter,
                                                  data_tools=self.data_tools, preamble=self._preamble(),
-                                                 header=self.header))
+                                                 header=self.header, on_write=self.on_write))
         self.inflight[task] = (seat, order)
         escalated = bool(escalate and seat.escalate_to and seat.escalate_to != seat.model and not seat.external)
         if escalated:
@@ -220,6 +238,47 @@ class Scheduler:
                 self.res.reproductions += 1
                 self._ev("reproduced", result=r.get("code"), ok=out["ok"], run=out["run"], confirmed=out["confirmed"],
                          unprinted=out["unprinted"], contradicted=out["contradicted"], missing=out["missing"])
+
+    def _sync_world(self) -> None:
+        """The record catches up with the world: changed files, a new head, a page that moved (world.py)."""
+        if not self.world:
+            return
+        try:
+            notes = self.world.sync()
+        except GraphError as e:
+            self._ev("world_sync_failed", why=str(e)[:200])
+            return
+        for n in notes:
+            if n not in self.notices:
+                self.notices.append(n)
+            self.res.notices.append({"t": round(time.time(), 3), "text": n, "stale": [], "added": [],
+                                     "after_calls": self.meter.total.calls, "by": "world"})
+        if notes:
+            self.res.world_changes += len(notes)
+            self._ev("world_changed", notes=[n[:160] for n in notes])
+
+    async def _reverify(self) -> None:
+        """Every result that went stale is re-run once per reason on the current files. Unchanged values bring its
+        claims back (the lab result supports them); a moved value leaves them stale for a refresh order."""
+        if not self.reproducer:
+            return
+        for r in self.r.search("", "result", self.inv, 500):
+            if r.get("by") == INSTRUMENT:
+                continue
+            why = "; ".join((r.get("state") or {}).get("stale") or [])
+            if not why or (r["id"], why) in self._reverified:
+                continue
+            self._reverified.add((r["id"], why))
+            try:
+                out = await reproduce_result(self.r, self.inv, r["id"], self.reproducer, support_claims=True)
+            except GraphError as e:
+                self._ev("reverify_failed", result=r.get("code"), why=str(e)[:200])
+                continue
+            if out:
+                self.res.reverifications += 1
+                self._ev("reverified", result=r.get("code"), run=out["run"], confirmed=out["confirmed"],
+                         contradicted=out["contradicted"], unprinted=out["unprinted"], supported=out["supported"],
+                         because=why[:160])
 
     def _settle_and_rework(self) -> None:
         moot = self.r.cancel_moot(author=HARNESS, inv=self.inv)
@@ -314,7 +373,7 @@ class Scheduler:
                     claim = self.r.resolve(b["answers"][-1], self.inv)
                 except (GraphError, KeyError, IndexError):
                     claim = ""
-                if claim and claim not in busy_targets:
+                if claim and claim not in busy_targets and not self._stale(claim):
                     self._issue_review_on(q, gates[rev], claim, b["answers"][-1], text, busy_targets)
             if q["question"] in busy_targets:
                 continue
@@ -349,11 +408,41 @@ class Scheduler:
                  if re.fullmatch(prefix + r"\d+", str(c))]
         if not codes:
             return
+        ids: list[tuple[str, str]] = []
+        for c in dict.fromkeys(codes):
+            try:
+                ids.append((c, self.r.resolve(c, self.inv)))
+            except (GraphError, KeyError):
+                continue
+        fresh = [(c, x) for c, x in ids if not self._stale(x)]
+        if fresh:
+            self._issue_review_on(q, first, fresh[-1][1], fresh[-1][0], text, busy_targets)
+        elif ids:
+            self._issue_refresh(q, gates, i, text, ids[-1][0], ids[-1][1], busy_targets)
+
+    def _stale(self, nid: str) -> list[str]:
         try:
-            target = self.r.resolve(codes[-1], self.inv)
+            return list((self.r.get(nid).get("state") or {}).get("stale") or [])
         except (GraphError, KeyError):
+            return []
+
+    def _issue_refresh(self, q: dict[str, Any], gates: list[dict[str, Any]], i: int, text: str, code: str, nid: str,
+                       busy_targets: set[str]) -> None:
+        """The answer's evidence moved (the instrument's re-run on the current files didn't reproduce it): a worker
+        recomputes and writes the claim again. A review of the stale claim would be wasted — it can't count."""
+        if q["question"] in busy_targets:
             return
-        self._issue_review_on(q, first, target, codes[-1], text, busy_targets)
+        why = "; ".join(self._stale(nid)[:2]) or "what it rests on has changed"
+        who = next((gt["who"] for gt in gates[:i] if gt["gate"] in _RESULT_GATES), gates[i]["who"])
+        seat = self._pick_for_stage(self.workers, who, text)
+        objective = (f"{q['code']}'s answer {code} rests on evidence that is now stale — {why}. The instrument re-ran it on "
+                     "the current files and it did not reproduce. Recompute from the files as they are now (the notices "
+                     f"say what changed), register the run, and write the claim again; link the new claim supersedes "
+                     f"{code}. The question: {text}")
+        if seat and self._issue(seat, q["question"], objective, [{"p": "result_exists"}, {"p": "claim_made"}]):
+            self.res.refreshes += 1
+            self._ev("refresh_order", question=q["code"], stale=code, why=why[:160], seat=seat.name)
+            busy_targets.add(q["question"])
 
     def _issue_review_on(self, q: dict[str, Any], first: dict[str, Any], target: str, code: str, text: str,
                          busy_targets: set[str]) -> None:
@@ -463,7 +552,9 @@ class Scheduler:
         while not self._stop:
             self.res.rounds += 1
             try:
+                self._sync_world()
                 await self._reproduce_new()
+                await self._reverify()
                 self._settle_and_rework()
                 while self._pending_lead:
                     o, missing = self._pending_lead.pop(0)
