@@ -1,4 +1,4 @@
-# Discovery study — real run, 2026-10-25 (internal)
+# Discovery study — real run, 2026-10-25 (internal) 
 
 *DeepSeek-V4.1-Flash through the pod proxy, 5 families × 5 seeds × {P, R} = 50 runs in six parallel lanes,
 $0.445 total (P $0.043, R $0.402). Scored by the checkers in this folder's commit; `results.md` is the generated
