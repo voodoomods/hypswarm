@@ -150,14 +150,18 @@ def test_a_correction_mid_run_redoes_only_the_answer_that_moved(tmp_path):
     assert fired and res.stopped == "settled", res.scheduler.events[-8:]
     ev = res.scheduler.events
     assert any(e["kind"] == "world_changed" for e in ev)
-    refreshed = [e for e in ev if e["kind"] == "refresh_order"]
-    assert [e["question"] for e in refreshed] == ["Q2"]                        # only the answer that moved is redone
     reverified = {e["result"]: e for e in ev if e["kind"] == "reverified"}
     assert any(e["supported"] for e in reverified.values())                    # Q1 came back with no model call
     assert any(e["contradicted"] == ["n_b"] for e in reverified.values())
     assert '"Q2": 7' in res.report and '"Q1": 6' in res.report
     g = Graph(str(path))
     try:
+        work_orders: dict[str, int] = {}
+        for o in g.orders(res.inv):
+            gates = {p["p"] for p in g.get(o["id"])["body"]["done_when"]}
+            if not gates <= {"reviewed", "result_reviewed"}:
+                work_orders[o["target"]] = work_orders.get(o["target"], 0) + 1
+        assert work_orders["Q1"] == 1 and work_orders["Q2"] >= 2               # only the answer that moved is redone
         rows = g.stages(res.inv)
         assert all(r["complete"] for r in rows)
         assert "STALE" in g.report(res.inv)["markdown"]                       # the old Q2 claim stays, marked

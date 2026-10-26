@@ -175,7 +175,8 @@ def scripted(answers: dict[str, dict[str, Any]]) -> dict[str, Any]:
         a = answers.get(q)
         if a is None:
             return ("return_work", {"note": f"no scripted answer for {q}"}) if "return_work" not in done else None
-        if "after" in a and _noticed(messages):
+        moved = "after" in a and _noticed(messages)              # the world changed under this question: recompute
+        if moved:
             a = {**a, **a["after"]}
         if any("return_work now" in o for o in outs) and "return_work" not in done:
             return ("return_work", {"note": a.get("note", "answered from the files")})
@@ -190,9 +191,9 @@ def scripted(answers: dict[str, dict[str, Any]]) -> dict[str, Any]:
         gates = _order_gates(messages) or ["claim_made"]
         status = _order_status(outs)
         H, X, A, S, RUN, RS, CL, D = (_codes(outs, p) for p in ("H", "X", "A", "S", "RUN", "RS", "CL", "D"))
-        if rework and "find" not in done:                           # a rework: see what earlier attempts left in the record
+        if rework and "find" not in done and not moved:             # a rework: see what earlier attempts left in the record
             return ("find", {"type": "result", "text": q})
-        if rework and not RS:
+        if rework and not RS and not moved:
             found = outs[done.index("find")] if "find" in done else ""
             RS = [c for c, title in re.findall(r"(RS\d+) result — (.*?) —", found) if q in title]
         claim_kind = a.get("claim_kind", "")

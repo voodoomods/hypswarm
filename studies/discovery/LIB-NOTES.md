@@ -112,3 +112,26 @@ cost, what to change. Items move to CHANGELOGs when fixed.
   on URL variants (HypSwarm item 3).
 - The checkers use HypGraph's own regexes (`language.asserted`, `_EDGE`, `_OPTIMAL`, `_PASSES`), so a P violation is
   by construction a sentence R would refuse. That is the fairness guarantee of the study.
+
+
+## Found building P3 (the change suite), 2026-10-26
+
+28. **The report check linted the record's own facts.** A hypothesis that said "significantly" is listed by
+    `report()`; the check read that line as the author's assertion and refused every report built on it. *Fixed in
+    hypgraph 0.5.2*: lines inside a facts block that are exactly what the record generates now are skipped.
+29. **Gates counted stale evidence.** `solved`, `backtested` and `result_exists` took a result whose instance or
+    data had since changed; `result_reviewed` took a check of one; `positioned` took a position decided on one. A
+    question could look complete on a world that no longer existed. *Fixed in 0.5.2* (fresh-only gates, stale
+    decisions).
+30. **A source had no notion of freshness.** A page edited after it was read left the source and its claims
+    standing. *Fixed in 0.5.2* (excerpt artifacts, `contains_passage`).
+31. **The record caught a scripted seat re-registering the old instance** and declaring that the new solve used it:
+    `OPTIMAL_ON_STALE_INSTANCE` refused the claim. The refusal was right; the scripted seat was wrong. Keep it as a
+    regression: the stale-instance rule fires on declared `uses`, not only on what the record infers.
+32. **A substring matched a file name** (`data.csv` inside `mydata.csv.bak`) when inferring `uses` — fixed before it
+    shipped, with a test.
+33. **0.1.0a4 never reached PyPI**: the tag was pushed with `pyproject.toml` bumped and `__init__.__version__` not, and
+    the release workflow refuses a mismatch. Nobody noticed because nobody checked PyPI after the tag. *Fixed*: a
+    test keeps the two equal; check PyPI after every tag.
+34. Open: the stub's scripted seats walk gates mechanically; one harmless C4 run issued an extra order because the
+    scripted walk returned early. Real models read the order text; watch for the same shape in the model run.

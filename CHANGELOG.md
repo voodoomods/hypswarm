@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.1.0a5 — 2026-10-26: when the world changes (P3)
+
+0.1.0a4 was tagged but never published: `__init__.__version__` still said 0.1.0a3, and the release workflow
+publishes only when the tag matches it. 0.1.0a5 carries everything 0.1.0a4 described (orders from stages) plus the
+P3 instruments; a test now keeps `pyproject.toml` and `__version__` equal.
+
+The record now notices when the files and pages a run used have changed — nobody has to tell the team.
+- **The world watcher** (`world.py`, `run(..., watch=True)`). Each scheduler round re-hashes the task's files: a file
+  whose bytes changed gets a new artifact that supersedes the old one, so every result computed from the old bytes
+  goes STALE. Under the software workflow the working tree is one `kind=diff` head that a commit supersedes — tests
+  on the old head stop counting. With `refetch(url) -> text`, each source's page is fetched again and filed as an
+  `excerpt` (hypgraph 0.5.2); a page that no longer says the passage makes the source stale. Each change becomes a
+  notice in every later order and the lead's prompts.
+- **Re-verification on the current files.** Every stale result is re-run once per reason by the instrument; when every
+  registered value reproduces, the lab result supports the claims built on it and they are fresh again with no model
+  call; when a value moved, they stay stale and the question is redone. The instrument's run `uses` the live version
+  of each file the author's run used.
+- **Refresh orders.** An answer whose evidence went stale gets a worker order to recompute and write the claim again,
+  not a review — a check of stale evidence can't count. Review stages pick only fresh claims and results.
+- **Implied `uses`.** `register_run` links the live file artifacts its code names and the question's current diff or
+  instance, so freshness works without the model declaring what it read.
+- `on_write(kind, payload)` hook on every accepted seat write; `SchedulerResult` counts `world_changes`,
+  `reverifications`, `refreshes`. The examples' scripted seats read notices and refresh orders and recompute once the
+  world moved under their question.
+- **The change suite** (`studies/discovery/PLAN-CHANGE.md`, `change.py`, `change_run.py`): five families where a file,
+  a commit, a page or an instance changes silently mid-run; P vs R; predictions locked; self-test and stub run at $0.
+- Depends on hypgraph >= 0.5.2.
+
 ## 0.1.0a4 — 2026-10-26: orders from stages
 
 - **The scheduler issues each question's stage order.** Under a profile with a workflow (hypgraph ≥ 0.5.1's `@2`
