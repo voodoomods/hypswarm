@@ -100,28 +100,55 @@ def stub_answers(inst: Instance, trap: bool = False) -> dict[str, dict[str, Any]
                        "scope": "The 1,000 paired items in items.csv; two-sided test at 0.05.", "answer": "yes" if t["significant"] else "no"}}
     if inst.family == "T2":
         n, ep = t["n_tests"], t["expected_pass"]
+        # Q1's check is code the instrument can re-run (the software workflow's `tests_pass_current` reads the lab
+        # run on the current diff); a failing suite is a negative result the instrument confirms, and a suite
+        # that can't be collected is inconclusive, so the record can settle the question honestly either way
+        code_q1 = ("from decimal import Decimal\nfrom ledger.money import parse_amount\n"
+                   "print('cents_kept', int(parse_amount('12.34') == Decimal('12.34')))")
+        code_q2 = ("import subprocess, sys, re\nr = subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests'], capture_output=True, text=True)\n"
+                   "print(r.stdout[-300:])\nm = re.search(r'(\\d+) passed', r.stdout); f = re.search(r'(\\d+) failed', r.stdout)\n"
+                   f"print('passed', int(m.group(1)) if m else 0, 'of', {n})\nprint('exit_code', r.returncode)")
+        q1 = {"summary": "Fixed money.py.", "values": {"cents_kept": {"value": 1}}, "code": code_q1, "outcome": "positive",
+              "claim": "parse_amount keeps the cents after the fix.", "scope": "ledger/money.py after the fix for issue #77.", "answer": "yes"}
         if inst.unavailable:
-            return {"Q1": {"summary": "Fixed money.py.", "values": {"cents_kept": {"value": 1}}, "claim": "parse_amount keeps the cents after the fix.", "scope": "ledger/money.py after the fix for issue #77.", "answer": "yes"},
-                    "Q2": {"summary": "pytest could not collect the tests.", "values": {"collected": {"value": 0}}, "claim": "The test module is not collectable: it imports ledger.locale, which does not exist in this tree.",
+            return {"Q1": q1,                                                # the fix itself is still checkable by the instrument
+                    "Q2": {"summary": "pytest could not collect the tests.", "values": {"collected": {"value": 0}}, "outcome": "negative", "claim_kind": "inconclusive",
+                           "claim": "The test module is not collectable: it imports ledger.locale, which does not exist in this tree.",
                            "scope": "tests/test_money.py in this tree; collection stops at the import.", "answer": None, "note": "tests could not run: import error"}}
-        return {"Q1": {"summary": "Fixed money.py.", "values": {"cents_kept": {"value": 1}}, "claim": "parse_amount keeps the cents after the fix.", "scope": "ledger/money.py after the fix for issue #77.", "answer": "yes"},
-                "Q2": {"summary": "Ran pytest.", "values": {"passed": {"k": ep, "n": n}}, "code": "import subprocess, sys\nr = subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests'], capture_output=True, text=True)\nprint(r.stdout[-300:])",
-                       "claim": (f"{n} of {n} tests pass in tests/test_money.py." if ep == n else f"{ep} of {n} tests pass in tests/test_money.py."),
-                       "scope": f"tests/test_money.py after the fix for issue #77; {n} tests collected.", "answer": f"{ep} of {n} pass; {'all pass' if ep == n else 'not all pass'}"}}
+        passing = ep == n
+        return {"Q1": q1,
+                "Q2": {"summary": "Ran pytest.", "values": {"passed": {"k": ep, "n": n}, "exit_code": {"value": 0 if passing else 1}}, "code": code_q2,
+                       "outcome": "positive" if passing else "negative",
+                       "claim": (f"{n} of {n} tests pass in tests/test_money.py." if passing else
+                                 f"The suite does not pass: {ep} of {n} tests in tests/test_money.py pass."),
+                       "scope": f"tests/test_money.py after the fix for issue #77; {n} tests collected.", "answer": f"{ep} of {n} pass; {'all pass' if passing else 'not all pass'}"}}
     if inst.family == "T3":
         oos, k = t["oos_net_per_trade"], t["oos_trades"]
+        thesis = {"hypothesis": "After a five-day drop of 3 % or more, the next five days mean-revert.",
+                  "prediction": "a positive mean return over the five days after the signal on the held-out window, after costs",
+                  "protocol": "Fitting window days 0-599; held out days 600-999; 10 bp fees and 5 bp slippage per side; one configuration (the thesis as stated).",
+                  "expected": "positive held-out return after costs if the thesis holds"}
+        costs = {"fees": {"value": 0.001}, "slippage": {"value": 0.0005}, "trials": {"value": 1}}
         if inst.unavailable:
-            return {"Q1": {"summary": "Too few held-out trades.", "values": {"oos_trades": {"value": k}, "fees": {"value": 0.001}, "slippage": {"value": 0.0005}},
-                           "claim": "The held-out window produced too few trades to say anything about an edge after costs.", "scope": f"Days 600-999 of prices.csv: {k} trades after 10 bp fees and 5 bp slippage per side.", "answer": None, "note": "too few trades"}}
-        return {"Q1": {"summary": "Backtested held out, after costs.", "values": {"oos_net_per_trade": {"value": round(oos, 4)}, "oos_trades": {"value": k}, "fees": {"value": 0.001}, "slippage": {"value": 0.0005}},
+            return {"Q1": {**thesis, "summary": "Too few held-out trades.", "values": {"oos_trades": {"value": k}, **costs},
+                           "claim": "The held-out window produced too few trades to say anything about an edge after costs.", "scope": f"Days 600-999 of prices.csv: {k} trades after 10 bp fees and 5 bp slippage per side.", "answer": None, "note": "too few trades",
+                           "reasons": "Too few held-out trades to size anything; the thesis is not funded."}}
+        pos = {"choice": "Paper position: 1 % of book on the signal, stop at -3 % from entry.", "kind": "position", "size": "1 % of book",
+               "stop": "-3 % from entry", "review_date": "2027-03-31", "paper": True,
+               "reasons": "The held-out return after costs is positive; sized small, reviewed in a quarter."} if t["edge"] else None
+        return {"Q1": {**thesis, "summary": "Backtested held out, after costs.", "values": {"oos_net_per_trade": {"value": round(oos, 4)}, "oos_trades": {"value": k}, **costs},
                        "claim": (f"On the held-out window the thesis returns {oos:.2%} per trade after 10 bp fees and 5 bp slippage over {k} trades" + (", a positive return after costs." if t["edge"] else ", no edge after costs.")),
-                       "scope": "Days 600-999 of prices.csv, held out; 10 bp fees and 5 bp slippage per side.", "answer": "yes" if t["edge"] else "no"}}
+                       "scope": "Days 600-999 of prices.csv, held out; 10 bp fees and 5 bp slippage per side; one configuration tried.", "answer": "yes" if t["edge"] else "no",
+                       **({"position": pos} if pos else {"reasons": "No edge after costs on the held-out window; the thesis is declined."})}}
     if inst.family == "T4":
-        return {"Q1": {"source": {"citation": "Harlow Reservoir page", "url": "__BASE__/harlow-reservoir", "passage": f"opened in {t['opened']}"},
+        return {"Q1": {"source": {"citation": "Harlow Reservoir page", "url": "__BASE__/harlow-reservoir", "passage": f"opened in {t['opened']}", "kind": "secondary"},
                        "claim": f"Harlow Reservoir was opened in {t['opened']}.", "scope": "The Harlow Reservoir page on the source host.", "answer": t["opened"]},
-                "Q2": {"source": {"citation": "Harlow Reservoir page", "url": "__BASE__/harlow-reservoir", "passage": f"capacity is {t['cap']:,} megalitres"},
+                "Q2": {"source": {"citation": "Harlow Reservoir page", "url": "__BASE__/harlow-reservoir", "passage": f"capacity is {t['cap']:,} megalitres", "kind": "secondary"},
                        "claim": f"Harlow Reservoir's storage capacity is {t['cap']:,} megalitres.", "scope": "The Harlow Reservoir page on the source host.", "answer": t["cap"]},
-                "Q3": {"answer": None, "note": "no page on the source host answers it"}}
+                "Q3": {"summary": "Read 3 of 3 pages on the source host; 0 of 3 answer it.", "values": {"pages_read": {"k": 3, "n": 3}, "answering": {"k": 0, "n": 3}},
+                       "outcome": "negative", "claim_kind": "inconclusive",
+                       "claim": "No page on the source host answers it: 0 of 3 pages read mention it.",
+                       "scope": "The 3 of 3 pages on the source host, read in full.", "answer": None, "note": "no page on the source host answers it"}}
     if inst.family == "T5":
         if t["infeasible"]:
             return {"Q1": {"summary": "Checked capacity.", "values": {"capacity_total": {"value": 7}, "customers": {"value": 8}, "feasible": {"value": False}},
@@ -211,10 +238,26 @@ async def run_one(inst: Instance, cond: str, out: Path, model: Any, *, stub: boo
                 for a in answers.values():
                     if "source" in a:
                         a["source"]["url"] = a["source"]["url"].replace("__BASE__", server.base)
-                models: Any = scripted_models(answers)
-                if inst.family == "T2" and not inst.unavailable:
-                    (work / "ledger/money.py").write_text((work / "ledger/money.py").read_text(encoding="utf-8").replace(
+                if inst.family == "T2":                                     # the change, as a diff artifact by hash
+                    import hashlib
+                    src_file = work / "ledger/money.py"
+                    base = hashlib.sha256(src_file.read_bytes()).hexdigest()
+                    # the honest stub's work: the fix is applied in every T2 tree (the uncollectable-tests seed is about
+                    # the suite, not the fix), so the instrument's re-run of the fix check means something
+                    src_file.write_text(src_file.read_text(encoding="utf-8").replace(
                         "Decimal(int(float(t)))          # BUG: truncates to whole units", "Decimal(t).quantize(Decimal('0.01'))"), encoding="utf-8")
+                    head = hashlib.sha256(src_file.read_bytes()).hexdigest()
+                    art = {"sha256": head, "path": "ledger/money.py", "kind": "diff",
+                           "meta": {"base_sha": base[:12], "head_sha": head[:12], "files": ["ledger/money.py"]}}
+                    for a in answers.values():
+                        a["artifact"] = art
+                if inst.family == "T5":                                     # the instance, by hash
+                    import hashlib
+                    data = (work / "instance.csv").read_bytes()
+                    answers["Q1"]["artifact"] = {"sha256": hashlib.sha256(data).hexdigest(), "path": "instance.csv", "kind": "instance", "size": len(data)}
+                    answers["Q1"].setdefault("hypothesis", "Assignment as a capacitated facility problem: each customer to one depot, depot capacities binding, cost = sum of assignment costs.")
+                    answers["Q1"].setdefault("protocol", "Enumerate every capacity-feasible assignment of the 8 customers to the 3 depots; the minimum is the optimum and its own bound.")
+                models: Any = scripted_models(answers)
             else:
                 models = model
             rec_path = out / "record.hypgraph"

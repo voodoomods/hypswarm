@@ -59,7 +59,8 @@ if __name__ == "__main__":
         r1 = httpx.post(f"{base}/api/graph/write", json=body, timeout=5)
         r2 = httpx.post(f"{base}/api/graph/write", json=body, headers={"Authorization": f"Bearer {person_token}"}, timeout=5)
         print(f"write with no token      → {r1.status_code}\nwrite as analyst with the person's token → {r2.status_code}\n")
-        task = Task(title="Served record", profile="scientific",
+        # scientific@1: the frozen pre-workflow profile (the example is about the served record); 01 runs the workflow (scientific@2)
+        task = Task(title="Served record", profile="scientific@1",
                     mission="Two models were scored on the same items. items.csv is not attached: the counts are given in the mission "
                             "— A right on 812 of 1000, B on 800 of 1000. Record them as results and answer.",
                     questions=[("Q1", "What is A's accuracy?")])

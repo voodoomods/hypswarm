@@ -40,7 +40,8 @@ import scripted
 HERE = Path(__file__).resolve().parent
 ITEMS = ("item,a,b\n" + "\n".join(f"{i},{int(i % 10 != 3)},{int(i % 10 not in (3, 7))}" for i in range(1, 1001)) + "\n").encode()
 KA, KB, N = 900, 800, 1000           # what the file holds, by construction
-TASK = Task(title="Does A beat B (mixed swarm)", profile="scientific",
+# scientific@1: the frozen pre-workflow profile (the example is about the bridges); 01 runs the workflow (scientific@2)
+TASK = Task(title="Does A beat B (mixed swarm)", profile="scientific@1",
             mission="Two models were scored on the same 1,000 items (items.csv: item,a,b with 1 = right). Find out whether A beats B. "
                     "Use python on the file for every number.",
             questions=[("Q1", "What is A's accuracy?"), ("Q2", "Is A significantly more accurate than B (two-sided, 0.05)?")],

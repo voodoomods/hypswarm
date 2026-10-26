@@ -39,13 +39,19 @@ if __name__ == "__main__":
     code_q2 = ("import subprocess, sys\nr = subprocess.run([sys.executable, '-m', 'pytest', '-q', 'test_importer.py'], capture_output=True, text=True)\n"
                "print(r.stdout[-300:])\nimport re\nm = re.search(r'(\\d+) passed', r.stdout)\n"
                "print('passed', int(m.group(1)) if m else 0, 'of', 3)\nprint('exit_code', r.returncode)")
+    # the change under test, as the software workflow wants it: a diff artifact by hash (base → head, files). The
+    # example starts from the fixed tree, so the base is the issue's tag; the head is the file as it is.
+    import hashlib
+    head = hashlib.sha256(FILES["importer.py"]).hexdigest()
+    diff = {"sha256": head, "path": "importer.py", "kind": "diff",
+            "meta": {"base_sha": "issue-412-base", "head_sha": head[:12], "files": ["importer.py"]}}
     answers = {
         "Q1": {"summary": "Imported fixtures/quoted.csv and checked the quoted comma survived.",
-               "values": {"rows": {"value": 3}, "comma_kept": {"value": 1}}, "code": code_q1,
+               "values": {"rows": {"value": 3}, "comma_kept": {"value": 1}}, "code": code_q1, "artifact": diff,
                "claim": "import_rows keeps the comma inside the quoted field of fixtures/quoted.csv.",
                "scope": "importer.py at this commit; fixtures/quoted.csv, 3 rows.", "answer": "yes"},
         "Q2": {"summary": "Ran pytest -q test_importer.py.", "values": {"passed": {"k": 3, "n": 3}, "exit_code": {"value": 0}},
-               "code": code_q2, "outcome": "positive",
+               "code": code_q2, "outcome": "positive", "artifact": diff,
                "claim": "The importer passes all 3 of 3 tests in test_importer.py.",
                "scope": "test_importer.py at this commit, run by the instrument.", "answer": "yes"},
     }

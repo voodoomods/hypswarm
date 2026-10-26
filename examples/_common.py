@@ -121,13 +121,45 @@ def _rework(messages: Any) -> bool:
     return any(m.role == "user" and "Rework of" in m.content for m in messages)
 
 
+def _order_gates(messages: Any) -> list[str]:
+    """The order's done-when predicates, in order, from the WORK ORDER text ("  [hypothesis_stated] — …")."""
+    for m in messages:
+        if m.role == "user" and "WORK ORDER" in m.content:
+            body = m.content.split("DONE WHEN", 1)[-1]
+            return re.findall(r"^\s+\[([a-z_]+)", body, re.MULTILINE)
+    return []
+
+
+def _order_status(outs: list[str]) -> dict[str, bool]:
+    """What the record said last about this order's predicates ("your order: T1: a MET; b NOT MET")."""
+    for o in reversed(outs):
+        m = re.search(r"your order: [^:\n]+: (.*)", o)
+        if m:
+            return {p: met == "MET" for p, met in re.findall(r"([a-z_]+) (MET|NOT MET)", m.group(1))}
+    return {}
+
+
+def _codes(outs: list[str], prefix: str) -> list[str]:
+    """Node codes of one type the worker has written so far ("added H1", "run RUN2 → result RS2", "linked …")."""
+    out: list[str] = []
+    for o in outs:
+        for c in re.findall(rf"\b({prefix}\d+)\b", o):
+            if c not in out and ("added " + c in o or "run " + c in o or "result " + c in o or "claim " + c in o):
+                out.append(c)
+    return out
+
+
 def scripted(answers: dict[str, dict[str, Any]]) -> dict[str, Any]:
     """Scripted worker / reviewer / lead. ``answers[Q]`` holds what the worker writes for question Q:
-    ``values`` (+ ``summary``, ``code``, ``outcome``), ``claim`` and ``scope``; for a knowledge task ``source`` (+ the
-    claim that cites it); ``first_try`` = (tool, args) a deliberately wrong first write, so the trace shows the
-    refusal the profile adds; ``answer`` = what goes in the report's answers block."""
+    ``values`` (+ ``summary``, ``code``, ``outcome``, ``claim_kind``), ``claim`` and ``scope``; for a knowledge task
+    ``source`` (+ the claim that cites it); under a workflow profile also the stage writes the order asks for —
+    ``hypothesis`` / ``prediction`` / ``expected`` (defaults are derived from the claim), ``artifact`` ({sha256, path,
+    kind, meta} — the diff or the instance), ``position`` (a decision's fields; absent = kind=no_position);
+    ``first_try`` = (tool, args) a deliberately wrong first write, so the trace shows the refusal the profile adds;
+    ``answer`` = what goes in the report's answers block. The worker reads which gates its order names and which the
+    record has met, and writes the next one; it never writes what the order doesn't ask for."""
 
-    def worker(messages: Any, tools: Any) -> Any:
+    def worker(messages: Any, tools: Any) -> Any:  # one scripted walk through every gate an order can name
         done, outs = calls_made(messages), tool_outputs(messages)
         if not done:
             time.sleep(1.05)          # the record stamps whole seconds; a scripted model would otherwise write in the order's own second
@@ -138,31 +170,94 @@ def scripted(answers: dict[str, dict[str, Any]]) -> dict[str, Any]:
         if any("return_work now" in o for o in outs) and "return_work" not in done:
             return ("return_work", {"note": a.get("note", "answered from the files")})
         rework = _rework(messages)
+        if "values" not in a and "source" not in a:
+            return ("return_work", {"note": a.get("note", "no answer from the files")}) if "return_work" not in done else None
         if "first_try" in a and not done and not rework:
-            return a["first_try"]                                   # the deliberately wrong write: the record refuses it
-        if "source" in a:                                           # knowledge: the source, then the claim that cites it
-            src = next((m.group(1) for o in outs for m in [re.search(r"added (S\d+)", o)] if m), "")
-            if not src:
-                return ("graph_add", {"type": "source", "fields": a["source"]}) if done.count("graph_add") < 3 else None
-            if not any("added CL" in o for o in outs) and done.count("graph_add") < 4:
-                return ("graph_add", {"type": "claim", "fields": {"statement": a["claim"], "scope": a["scope"], "kind": "finding"},
-                                      "links": [{"rel": "answers", "to": q}, {"rel": "cites", "to": src}]})
-            return None
-        registered = any(o.startswith("run RUN") for o in outs)     # the honest result went in (a refused first try didn't)
-        if a.get("delay_calls", 0) > done.count("find") and not registered:
-            return ("find", {"text": q})                            # look around first: lets another seat return before this one
-        if "values" in a and not registered and not rework:
-            return ("register_run", {"name": a.get("name", f"{q} computation"), "result_summary": f"{q}: {a['summary']}",
-                                     "values": a["values"], "code": a.get("code", ""), "outcome": a.get("outcome", ""),
-                                     "claim": a["claim"], "answers": q, "scope": a["scope"]})
-        if "values" in a and rework:                                # the result is in the record: write the claim from it
-            if "find" not in done:
-                return ("find", {"type": "result", "text": q})
+            return a.pop("first_try")                               # the deliberately wrong write, once per run: the record refuses it
+        if outs and ("refused" in outs[-1][:200] or "claim refused" in outs[-1]) and done[-1] in ("graph_add", "register_run") \
+                and not (a.get("first_try") and done.count(done[-1]) == 1 and not rework):
+            return None                                             # the record refused the honest write: return, let the rework carry it
+        gates = _order_gates(messages) or ["claim_made"]
+        status = _order_status(outs)
+        H, X, A, S, RUN, RS, CL, D = (_codes(outs, p) for p in ("H", "X", "A", "S", "RUN", "RS", "CL", "D"))
+        if rework and "find" not in done:                           # a rework: see what earlier attempts left in the record
+            return ("find", {"type": "result", "text": q})
+        if rework and not RS:
             found = outs[done.index("find")] if "find" in done else ""
-            rs = [c for c, title in re.findall(r"(RS\d+) result — (.*?) —", found) if q in title]
-            if rs and "graph_add" not in done:
-                return ("graph_add", {"type": "claim", "fields": {"statement": a["claim"], "scope": a["scope"]},
-                                      "links": [{"rel": "answers", "to": q}, {"rel": "derived_from", "to": rs[-1]}]})
+            RS = [c for c, title in re.findall(r"(RS\d+) result — (.*?) —", found) if q in title]
+        claim_kind = a.get("claim_kind", "")
+        for p in gates:
+            if status.get(p):
+                continue
+            if p == "hypothesis_stated":
+                if H:
+                    continue
+                return ("graph_add", {"type": "hypothesis", "fields": {
+                    "statement": a.get("hypothesis") or f"The files settle {q}; the scripted prediction is what the record will be asked to bind: {a['claim']}",
+                    "predictions": [a.get("prediction") or a["claim"]]},
+                    "links": [{"rel": "answers", "to": q}]})
+            if p == "preregistered":
+                if X or not H:
+                    continue
+                return ("graph_add", {"type": "experiment", "fields": {
+                    "aim": a.get("aim") or f"Test {H[-1]} for {q} from the files.",
+                    "protocol": a.get("protocol") or a.get("code") or f"Compute from the files exactly what {q} asks; register the run and its values.",
+                    "success_criteria": a.get("success_criteria") or "the prediction holds in the files, as registered values",
+                    **({"method": a["method"]} if a.get("method") else {})},
+                    "links": [{"rel": "tests", "to": H[-1], "data": {"expected": a.get("expected") or a.get("prediction") or a["claim"]}}]})
+            if p in ("diff_registered", "instance_registered"):
+                art = a.get("artifact")
+                if not art:
+                    continue
+                if not A:
+                    return ("graph_add", {"type": "artifact", "fields": art, "links": [{"rel": "part_of", "to": q}]})
+                if status.get(p) is False and "graph_link" not in done:
+                    return ("graph_link", {"src": A[-1], "rel": "part_of", "dst": q})     # the artifact existed: link it here too
+                continue
+            if p == "source_quoted" and "source" in a:
+                if S:
+                    continue
+                src = {**a["source"]}
+                src.setdefault("retrieved", time.strftime("%Y-%m-%d"))
+                return ("graph_add", {"type": "source", "fields": src, "links": [{"rel": "part_of", "to": q}]})
+            if p in ("run_registered", "result_exists", "backtested", "solved", "tests_pass", "tests_pass_current",
+                     "claim_made", "sourced", "source_quoted", "feasible_bounded", "backtested_oos"):
+                if "source" in a:                                   # knowledge: the claim that cites the source
+                    if not S:
+                        src = {**a["source"]}
+                        src.setdefault("retrieved", time.strftime("%Y-%m-%d"))
+                        return ("graph_add", {"type": "source", "fields": src, "links": [{"rel": "part_of", "to": q}]})
+                    if CL:
+                        continue
+                    return ("graph_add", {"type": "claim", "fields": {"statement": a["claim"], "scope": a["scope"], "kind": "finding"},
+                                          "links": [{"rel": "answers", "to": q}, {"rel": "cites", "to": S[-1]}]})
+                if a.get("delay_calls", 0) > done.count("find") and not RUN:
+                    return ("find", {"text": q})                    # look around first: lets another seat return before this one
+                if not RUN and not RS:
+                    return ("register_run", {"name": a.get("name", f"{q} computation"), "result_summary": f"{q}: {a['summary']}",
+                                             "values": a["values"], "code": a.get("code", ""), "outcome": a.get("outcome", ""),
+                                             "claim": a["claim"], "answers": q, "scope": a["scope"],
+                                             **({"experiment": X[-1]} if X else {}), **({"uses": [A[-1]]} if A else {}),
+                                             **({"claim_kind": claim_kind} if claim_kind else {})})
+                if p in ("claim_made", "sourced", "source_quoted") and not CL and RS:   # the result is in; the claim was refused or not yet written
+                    return ("graph_add", {"type": "claim", "fields": {"statement": a["claim"], "scope": a["scope"],
+                                                                       **({"kind": claim_kind} if claim_kind else {})},
+                                          "links": [{"rel": "answers", "to": q}, {"rel": "derived_from", "to": RS[-1]}]})
+                continue                                            # the instrument's turn, or already done
+            if p == "positioned":
+                if D:
+                    continue
+                cl = CL[-1] if CL else ""
+                if not cl:
+                    found = re.findall(r"(CL\d+) claim — ", "\n".join(outs))
+                    cl = found[-1] if found else ""
+                    if not cl:                                      # the claim's words needn't name the question: list them all
+                        return ("find", {"type": "claim", "text": ""}) if done.count("find") < 2 else None
+                pos = a.get("position")
+                fields = {**pos} if pos else {"choice": f"No position: {a['claim']}", "kind": "no_position",
+                                              "reasons": a.get("reasons") or "The evidence in the record does not support a position."}
+                return ("graph_add", {"type": "decision", "fields": fields, "links": [{"rel": "based_on", "to": cl}]})
+            # reviewed / result_reviewed / still_valid / anything else: not the worker's to write
         return None
 
     def reviewer(messages: Any, tools: Any) -> Any:

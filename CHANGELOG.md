@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.0a4 — 2026-10-26: orders from stages
+
+- **The scheduler issues each question's stage order.** Under a profile with a workflow (hypgraph ≥ 0.5.1's `@2`
+  profiles, now what a profile name means), it asks the record which stage every question is in and issues that
+  stage's order: the gates up to the next review as the done-when, to the seat the stage names (`quant`,
+  `fact_checker`, …); a review stage goes to a reviewer, on the node the previous gate produced. The order text
+  names the stage (`Q1 is at stage 'conjectured' (2/8) of the scientific@2 workflow — …`). A question is complete
+  when the record says so; a checked `inconclusive` answer completes it at any stage, and the open order on it is
+  cancelled as moot. `scientific@1` … keep the board path exactly as it was.
+- Workers get `graph_link` and `register_run(uses=[…])`, so a run can name the diff it tested or the instance it
+  solved; the instrument's re-run copies the author's `uses`, so `tests_pass_current` reads off the lab run.
+- `HttpRecord` speaks `stages`, `stage`, `completion` and `link`.
+- The examples' scripted models walk the stages their order names (hypothesis, preregistered experiment, typed
+  artifact, position or no-position decision, inconclusive answer); examples 01–05 run their `@2` workflow, 06–10
+  pin `scientific@1` (they are about bridges, people, served records, resume, custom seats). The discovery study's
+  stub run settles every family through its stages.
+- Depends on hypgraph ≥ 0.5.1.
+
 ## 0.1.0a3 — 2026-10-25
 
 - Package metadata brought in line with HypGraph's: a one-line description, classifiers, keywords, project URLs

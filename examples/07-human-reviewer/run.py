@@ -67,7 +67,8 @@ if __name__ == "__main__":
                name={"default": "nicolas", "help": "your seat name"})
     work = stage(HERE, {"items.csv": ITEMS})
     register_python(work)
-    task = Task(title="Count A's accuracy, reviewed by a person", profile="scientific",
+    # scientific@1: the frozen pre-workflow profile (the example is about the human seat); 01 runs the workflow (scientific@2)
+    task = Task(title="Count A's accuracy, reviewed by a person", profile="scientific@1",
                 mission="items.csv (item,a with 1 = right). What is A's accuracy? Use python on the file.",
                 questions=[("Q1", "What is A's accuracy?")], files={"items.csv": ITEMS})
     answers = {"Q1": {"summary": "Counted column a in items.csv.", "values": {"acc_a": {"k": KA, "n": N}},

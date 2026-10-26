@@ -33,6 +33,11 @@ class SwarmProfile:
     def record_profile(self):  # type: ignore[no-untyped-def]  # hypgraph is untyped here
         return _gp.get(self.id)
 
+    @property
+    def workflow(self):  # type: ignore[no-untyped-def]
+        """The record profile's workflow (stages, gates, typed shapes), or None for a frozen @1 profile."""
+        return getattr(self.record_profile, "workflow", None)
+
 
 def _seats(p) -> tuple[Seat, ...]:  # type: ignore[no-untyped-def]
     out = []
@@ -54,12 +59,35 @@ _NOTES = {
                    "not a source. The report is linted against the record.",
     "optimization@1": "A result reports objective, feasible (true/false) and bound or gap. 'Optimal' without a bound is "
                       "refused — say 'best found' and give the gap.",
+    # @2: the discipline's workflow. Each order names the stage the question is in and the gates that move it on.
+    "scientific@2": "Each question moves through stages the record derives: a hypothesis with predictions answers it; "
+                    "an experiment tests the hypothesis (data.expected) BEFORE any run; register_run executes it; a claim "
+                    "with its numbers bound answers the question; a reviewer checks it. Your order names the gates; "
+                    "write them in order. An honest 'can't be answered' is a claim kind=inconclusive derived from what "
+                    "you did find.",
+    "software@2": "Register the change first: graph_add artifact {sha256, path, kind: 'diff', meta: {base_sha, head_sha, "
+                  "files}} part_of the requirement. register_run with the exact test command as code and uses=[the diff]; "
+                  "the instrument re-runs it on that head — tests on a superseded head don't count. Then the claim.",
+    "trading@2": "Thesis first (a hypothesis answering the question), then the backtest preregistered as an experiment "
+                 "(windows, costs, configurations to try; data.expected) BEFORE register_run. The result carries oos_*, "
+                 "fees/slippage and trials (configurations tried). After the risk review, a decision based_on the claim: "
+                 "kind=position with size, stop, review_date and paper=true — or kind=no_position when the thesis is "
+                 "declined. Never a live order.",
+    "knowledge@2": "A source carries citation, url|doi, the passage that says it, retrieved (the date you read it) and "
+                   "kind (primary/secondary/tertiary); link it part_of the question. The claim cites it. If no source "
+                   "answers, register the search as a run with a result (pages read, mentions found) and a claim "
+                   "kind=inconclusive derived from it.",
+    "optimization@2": "Register the instance as an artifact {sha256, path, kind: 'instance'} part_of the question, state the "
+                      "model as a hypothesis, the solve configuration as an experiment, then register_run with "
+                      "uses=[the instance] and values {objective, feasible, bound|gap} (or feasible=false). A verifier "
+                      "reviews the result before the claim.",
 }
 
 PROFILES: dict[str, SwarmProfile] = {}
 for _pid, _p in _gp.PROFILES.items():
     PROFILES[_pid] = SwarmProfile(_pid, _seats(_p), toolkits=("files",), notes=_NOTES.get(_pid, ""), about=_p.about)
-    PROFILES[_p.name] = PROFILES[_pid]          # "software" → the current version
+for _p in sorted(_gp.PROFILES.values(), key=lambda p: p.version):
+    PROFILES[_p.name] = PROFILES[_p.id]         # "software" → the newest version (software@2: the workflow)
 
 
 def get(name: str) -> SwarmProfile:

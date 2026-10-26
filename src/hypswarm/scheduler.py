@@ -4,12 +4,18 @@ are met, reworks the rest (twice), cancels what became moot, and brings in the l
 for the report. Workers run in parallel as asyncio tasks; the record's leases keep them off each other's work.
 Every scheduler action is already an event in the record (orders are task nodes, acceptance a decision), so the
 run's audit trail is the record itself.
+
+Under a profile with a workflow (hypgraph's ``@2`` profiles) the scheduler asks the record which **stage** each
+question is in and issues that stage's order: the gates from the current stage up to the next review, as the
+order's done-when, to the seat the stage names; a review stage goes to a reviewer, on the node the previous gate
+produced. The question is complete when the record says so (``stages``), never when a seat says so.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
@@ -27,6 +33,8 @@ from .tools import lead_tools
 from .worker import WorkerResult, await_external, run_agent_order, run_order
 
 log = logging.getLogger("hypswarm.scheduler")
+
+_REVIEW_GATES = {"reviewed": "CL", "result_reviewed": "RS"}    # a review gate → the code prefix of what it reviews
 
 
 @dataclass
@@ -219,9 +227,18 @@ class Scheduler:
             self._ev("cancel_moot", order=m["order"], because=m["because"])
         for d in self.r.settle(author=HARNESS, inv=self.inv):
             self._ev("settled", order=d["order"], decision=d["decision"])
+        rows = self._stage_rows()
+        complete_qs = {q["question"] for q in rows if q["complete"]} if rows else set()
         for o in self.r.orders(self.inv, status="returned"):
             chk = self.r.check_work(o["id"])
             if chk["all_met"]:
+                continue
+            if o["target_id"] in complete_qs:
+                # the record settled the question another way (a checked inconclusive answer): the order's gates no
+                # longer matter, and a rework would ask for work the record no longer needs
+                self.r.cancel_work(author=HARNESS, order=o["id"], why="the question is complete in the record; the "
+                                   "order's remaining gates are moot")
+                self._ev("cancelled", order=o["code"], why="question complete")
                 continue
             root = self.chain.get(o["id"], o["id"])
             seat = next((s for s in self.seats if s.name == o["assignee"]), None)
@@ -252,9 +269,127 @@ class Scheduler:
         self._ev("escalate", order=o["code"], missing=missing[:200])
         self._pending_lead.append((o, missing))
 
+    # ── stages: the workflow's orders ────────────────────────
+    def _stage_rows(self) -> list[dict[str, Any]] | None:
+        """Each question's derived stage from the record, or None when the profile has no workflow (frozen @1, no
+        profile) or the record can't say (an older hypgraph / server)."""
+        try:
+            rows = list(self.r.stages(self.inv) or [])
+        except (AttributeError, GraphError, KeyError, NotImplementedError, TypeError):
+            return None
+        if not rows or not all(r.get("workflow") for r in rows):
+            return None
+        return rows
+
+    def _pick_for_stage(self, pool: Sequence[Seat], who: str, text: str) -> Seat | None:
+        """The seat a stage names (`quant`, `fact_checker`), when it is idle; else the best fit for the question."""
+        idle = self._idle(pool)
+        if not idle:
+            return None
+        tokens = set(re.findall(r"[a-z_]+", (who or "").lower()))
+        named = [s for s in idle if s.name in tokens]
+        if named:
+            return named[0]
+        return max(idle, key=lambda s: (fit(s, f"{who} {text}", "question"), -self.seats.index(s)))
+
+    def _assign_from_stages(self, rows: list[dict[str, Any]]) -> None:
+        busy_targets = {o["target_id"] for o in self.r.orders(self.inv) if o["status"] in ("open", "overdue", "returned")}
+        answered = {b["id"]: b for b in self.r.question_board(self.inv) if b["status"] == "answered"}
+        for q in rows:
+            if q["complete"]:
+                continue
+            gates = q["gates"]
+            i = next((k for k, gt in enumerate(gates) if not gt["met"] and not gt["optional"]), None)
+            if i is None:
+                continue
+            first = gates[i]
+            text = str((self.r.get(q["question"]).get("body") or {}).get("text") or "")
+            # an unchecked claim already answers the question while an earlier gate is still open (an honest
+            # "it can't be answered", or an answer written ahead of its hypothesis): the review comes first — a
+            # checked inconclusive answer settles the question, and a checked finding tells the worker what stands
+            rev = next((k for k, gt in enumerate(gates) if gt["gate"] == "reviewed"), None)
+            if q["question"] in answered and rev is not None and not gates[rev]["met"] and i < rev:
+                b = answered[q["question"]]
+                try:
+                    claim = self.r.resolve(b["answers"][-1], self.inv)
+                except (GraphError, KeyError, IndexError):
+                    claim = ""
+                if claim and claim not in busy_targets:
+                    self._issue_review_on(q, gates[rev], claim, b["answers"][-1], text, busy_targets)
+            if q["question"] in busy_targets:
+                continue
+            if first["gate"] in _REVIEW_GATES:
+                self._issue_review_stage(q, gates, i, text, busy_targets)
+                continue
+            run = []
+            for gt in gates[i:]:
+                if gt["optional"]:
+                    continue
+                if gt["gate"] in _REVIEW_GATES:
+                    break
+                run.append(gt)
+            seat = self._pick_for_stage(self.workers, first["who"], text)
+            objective = (f"{q['code']} is at stage '{first['stage']}' ({q['index']}/{q['of']}) of the {q['profile']} "
+                         f"workflow — {first['why']}. Move it through {', '.join(gt['stage'] for gt in run)}: "
+                         f"{text}")
+            if seat and self._issue(seat, q["question"], objective, [{"p": gt["gate"]} for gt in run]):
+                self._ev("stage_order", question=q["code"], stage=first["stage"], gates=[gt["gate"] for gt in run],
+                         seat=seat.name)
+                busy_targets.add(q["question"])
+
+    def _issue_review_stage(self, q: dict[str, Any], gates: list[dict[str, Any]], i: int, text: str,
+                            busy_targets: set[str]) -> None:
+        """A review stage: the order goes to a reviewer who didn't write the node, on the node the reviewed gate
+        produced (the newest claim for `reviewed`, the solve result for `result_reviewed`)."""
+        first = gates[i]
+        prefix = _REVIEW_GATES[first["gate"]]
+        # the newest node of the reviewed kind that an earlier, met gate produced (a claim for `reviewed`, whatever
+        # the profile calls that gate — claim_made, sourced; a result for `result_reviewed`)
+        codes = [c for gt in gates[:i] if gt["met"] for c in gt.get("evidence") or []
+                 if re.fullmatch(prefix + r"\d+", str(c))]
+        if not codes:
+            return
+        try:
+            target = self.r.resolve(codes[-1], self.inv)
+        except (GraphError, KeyError):
+            return
+        self._issue_review_on(q, first, target, codes[-1], text, busy_targets)
+
+    def _issue_review_on(self, q: dict[str, Any], first: dict[str, Any], target: str, code: str, text: str,
+                         busy_targets: set[str]) -> None:
+        if target in busy_targets:
+            return
+        author = self.r.get(target)["by"]
+        pool = [s for s in self.reviewers if s.name != author]
+        if not pool:
+            if target in self._reissued or q["question"] in busy_targets:
+                return
+            self._reissued.add(target)
+            worker = self._pick(self.workers, text, "question")
+            if worker and self._issue(worker, q["question"], f"Answer {q['code']}: {text} — {code} by {author} "
+                                      "can't be reviewed (its author is the reviewer); write the answer as your own "
+                                      "claim, from the files.", [{"p": "claim_made"}]):
+                self._ev("unreviewable", claim=code, by=author, reissued_to=worker.name)
+                busy_targets.add(q["question"])
+            return
+        seat = self._pick_for_stage(pool, first["who"], text)
+        what = "claim" if first["gate"] == "reviewed" else "result"
+        objective = (f"{q['code']} is at stage '{first['stage']}' ({q['index']}/{q['of']}) of the {q['profile']} "
+                     f"workflow. Review {code}, the {what} that answers it: the order lists it, its values and "
+                     "what it rests on" + (", and what the instrument's re-run confirmed — recompute only a value it "
+                     "CONTRADICTED; a value merely not printed is not evidence against" if self.reproducer else "")
+                     + ". Judge the method and the wording against the question; record a verdict.")
+        if seat and self._issue(seat, target, objective, [{"p": first["gate"]}]):
+            self._ev("stage_order", question=q["code"], stage=first["stage"], gates=[first["gate"]], seat=seat.name)
+            busy_targets.add(target)
+
     def _assign(self) -> None:
         if self.meter.warn():
             return                                          # drain; the report is next
+        rows = self._stage_rows()
+        if rows is not None:
+            self._assign_from_stages(rows)
+            return
         board = self.r.question_board(self.inv)
         busy_targets = {o["target_id"] for o in self.r.orders(self.inv) if o["status"] in ("open", "overdue", "returned")}
         for q in board:
@@ -303,6 +438,15 @@ class Scheduler:
                 busy_targets.add(xid)
 
     def _done(self) -> str:
+        rows = self._stage_rows()
+        if rows is not None:                                # the workflow's word on done, question by question
+            if all(q["complete"] for q in rows) and not self.inflight:
+                return "settled"
+            if not self.inflight and not self._pending_lead:
+                open_orders = [o for o in self.r.orders(self.inv) if o["status"] in ("open", "overdue", "returned")]
+                if not open_orders:
+                    return "stuck" if any(not q["complete"] for q in rows) else "settled"
+            return ""
         board = self.r.question_board(self.inv)
         if board and all(q["status"] in ("settled", "contested") for q in board) and not self.inflight:
             return "settled"
@@ -413,6 +557,16 @@ class Scheduler:
                 self.chain[rw["id"]] = self.chain.get(o["id"], o["id"])
                 self._dispatch(seat, rw["id"])
 
+    def _report_kind(self) -> str:
+        """The profile's name for its report ('Change report', 'Desk note'), when the profile has a workflow."""
+        try:
+            from hypgraph import profiles as _gp
+            pid = str((self.r.get(self.inv).get("body") or {}).get("profile") or "")
+            w = getattr(_gp.get(pid), "workflow", None) if pid else None
+            return str(w.report) if w else ""
+        except Exception:  # noqa: BLE001 — a missing profile never costs the report
+            return ""
+
     async def _report(self) -> tuple[str, bool]:
         facts = self.r.report(self.inv)["markdown"]
         if not self.lead:
@@ -424,9 +578,11 @@ class Scheduler:
         tools = [t for t in lead_tools(self.r, self.lead, self.inv, self.meter, report_box=box, roster=self.roster,
                                        order_author=HARNESS) if t.name in ("briefing", "report_facts", "submit_report",
                                                                              "show")]
-        user = ("Write the final report. Call report_facts and start from it; write your interpretation under the "
-                "facts; end with the answers in the format the task asks for; submit_report. If it is refused, fix "
-                "exactly what it names and submit again. Nothing else can be done now: the run is ending.")
+        kind = self._report_kind()
+        user = (f"Write the final report{' — the ' + kind if kind else ''}. Call report_facts and start from it; "
+                "write your interpretation under the facts; end with the answers in the format the task asks for; "
+                "submit_report. If it is refused, fix exactly what it names and submit again. Nothing else can be "
+                "done now: the run is ending.")
         try:
             await self._lead_turns(user, tools, "report", self.lead_turns)
         except Exception as e:  # noqa: BLE001
