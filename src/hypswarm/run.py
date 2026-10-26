@@ -102,7 +102,8 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
               on_return: Callable[[Scheduler, int], None] | None = None, lease_minutes: int = 240,
               external_poll_s: float = 1.0, external_timeout_s: float | None = None,
               resume: str = "", reproducer: Any = None, folder: str | Path | None = None,
-              toolkits: Sequence[str] | None = None) -> RunResult:
+              toolkits: Sequence[str] | None = None, watch: bool = False, refetch: Any = None,
+              on_write: Any = None) -> RunResult:
     """Run ``task`` with ``seats`` on a record at ``record`` — a path, in memory, or a record client such as
     ``HttpRecord`` for a record served by ``hypgraph serve --writable`` — under ``budget``.
     ``models``: one model for every seat, a mapping by seat name / role / model id, or a function of the seat.
@@ -111,7 +112,11 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
     ``reproducer``: ``(source) -> stdout`` (sync or async) that re-executes a worker's registered code in the host's
     sandbox; every result with code is re-run once by the instrument before review (see reproduce.py).
     ``seats=None`` takes the task's profile roster; ``toolkits`` names registry bundles built for the run (the
-    profile's by default) over ``folder``, added to ``data_tools``."""
+    profile's by default) over ``folder``, added to ``data_tools``.
+    ``watch``: keep the record in step with the world each round (world.py) — files in ``folder`` whose bytes
+    changed, and under the software workflow the working tree as a head that a commit supersedes; ``refetch(url) ->
+    text`` adds the sources' pages. Stale results are then re-run on the current files and only the answers whose
+    evidence moved are redone. ``on_write(kind, payload)`` is told after every write a seat makes."""
     sp = None
     if task.profile:
         from .profiles import get as _profile
@@ -145,9 +150,16 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
               "preamble_sha256": hashlib.sha256(task.preamble().encode()).hexdigest(),
               "data_tools": [t.name for t in data_tools], **({"resumes": inv} if resume else {})}
     rid = rec.file_run(inv, config)
+    world = None
+    if watch or refetch:
+        from .world import World
+        wf = getattr(sp.record_profile, "workflow", None) if sp else None
+        world = World(rec, inv, folder if watch else None, refetch=refetch,
+                      tree=bool(watch and folder and wf and "diff" in getattr(wf, "artifacts", {})))
     sched = Scheduler(rec, inv, seats, model_for, meter, data_tools=data_tools, preamble=task.preamble(),
                       on_return=on_return, lease_minutes=lease_minutes, external_poll_s=external_poll_s,
-                      external_timeout_s=external_timeout_s, header=task.header, reproducer=reproducer)
+                      external_timeout_s=external_timeout_s, header=task.header, reproducer=reproducer,
+                      world=world, on_write=on_write)
     for s in seats:
         if s.external:
             log.info("external seat %s: %s", s.name, s.mcp_hint(str(rec.path)))

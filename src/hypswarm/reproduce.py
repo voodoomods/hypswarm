@@ -16,6 +16,7 @@ anything itself.
 from __future__ import annotations
 
 import inspect
+import logging
 import re
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -23,6 +24,7 @@ from typing import Any
 from .record import INSTRUMENT, Record
 
 Reproducer = Callable[[str], "str | Awaitable[str]"]
+log = logging.getLogger("hypswarm.reproduce")
 
 _NUM = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
 
@@ -107,9 +109,37 @@ def check_output(values: dict[str, Any], stdout: str) -> dict[str, Any]:
             "ok": not contradicted and bool(confirmed)}
 
 
-async def reproduce_result(record: Record, inv: str, result_id: str, reproducer: Reproducer) -> dict[str, Any] | None:
+def live_version(record: Record, aid: str) -> str:
+    """The artifact that now stands for ``aid``: follow ``supersedes`` forward to the newest live version (the file
+    as it is now). ``aid`` itself when nothing replaced it."""
+    seen, cur = {aid}, aid
+    for _ in range(50):
+        n = record.get(cur)
+        newer = [e["src"] for e in n.get("in", []) if e.get("rel") == "supersedes" and e["src"] not in seen]
+        if not newer:
+            return cur
+        cur = newer[-1]
+        seen.add(cur)
+    return cur
+
+
+def _claims_on(res: dict[str, Any]) -> list[str]:
+    """Claims built on a result: derived from it, or supported by it."""
+    out = [e["src"] for e in res.get("in", []) if e.get("rel") == "derived_from"]
+    out += [e["dst"] for e in res.get("out", []) if e.get("rel") == "supports"]
+    return list(dict.fromkeys(out))
+
+
+async def reproduce_result(record: Record, inv: str, result_id: str, reproducer: Reproducer, *,
+                           support_claims: bool = False) -> dict[str, Any] | None:
     """Re-run the code behind one result and file the instrument's run + result. None when there is nothing to
-    re-run (no source on the run). Never raises: a failure is filed as a failed lab run."""
+    re-run (no source on the run). Never raises: a failure is filed as a failed lab run.
+
+    The re-run happens on the files as they are now, so the lab run ``uses`` the live version of every artifact the
+    author's run used. ``support_claims`` (re-verification of a stale result): when every registered value is
+    reproduced on the current files, the lab result ``supports`` each claim built on the author's result — the
+    claim is fresh again with no model call; when anything is contradicted or unprinted, nothing is linked and the
+    claim stays stale for a worker to redo."""
     res = record.get(result_id)
     runs = [e["src"] for e in res.get("in", []) if e["rel"] == "produced"]
     if not runs:
@@ -145,8 +175,9 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
     # the instrument's run uses what the author's run used (the diff, the instance, the data file): a workflow reads
     # `tests_pass_current` and freshness off the lab run's own `uses`, not the author's
     links: list[dict[str, Any]] = [{"rel": "replicates", "to": run["id"], "data": {"differs": "same_code"}}]
-    links += [{"rel": "uses", "to": e["dst"], "data": dict(e.get("data") or {})} for e in run.get("out", [])
-              if e.get("rel") == "uses"]
+    used = list(dict.fromkeys((live_version(record, e["dst"]), tuple(sorted((e.get("data") or {}).items())))
+                              for e in run.get("out", []) if e.get("rel") == "uses"))
+    links += [{"rel": "uses", "to": a, "data": dict(d)} for a, d in used]
     lab = record.create(author=INSTRUMENT, type="run", inv=inv, fields={
         "kind": "lab", "name": f"re-execution of {run['code']}", "state": state,
         "note": f"re-ran {run['code']}'s registered code: {verdict}"[:2000],
@@ -166,8 +197,19 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
         "summary": f"Re-executed {run['code']}'s code: {verdict}.", "kind": "computed", "outcome": outcome,
         "values": {k: v for k, v in values.items() if k in chk["confirmed"]}},
         links=[{"rel": "produced", "from": lab["id"]}])
+    supported: list[str] = []
+    every = bool(chk["confirmed"]) and not chk["contradicted"] and not chk["unprinted"] and not err
+    if support_claims and every:
+        for c in _claims_on(res):
+            try:
+                record.link(author=INSTRUMENT, src=lab_res["id"], rel="supports", dst=c,
+                            why=f"re-run of {run['code']}'s code on the current files reproduced every value it registered")
+                supported.append(record.get(c)["code"])
+            except Exception as e:  # noqa: BLE001 — a claim that can't take the link stays stale; a worker redoes it
+                log.info("re-verified %s but could not support %s: %s", lab_res["code"], c, e)
     return {"run": lab["code"], "result": lab_res["code"], "ok": chk["ok"], "confirmed": chk["confirmed"],
-            "unprinted": chk["unprinted"], "contradicted": chk["contradicted"], "missing": chk["missing"], "error": err}
+            "unprinted": chk["unprinted"], "contradicted": chk["contradicted"], "missing": chk["missing"], "error": err,
+            "supported": supported}
 
 
-__all__ = ["Reproducer", "check_output", "reproduce_result"]
+__all__ = ["Reproducer", "check_output", "live_version", "reproduce_result"]

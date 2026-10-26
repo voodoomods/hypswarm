@@ -7,6 +7,9 @@ where the work happens, so no agent needs a tool call to learn where it stands.
 from __future__ import annotations
 
 import json
+import logging
+import re
+from collections.abc import Callable
 from typing import Any
 
 from hypgraph import GraphError
@@ -15,6 +18,8 @@ from .budget import Meter
 from .messages import Tool
 from .record import Record
 from .seats import Seat
+
+log = logging.getLogger("hypswarm.tools")
 
 
 def _tail(n: dict[str, Any], meter: Meter) -> str:
@@ -30,10 +35,57 @@ def _err(e: Exception) -> str:
     return f"refused: {e}"
 
 
-def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter) -> list[Tool]:
-    """What a worker or reviewer can do to the record while holding an order."""
+OnWrite = Callable[[str, dict[str, Any]], None]
+
+
+def _live(n: dict[str, Any]) -> bool:
+    st = n.get("state") or {}
+    return (st.get("lifecycle") or "active") == "active" and not st.get("fallen")
+
+
+def implied_uses(record: Record, inv: str, order: str, code: str) -> list[str]:
+    """The artifacts a registered run used, as far as the record can tell without the author saying so: every live
+    file artifact whose path the code names, and — under a workflow — the live diff or instance that is part of the
+    order's question (the tests you ran while holding the order ran on the current head). Freshness then works
+    without the model remembering to declare ``uses``."""
+    out: list[str] = []
+    if code.strip():
+        for a in record.search("", "artifact", inv, 500):
+            n = record.get(a["id"])
+            b = n.get("body") or {}
+            path = str(b.get("path") or "")
+            if not path or path == "." or "://" in path or b.get("kind") == "excerpt" or not _live(n):
+                continue
+            names = {path, path.rsplit("/", 1)[-1]}
+            if any(re.search(r"(?<![\w.-])" + re.escape(x) + r"(?![\w.-])", code) for x in names):
+                out.append(a["id"])
+    try:
+        target = next((e["dst"] for e in record.get(order).get("out", []) if e.get("rel") == "works_on"), "")
+        if target and record.get(target)["type"] == "question":
+            for e in record.get(target).get("in", []):
+                if e.get("rel") != "part_of":
+                    continue
+                n = record.get(e["src"])
+                if n["type"] == "artifact" and (n.get("body") or {}).get("kind") in ("diff", "instance") and _live(n):
+                    out.append(n["id"])
+    except (GraphError, KeyError):
+        pass
+    return list(dict.fromkeys(out))
+
+
+def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
+                 on_write: OnWrite | None = None) -> list[Tool]:
+    """What a worker or reviewer can do to the record while holding an order. ``on_write(kind, payload)`` is told
+    after every accepted ``graph_add`` / ``register_run`` (a host's hook; it never changes the reply)."""
     me = seat.name
     state = {"returned": False}
+
+    def _told(kind: str, payload: dict[str, Any]) -> None:
+        if on_write:
+            try:
+                on_write(kind, payload)
+            except Exception as e:  # noqa: BLE001 — a host hook never costs a worker its write
+                log.warning("on_write hook failed on %s: %s", kind, e)
 
     def _links(links: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
         out = []
@@ -60,6 +112,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter)
             n = record.create(author=me, type=type, inv=inv, fields=fields, links=_links(links))
         except (GraphError, KeyError) as e:
             return _err(e)
+        _told("graph_add", {"type": type, "fields": fields, "code": n["code"], "id": n["id"]})
         return f"added {n['code']} — {n['state']['sentence']}" + _tail(n, meter)
 
     def graph_link(src: str, rel: str, dst: str, why: str = "") -> str:
@@ -85,8 +138,9 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter)
         question."""
         try:
             links: list[dict[str, Any]] = [{"rel": "executes", "to": record.resolve(experiment, inv)}] if experiment.strip() else []
-            links += [{"rel": "uses", "to": record.resolve(str(a), inv), "data": {"role": "data"}}
-                      for a in (uses or []) if str(a).strip()]
+            declared = [record.resolve(str(a), inv) for a in (uses or []) if str(a).strip()]
+            links += [{"rel": "uses", "to": a, "data": {"role": "data"}}
+                      for a in dict.fromkeys(declared + implied_uses(record, inv, order, code))]
             rfields: dict[str, Any] = {"kind": "agent", "name": name[:300], "state": "succeeded", "note": code[:1500]}
             if code.strip():
                 rfields["config"] = {"source": code[:18000], "language": "python"}
@@ -98,6 +152,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter)
                                 links=[{"rel": "produced", "from": r["id"]}])
         except (GraphError, KeyError) as e:
             return _err(e)
+        _told("register_run", {"code": code, "values": values or {}, "result": res["code"], "run": r["code"]})
         out = f"run {r['code']} → result {res['code']}"
         if claim.strip():
             cf: dict[str, Any] = {"statement": claim, "scope": scope or result_summary}
