@@ -123,9 +123,13 @@ did not bring every unchanged answer back.
 
 - **The lead claim "the record notices when the world changes; a prompt doesn't" is not supported here** and is
   not used publicly. What held: R shipped no stale answer, and every report it delivered was current.
-- **The report check must read the answers block.** A value in the block that matches a stale claim or result,
-  or no live claim at all, should be an error. That is a HypGraph change (`report_check`), with tests, before any
-  public claim about stale answers.
+- **The report check now reads the answers block** (hypgraph 0.5.2, voodoomods/hypgraph PR #7: `REPORT_ANSWER_STALE`,
+  `REPORT_ANSWER_UNBACKED`, `REPORT_ANSWERS_UNREADABLE`). On these records the plain report with the pre-change
+  answers is refused on 19 of 20 instances; 11 of R's 12 accepted reports still pass, and all 20 accepted reports of
+  the 2026-10-25 discovery run do. The refused one (C2 seed 0) is right to be refused: the record's only current
+  claim on Q2 says "6 of the 6 tests passed" while the report says 5. That is also the one stale answer set it
+  passes. The claim rests on a result whose run has no `uses` link to the code tree, so it never goes stale: **a
+  result with no provenance is fresh forever**, and that is the next hole to close in the record.
 - **The R failure to fix is the report step.** The record was right in all 13 lost reports, and a plain report
   would have passed. The next run logs the report turns. A harness fallback is also worth testing: when the lead
   submits nothing that passes, assemble the answers from checked, fresh claims.
