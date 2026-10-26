@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **The harness writes the report when the lead's doesn't pass** (`assemble.py`, `run(..., assemble_report=True)`,
+  on by default). A run can end with a current, checked claim on every question and still lose its report, because
+  the lead never submitted one the record's check accepts. The harness now writes it from the record alone: the
+  facts, a labelled note, and an answers block read off each question's current claim — the fields the question
+  asks for, filled only from what the claim binds (or, for a claim that binds nothing, the current results it is
+  derived from); a true / false field only from a boolean, never a 0 that an author labelled "optimal"; a stale or
+  contested claim answers nothing. The text has to pass the record's check like any report. No model call.
+  `RunResult.report_source` / `SchedulerResult.report_source` say whose report it is (`lead` | `assembled`);
+  `report_accepted` still means the lead's passed. Replayed on the change suite's 13 lost reports: 11 assembled,
+  none stale, no field filled with a wrong value.
+- The change-suite runner keeps `report_source` and scores an assembled report beside the locked score (which counts
+  only the lead's).
+
 ## 0.1.0a5 — 2026-10-26: when the world changes (P3)
 
 0.1.0a4 was tagged but never published: `__init__.__version__` still said 0.1.0a3, and the release workflow

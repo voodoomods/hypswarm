@@ -185,7 +185,12 @@ async def run_one(inst: CInstance, cond: str, out: Path, model: Any, *, stub: bo
                             watch=True, refetch=page_text(server) if server else None,
                             on_write=stub_hook(ch) if stub else None)
             ev = res.scheduler.events
+            # the locked score counts the lead's report only; an assembled one (the harness, from the current
+            # claims) is kept and scored beside it, labelled
+            if res.report_source == "assembled":
+                row.update(assembled_artifact=res.report, assembled_score=check_change(inst, res.report))
             row.update(artifact=res.report if res.report_accepted else "", report_accepted=res.report_accepted,
+                       report_source=res.report_source,
                        calls=res.usage["calls"], usd=res.usage["usd"], stopped=res.stopped,
                        world_changes=res.scheduler.world_changes, reverifications=res.scheduler.reverifications,
                        refreshes=res.scheduler.refreshes,
