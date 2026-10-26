@@ -22,7 +22,7 @@
 <header class="nav"><div class="wrap">
   <a class="brand" href="../"><img src="../assets/hypswarm.svg" alt=""><span>Hyp<b>Swarm</b></span></a>
   <nav aria-label="Site"><a href="../agents/">Agents</a><a href="../examples/" class="hide-sm">Examples</a><a href="../engineers/" aria-current="page">Engineers</a>
-    <a href="../#profiles" class="hide-sm">Profiles</a><a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
+    <a href="../#profiles" class="hide-sm">Profiles</a><a href="../#workflows" class="hide-sm">Workflows</a><a href="../#seats" class="hide-sm">Seats</a><a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
     <a href="https://github.com/voodoomods/hypswarm" class="hide-sm">GitHub</a>
     <button class="iconbtn" data-toggle-theme type="button" aria-label="Toggle light and dark">◐</button></nav>
 </div></header>
@@ -42,10 +42,10 @@
 <article class="prose">
 
 <h2 id="install">Install</h2>
-<p>HypSwarm needs HypGraph's coordination layer, which ships with hypgraph 0.4:</p>
+<p>HypSwarm needs HypGraph's coordination layer and workflows, which ship with hypgraph 0.5:</p>
 <div class="code"><pre>python -m venv .venv && . .venv/bin/activate        # .venv\Scripts\activate on Windows
-pip install --pre hypswarm                                      # pulls hypgraph>=0.4; or: "hypswarm[anthropic]"
-hypswarm profiles                                               # the five rosters</pre></div>
+pip install --pre hypswarm                                      # pulls hypgraph>=0.5.1; extras: anthropic · bedrock · langchain · pydantic-ai · crewai
+hypswarm profiles                                               # the five rosters and their workflows</pre></div>
 <p>Any OpenAI-compatible endpoint is the model (<code>OPENAI_BASE_URL</code>, <code>OPENAI_API_KEY</code>);
   <code>hypswarm[anthropic]</code> adds the Messages API. Nothing in the box executes code or reaches a network on its
   own — those are tools you register (below).</p>
@@ -69,16 +69,23 @@ text = "Do all existing importer tests still pass after the fix?"</pre></div>
 
 <h2 id="profile">Pick a profile</h2>
 <p>The profile is the record's rule-set for the discipline, pinned on the investigation and versioned. It brings a
-  roster, a paragraph of rules every seat reads, the predicates orders must meet, and what "complete" means.</p>
+  roster, a paragraph of rules every seat reads, the discipline's <b>workflow</b> — the stages a question passes through
+  and the gate out of each — and what "complete" means. A name (<code>software</code>) is its newest version,
+  <code>software@2</code>; <code>software@1</code> pins the pre-workflow one.</p>
 <table>
-  <tr><th>profile</th><th>roster</th><th>an order is done when</th><th>the record refuses</th></tr>
-  <tr><td><code>scientific</code></td><td>analyst, stats, critic, lead</td><td>a checked claim answers the question</td><td>unbound numbers; "never" without the count; "significant" without the test</td></tr>
-  <tr><td><code>software</code></td><td>implementer, tester, reviewer, lead</td><td>the instrument ran the tests (<code>tests_pass</code>)</td><td>"passes" without an instrument run</td></tr>
-  <tr><td><code>trading</code></td><td>quant, risk, lead</td><td>out-of-sample and after costs (<code>backtested_oos</code>)</td><td>costless backtests; in-sample "edge"; any live order</td></tr>
-  <tr><td><code>knowledge</code></td><td>researcher, fact_checker, lead</td><td>a claim cites a source node (<code>sourced</code>)</td><td>claims from recall</td></tr>
-  <tr><td><code>optimization</code></td><td>modeller, solver, verifier, lead</td><td>objective + feasible + bound/gap (<code>feasible_bounded</code>)</td><td>objectives without feasibility; "optimal" without a bound</td></tr>
+  <tr><th>profile</th><th>roster</th><th>the stages a question passes through</th><th>the record refuses</th></tr>
+  <tr><td><code>scientific</code></td><td>analyst, stats, critic, lead</td><td>conjectured → preregistered → run → evidenced → claimed → reviewed</td><td>unbound numbers; "never" without the count; "significant" without the test; a check on stale evidence</td></tr>
+  <tr><td><code>software</code></td><td>implementer, tester, reviewer, lead</td><td>implemented (a diff by hash) → verified (<code>tests_pass_current</code>: the instrument, on that head) → claimed → reviewed</td><td>"passes" without an instrument run, or on a superseded head; the diff's author reviewing</td></tr>
+  <tr><td><code>trading</code></td><td>quant, risk, lead</td><td>thesised → preregistered → backtested (<code>backtested</code>: out of sample, after costs, trials) → claimed → risk-reviewed → positioned → monitored</td><td>costless backtests; in-sample "edge", or without trials; a position without a stop; any live order</td></tr>
+  <tr><td><code>knowledge</code></td><td>researcher, fact_checker, lead</td><td>sourced (the passage, retrieved, kind) → claimed (<code>sourced</code>) → checked</td><td>claims from recall; a source without its passage</td></tr>
+  <tr><td><code>optimization</code></td><td>modeller, solver, verifier, lead</td><td>posed (the instance by hash) → modelled → configured → solved → verified → claimed → checked</td><td>objectives without feasibility; a solve that uses no instance; "optimal" without a bound, or on a changed instance</td></tr>
 </table>
-<p>Override the roster with your own <code>seats.toml</code> whenever you like; the profile's rules still apply.</p>
+<p><b>The scheduler issues each question's stage order.</b> It asks the record where every question stands
+  (<code>stages()</code>) and issues the gates up to the next review as one order's done-when, to the seat the stage
+  names; a review stage goes to a reviewer on the node the previous gate produced. The run ends <code>settled</code>
+  when the record says every question is complete — a checked inconclusive answer, a declined thesis
+  (<code>no_position</code>) or a verified failure count as complete too. Override the roster with your own
+  <code>seats.toml</code> whenever you like; the profile's rules still apply.</p>
 <div class="code"><span class="lbl">seats.toml (optional)</span><pre>[[seats]]
 name = "implementer"
 role = "worker"
@@ -197,42 +204,51 @@ external = true
     provenance, the work map, the refusal log ("overclaims caught"). <code>hypgraph brief</code> compiles the
     orchestrator's view; <code>hypgraph orders</code> lists orders; <code>hypgraph check report.md</code> lints a
     write-up against the record.</li>
-  <li><code>GET /api/graph/completion?inv=…</code> — the profile's criteria and whether each is met; the record
-    verifies by hash (<code>hypgraph verify</code>).</li>
+  <li><code>GET /api/graph/stages?inv=…</code> — each question's stage and every gate's status;
+    <code>GET /api/graph/completion?inv=…</code> — the profile's criteria and whether each is met; the record
+    verifies by hash (<code>hypgraph verify</code>). <code>res.report</code> carries the workflow's section: the stage
+    per question and the evidence that has gone stale.</li>
 </ul>
 
 <h2 id="examples">Worked setups, one per profile</h2>
 <h3>Software — CI as the instrument</h3>
 <p><span class="pill">profile</span> software &nbsp;<span class="pill">tools</span> files, python (pytest in a checkout)</p>
-<p>Mission: fix an issue and prove it. Questions are requirements. The tester registers <code>pytest</code> commands as
-  code; the reproducer runs them in a clean checkout; <code>tests_pass</code> is met only by that run. The implementer's
-  diff is an artifact by hash; the reviewer judges the method against the code the order carries. Completion:
-  every requirement's claim rests on a passing instrument run. Hook the reproducer to your CI runner and the record
-  holds the same evidence your pipeline does — by hash.</p>
+<p>Mission: fix an issue and prove it. Questions are requirements. The first stage order asks the implementer for the
+  change as an artifact <code>kind=diff</code> (base and head sha, files); the tester registers <code>pytest</code> commands
+  as code with <code>uses=[the diff]</code>; the reproducer runs them in a clean checkout and the lab run carries the same
+  <code>uses</code>; <code>tests_pass_current</code> is met only by that run, on that head. A later commit supersedes the
+  diff and the gate reopens. Completion: every requirement's claim rests on a passing instrument run on the current
+  head — or is a verified failure the record holds. Hook the reproducer to your CI runner and the record holds the same
+  evidence your pipeline does — by hash.</p>
 <h3>Trading — a paper desk</h3>
 <p><span class="pill">profile</span> trading &nbsp;<span class="pill">tools</span> files, python (pandas), a read-only market-data tool you register</p>
-<p>Mission: does a thesis have an edge after costs? The quant registers backtests whose values name the window and
-  the costs; the record refuses a costless result and an in-sample "edge"; the risk seat reviews against the code;
-  the lead records a <i>decision</i> — size, stop, review date — <code>based_on</code> the claim. Completion:
-  questions settled and a position recorded. There is no order-placement tool to register, and the profile's notes
-  say so to every seat; keep it that way.</p>
+<p>Mission: does a thesis have an edge after costs? The stage orders ask the quant for the thesis as a hypothesis, the
+  backtest preregistered as an experiment (windows, costs, configurations), then the result with out-of-sample return,
+  costs and <code>trials</code>; the record refuses a costless result and an in-sample "edge"; the risk seat reviews
+  against the code; then a <i>decision</i> <code>based_on</code> the claim — <code>kind=position</code> with size, stop,
+  review date, paper, or <code>kind=no_position</code>. Completion: questions settled, a position taken or declined,
+  nothing past its review date. There is no order-placement tool to register, and the profile's notes say so to every
+  seat; keep it that way.</p>
 <h3>Knowledge — a sourced brief</h3>
 <p><span class="pill">profile</span> knowledge &nbsp;<span class="pill">tools</span> files, a fetch tool you register (allowlisted hosts, read-only)</p>
-<p>Mission: answer questions from sources. Researchers add source nodes (citation, URL/DOI, the passage) and claims
-  that cite them; the fact-checker opens the sources; the report is linted so no sentence treats an unreviewed claim
-  as settled. Completion: every claim cites a source. Point the fetch tool at the sources you trust; the record
-  keeps what was actually read.</p>
+<p>Mission: answer questions from sources. Researchers add source nodes <code>part_of</code> the question (citation,
+  URL/DOI, <b>the passage</b>, retrieved, kind) and claims that cite them; the fact-checker opens the sources; the report
+  is linted so no sentence treats an unreviewed claim as settled. A question no source answers ends as a checked
+  <code>inconclusive</code> claim derived from the search's own result. Completion: every claim cites a source and is
+  checked. Point the fetch tool at the sources you trust; the record keeps what was actually read.</p>
 <h3>Optimization — a solve with a bound</h3>
 <p><span class="pill">profile</span> optimization &nbsp;<span class="pill">tools</span> files, python (OR-Tools / PuLP / scipy)</p>
-<p>Mission: minimise cost under constraints. The modeller writes the model as a hypothesis-with-predictions and an
-  experiment (the solve configuration); the solver registers runs whose values carry objective, feasible, gap and
-  runtime; the verifier checks feasibility against the constraints in the order; "optimal" is accepted only with
-  a bound that meets the objective. Completion: a feasible incumbent with a bound.</p>
+<p>Mission: minimise cost under constraints. The instance is registered as an artifact <code>kind=instance</code>; the
+  modeller writes the model as a hypothesis and the solve configuration as an experiment; the solver's run
+  <code>uses</code> the instance and its values carry objective, feasible, gap and runtime; the verifier reviews the
+  <i>result</i>, recomputing feasibility, before the claim; "optimal" is accepted only with a bound that meets the
+  objective, and never on an instance that has since changed. Completion: a feasible incumbent with a bound, verified.</p>
 <h3>Scientific — an eval report that holds up</h3>
 <p><span class="pill">profile</span> scientific &nbsp;<span class="pill">tools</span> files, python</p>
-<p>Mission: does model A beat model B on an item set? Analysts register counts; the record runs the test on bound
-  counts before it lets "significantly" through; the critic settles each question; the lead writes under the facts.
-  This is the setup the harmony study uses, and the one every scheduler path is tested on.</p>
+<p>Mission: does model A beat model B on an item set? The stage order asks for a hypothesis, an experiment with its
+  expected outcome before the run, then the run; analysts register counts; the record runs the test on bound counts
+  before it lets "significantly" through; the critic settles each question; the lead writes under the facts. This is
+  the setup the harmony study uses, and the one every scheduler path is tested on.</p>
 
 <h2 id="ops">Operating notes</h2>
 <ul>
@@ -255,7 +271,7 @@ external = true
 
 <footer class="foot"><div class="wrap">
   <span>HypSwarm is built on <a href="https://hypgraph.com">HypGraph</a>. Apache-2.0.</span>
-  <span>Made by Nicolas Houghtaling at <a href="https://github.com/voodoomods">VoodooMods LLC</a>.</span>
+  <span>Made by <a href="https://www.linkedin.com/in/nicolas-houghtaling-b68074147">Nicolas Houghtaling</a> at <a href="https://github.com/voodoomods">VoodooMods LLC</a>.</span>
 </div></footer>
 <script>
   document.querySelector('[data-toggle-theme]')?.addEventListener('click',()=>{

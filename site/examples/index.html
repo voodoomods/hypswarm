@@ -27,7 +27,7 @@
 <header class="nav"><div class="wrap">
   <a class="brand" href="../"><img src="../assets/hypswarm.svg" alt=""><span>Hyp<b>Swarm</b></span></a>
   <nav aria-label="Site"><a href="../examples/" aria-current="page">Examples</a><a href="../agents/">Agents</a><a href="../engineers/">Engineers</a>
-    <a href="../#profiles" class="hide-sm">Profiles</a><a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
+    <a href="../#profiles" class="hide-sm">Profiles</a><a href="../#workflows" class="hide-sm">Workflows</a><a href="../#seats" class="hide-sm">Seats</a><a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
     <a href="https://github.com/voodoomods/hypswarm" class="hide-sm">GitHub</a>
     <button class="iconbtn" data-toggle-theme type="button" aria-label="Toggle light and dark">◐</button></nav>
 </div></header>
@@ -63,35 +63,39 @@ python run.py --fresh            # add --trace for every tool call and reply, --
 
 <div class="ex"><div class="n">02</div><div>
   <h3><a href="https://github.com/voodoomods/hypswarm/tree/main/examples/02-software-tests">software-tests</a> <span class="pill">software</span></h3>
-  <p>A CSV importer must keep a comma inside a quoted field. The tester registers the exact <code>pytest</code>
-    command as its code; the instrument re-runs it and files a lab run; <code>tests_pass</code> is met by <i>that</i>
-    run. The tester's claim of "passes", written before the re-run, is refused, the order is reworked, and the
-    claim is accepted once the lab run has landed.</p>
+  <p>A CSV importer must keep a comma inside a quoted field. The stage order asks for the change as a diff artifact by
+    hash first; the tester registers the exact <code>pytest</code> command as its code, <code>uses</code> the diff; the
+    instrument re-runs it on that head and files a lab run; <code>tests_pass_current</code> is met by <i>that</i> run. The
+    tester's claim of "passes", written before the re-run, is refused, the order is reworked, and the claim is accepted
+    once the lab run has landed.</p>
   <div class="ref">refused: 'passes' is asserted, but no supporting result comes from an instrument-recorded run — tests must be run by the instrument, not reported [PASS_WITHOUT_INSTRUMENT_RUN]</div>
 </div></div>
 
 <div class="ex"><div class="n">03</div><div>
   <h3><a href="https://github.com/voodoomods/hypswarm/tree/main/examples/03-paper-trading">paper-trading</a> <span class="pill">trading</span></h3>
-  <p>A mean-reversion thesis backtested on a held-out window with fees and slippage. The quant's first result has
-    returns and no costs — refused before it is a result. The honest one carries out-of-sample return, in-sample
-    return, drawdown, trades, fees and slippage; "edge" is said only if the after-cost number is positive. No live
-    orders exist.</p>
+  <p>A mean-reversion thesis backtested on a held-out window with fees and slippage. The stage orders ask for the thesis
+    as a hypothesis and the backtest preregistered before the run. The quant's first result has returns and no costs —
+    refused before it is a result. The honest one carries out-of-sample return, in-sample return, drawdown, trades,
+    fees, slippage and the configurations tried; "edge" is said only if the after-cost number is positive; the desk
+    ends with a paper position (size, stop, review date) or a decision to decline. No live orders exist.</p>
   <div class="ref">refused: result refused: a backtest result reports returns without the costs it charged [BACKTEST_WITHOUT_COSTS]</div>
 </div></div>
 
 <div class="ex"><div class="n">04</div><div>
   <h3><a href="https://github.com/voodoomods/hypswarm/tree/main/examples/04-sourced-brief">sourced-brief</a> <span class="pill">knowledge</span></h3>
-  <p>Three facts. A claim from recall is refused; the researcher adds the source (citation, URL, the passage,
-    the date) and the claim that cites it. With <code>--model</code>, an allowlisted <code>fetch</code> tool lets
-    the model read the pages for itself; whatever it reads becomes a source node.</p>
+  <p>Three facts. A claim from recall is refused; the researcher adds the source (citation, URL, the passage, the date
+    it was read, its kind) <code>part_of</code> the question and the claim that cites it; the fact-checker opens it.
+    With <code>--model</code>, an allowlisted <code>fetch</code> tool lets the model read the pages for itself; whatever
+    it reads becomes a source node.</p>
   <div class="ref">refused: a knowledge claim must cite a source node (citation, url or doi, the passage) — the record holds what was read, not what was recalled [CLAIM_WITHOUT_SOURCE]</div>
 </div></div>
 
 <div class="ex"><div class="n">05</div><div>
   <h3><a href="https://github.com/voodoomods/hypswarm/tree/main/examples/05-optimal-with-bound">optimal-with-bound</a> <span class="pill">optimization</span></h3>
-  <p>Six customers, three depots, capacities. An objective without feasibility is refused; "optimal" needs a bound
-    that meets the objective. The instance is small enough to enumerate, so the bound is exact and the instrument
-    re-runs the enumeration.</p>
+  <p>Six customers, three depots, capacities. The instance is registered by hash; the model is a hypothesis, the solve
+    configuration an experiment; the solver's run <code>uses</code> the instance. An objective without feasibility is
+    refused; "optimal" needs a bound that meets the objective; the verifier recomputes feasibility before the claim.
+    The instance is small enough to enumerate, so the bound is exact and the instrument re-runs the enumeration.</p>
   <div class="ref">refused: 'optimal' is asserted, but no supporting result carries a bound or gap — an incumbent without a bound is a solution, not an optimum [OPTIMAL_WITHOUT_BOUND]</div>
 </div></div>
 
@@ -159,8 +163,10 @@ seats and what held them:
 
 <h2 id="common">What they share</h2>
 <ul>
-  <li><b>Orders come from the record.</b> The scheduler reads the question board and issues work; seats are matched on
-    the words they take. A seat never picks its own work.</li>
+  <li><b>Orders come from the record.</b> The scheduler asks the record which stage each question is in and issues
+    that stage's order — the gates up to the next review as its done-when — to the seat the stage names. A seat never
+    picks its own work; 01–05 run their profile's <code>@2</code> workflow, 06–10 pin <code>scientific@1</code> because
+    they are about other things.</li>
   <li><b>One write for a result and its claim.</b> <code>register_run</code> records the run, the result and the claim whose
     numbers are bound to the result's values; the instrument re-runs the code before any review.</li>
   <li><b>Done is the record's call.</b> Every reply says MET / NOT MET per predicate and "return_work now" when all
@@ -175,7 +181,7 @@ seats and what held them:
 
 <footer class="foot"><div class="wrap">
   <span>HypSwarm is built on <a href="https://hypgraph.com">HypGraph</a>. Apache-2.0.</span>
-  <span>Made by Nicolas Houghtaling at <a href="https://github.com/voodoomods">VoodooMods LLC</a>.</span>
+  <span>Made by <a href="https://www.linkedin.com/in/nicolas-houghtaling-b68074147">Nicolas Houghtaling</a> at <a href="https://github.com/voodoomods">VoodooMods LLC</a>.</span>
 </div></footer>
 <script>
   document.querySelector('[data-toggle-theme]')?.addEventListener('click',()=>{
