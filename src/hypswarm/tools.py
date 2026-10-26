@@ -84,7 +84,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter)
         (default) | exclusion | inconclusive. The result counts toward your order by itself; a claim settles a
         question."""
         try:
-            links = [{"rel": "executes", "to": record.resolve(experiment, inv)}] if experiment.strip() else []
+            links: list[dict[str, Any]] = [{"rel": "executes", "to": record.resolve(experiment, inv)}] if experiment.strip() else []
             links += [{"rel": "uses", "to": record.resolve(str(a), inv), "data": {"role": "data"}}
                       for a in (uses or []) if str(a).strip()]
             rfields: dict[str, Any] = {"kind": "agent", "name": name[:300], "state": "succeeded", "note": code[:1500]}
