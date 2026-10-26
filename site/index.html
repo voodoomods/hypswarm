@@ -85,34 +85,36 @@ hypswarm run --task task.toml --profile trading --record desk.hypgraph</pre>
   <div class="wrap">
     <div class="kicker">Profiles</div>
     <h2 class="h">Five disciplines. One record. The record decides what counts.</h2>
-    <p class="sub">A profile is pinned on the investigation and versioned: it says which predicates an order must meet,
-      what the record refuses the moment it's written, who usually sits at the table, and what "complete" means. A
-      record written under <code>trading@1</code> means the same thing in a year. Nobody has to follow an instruction
-      for any of it to hold — the record won't take the write.</p>
+    <p class="sub">A profile is pinned on the investigation and versioned: it says what the record refuses the moment
+      it's written, who usually sits at the table, what "complete" means — and, since hypgraph 0.5, the discipline's own
+      <b>workflow</b>: the stages a question passes through and the gate out of each. A record written under
+      <code>trading@2</code> means the same thing in a year (<code>trading@1</code> pins the pre-workflow one). Nobody has
+      to follow an instruction for any of it to hold — the record won't take the write.</p>
     <div class="prof">
       <div class="card"><h3><i></i>scientific</h3><div class="tag">analyst · stats · critic · lead</div>
-        <p>A checked claim answers a question. Numbers are bound to measured results; one review settles it.</p>
-        <div class="ref"><b>refuses</b> 812 of 1000 with no result behind it · "never" without the count · "significant" without the test</div></div>
+        <p>A hypothesis with predictions; an experiment preregistered <b>before</b> any run; numbers bound to measured
+          results; a reviewer's check on fresh evidence settles it.</p>
+        <div class="ref"><b>refuses</b> 812 of 1000 with no result behind it · "never" without the count · "significant" without the test · a check on stale evidence</div></div>
       <div class="card"><h3><i></i>software</h3><div class="tag">implementer · tester · reviewer · lead</div>
-        <p>"It passes" is the <b>instrument's</b> run of the tests — a lab-recorded result — never a report of one. A
-          requirement is verified when its claim rests on that run.</p>
-        <div class="ref"><b>refuses</b> "all tests pass" without an instrument run · a diff that isn't an artifact by hash</div></div>
+        <p>The change as a diff by hash. "It passes" is the <b>instrument's</b> run of the tests <b>on that head</b> — a
+          lab-recorded result — never a report of one. A newer commit supersedes the diff; the tests go stale.</p>
+        <div class="ref"><b>refuses</b> "all tests pass" without an instrument run, or on a superseded head · the diff's author as its reviewer</div></div>
       <div class="card"><h3><i></i>trading</h3><div class="tag">quant · risk · lead</div>
-        <p>A thesis is a hypothesis. An edge exists <b>out of sample and after costs</b>, or it doesn't exist. Positions are
-          paper: a sized decision based on the claim, with a stop.</p>
-        <div class="ref"><b>refuses</b> a backtest without the fees it charged · "edge" from the in-sample window · any live order (there is no path)</div></div>
+        <p>A thesis is a hypothesis; the backtest is preregistered. An edge exists <b>out of sample, after costs, with the
+          configurations tried declared</b>. A position is a decision with size, stop and review date — paper, or declined.</p>
+        <div class="ref"><b>refuses</b> a backtest without the fees it charged · "edge" from the in-sample window, or without trials · a position without a stop · any live order (there is no path)</div></div>
       <div class="card"><h3><i></i>knowledge</h3><div class="tag">researcher · fact_checker · lead</div>
-        <p>Every factual claim <b>cites a source node</b> the record holds — citation, URL or DOI, the passage. The report is
-          linted against the record before it's accepted.</p>
-        <div class="ref"><b>refuses</b> a claim from recall · a sentence that treats an unreviewed claim as settled</div></div>
+        <p>A source carries <b>the passage that says it</b>, when it was read, what kind it is; the claim cites it; the
+          fact-checker opens it. No source? A checked inconclusive answer settles the question honestly.</p>
+        <div class="ref"><b>refuses</b> a claim from recall · a source without its passage · a sentence that treats an unreviewed claim as settled</div></div>
       <div class="card"><h3><i></i>optimization</h3><div class="tag">modeller · solver · verifier · lead</div>
-        <p>A result carries the objective, <b>feasible</b>, and a <b>bound or gap</b>. "Best found, gap 0.4 %" is what the
-          record accepts.</p>
-        <div class="ref"><b>refuses</b> an objective with no feasibility · "optimal" without a bound</div></div>
-      <div class="card"><h3><i></i>yours</h3><div class="tag">one Profile · one roster · your toolkits</div>
-        <p>Vocabulary, default predicates, domain predicates, refusals, completion criteria: one object in HypGraph. A
-          roster and its toolkits here. The scheduler doesn't change.</p>
-        <div class="ref" style="color:var(--ink3)"><b>see</b> hypswarm profiles · /api/graph/profiles</div></div>
+        <p>The instance by hash; the model as a hypothesis; a result with the objective, <b>feasible</b>, and a <b>bound or
+          gap</b>; the verifier recomputes feasibility before the claim.</p>
+        <div class="ref"><b>refuses</b> an objective with no feasibility · "optimal" without a bound, or on a changed instance · a solve that uses no instance</div></div>
+      <div class="card"><h3><i></i>yours</h3><div class="tag">one Profile · one Workflow · one roster</div>
+        <p>Vocabulary, predicates, refusals, completion criteria and a workflow: one object in HypGraph. A roster and its
+          toolkits here. The scheduler doesn't change — it issues whatever stage the record names.</p>
+        <div class="ref" style="color:var(--ink3)"><b>see</b> hypswarm profiles · /api/graph/profiles · /api/graph/stages</div></div>
     </div>
   </div>
 </section>
@@ -120,75 +122,77 @@ hypswarm run --task task.toml --profile trading --record desk.hypgraph</pre>
 <section class="block" id="workflows">
   <div class="wrap">
     <div class="kicker">Workflows</div>
-    <h2 class="h">What a run looks like, per profile.</h2>
-    <p class="sub">The scheduler is the same in every profile; what changes is what each order must produce before the record
-      calls it done, and what the record refuses on the way. Each strip is one run, left to right. <b>Bold</b> steps are
-      writes the record checks; <em>slanted</em> steps are mechanical — no model is called.</p>
+    <h2 class="h">The stage is derived, never set. The scheduler issues it.</h2>
+    <p class="sub">Each profile's workflow is the discipline's own method — the scientific method with preregistration,
+      continuous integration and code review, preregistered backtesting and risk management, source criticism,
+      operations research — written as gates the record checks. A question is in the first stage whose gate the record
+      does not meet. The scheduler asks the record where each question stands and issues <b>that stage's order</b>: the
+      gates up to the next review as its done-when, to the seat the stage names; a review stage goes to a reviewer on the
+      node the previous gate produced. Nothing is complete until the record says so. <b>Bold</b> steps are writes the
+      record checks; <em>slanted</em> steps are mechanical — no model is called.</p>
 
     <div class="wf"><div class="wfh"><i class="sci"></i>scientific <span>analyst · stats · critic · lead</span></div>
       <ol class="flow">
-        <li><b>question</b><span>on the board; an order goes to the seat whose words match</span></li>
-        <li><b>register_run</b><span>run + result + claim in one write; numbers bound to the values</span></li>
+        <li><b>conjectured</b><span>a hypothesis with predictions answers the question</span></li>
+        <li><b>preregistered</b><span>an experiment tests it, expected outcome stated — <em>before</em> any run</span></li>
+        <li><b>run · evidenced</b><span>register_run executes it: run + result + claim, numbers bound</span></li>
         <li><em>instrument re-runs the code</em><span>values confirmed, unprinted or contradicted</span></li>
-        <li><b>review</b><span>the critic's order carries claim, code and verdict; judges, doesn't recompute</span></li>
-        <li><em>question settled</em><span>one checked claim answers it</span></li>
-        <li><b>report</b><span>facts from the record, interpretation under them, linted before it's accepted</span></li>
+        <li><b>reviewed</b><span>the critic's order carries claim, code and verdict; judges, doesn't recompute</span></li>
+        <li><em>complete</em><span>a checked claim on fresh evidence; report from the facts, linted</span></li>
       </ol>
-      <div class="ref"><b>refused on the way</b> a number no result accounts for · "never" without the count · "significant" without the test the record ran</div>
+      <div class="ref"><b>refused on the way</b> a number no result accounts for · "never" without the count · "significant" without the test · a check on evidence a corrected file made stale</div>
     </div>
 
     <div class="wf"><div class="wfh"><i class="sw"></i>software <span>implementer · tester · reviewer · lead</span></div>
       <ol class="flow">
-        <li><b>requirement</b><span>a question: the behaviour that must hold</span></li>
-        <li><b>change</b><span>the implementer's diff, an artifact by hash</span></li>
-        <li><b>register_run</b><span>the tester's exact test command as code; passed k of n, exit code</span></li>
-        <li><em>instrument runs the tests</em><span>a lab run that replicates the tester's — this is <code>tests_pass</code></span></li>
-        <li><b>claim "passes"</b><span>accepted only now: it rests on the instrument-backed result</span></li>
-        <li><b>review</b><span>method and wording against the code the order carries</span></li>
-        <li><em>requirement verified</em><span>completion: every requirement's claim rests on a lab run</span></li>
+        <li><b>implemented</b><span>the change as an artifact <code>kind=diff</code>: base → head sha, files</span></li>
+        <li><b>register_run</b><span>the exact test command as code, <code>uses</code> the diff; passed k of n, exit code</span></li>
+        <li><em>instrument runs the tests on that head</em><span>the lab run uses the same diff — this is <code>tests_pass_current</code></span></li>
+        <li><b>claimed</b><span>"passes", accepted only now: it rests on the instrument's run</span></li>
+        <li><b>reviewed</b><span>by someone who wrote neither the claim nor the diff</span></li>
+        <li><em>verified</em><span>or a verified failure: a checked claim on an instrument-recorded negative result</span></li>
       </ol>
-      <div class="ref"><b>refused on the way</b> "it passes" before the instrument has run · a diff that isn't an artifact by hash</div>
+      <div class="ref"><b>refused on the way</b> "it passes" before the instrument has run, or on a superseded head · a diff without base, head and files · the diff's author reviewing</div>
     </div>
 
     <div class="wf"><div class="wfh"><i class="tr"></i>trading <span>quant · risk · lead</span></div>
       <ol class="flow">
-        <li><b>market question</b><span>does this thesis have an edge after costs?</span></li>
-        <li><b>hypothesis + experiment</b><span>the thesis and the move it predicts; the backtest preregistered: window, costs</span></li>
-        <li><b>register_run</b><span>oos_return, fees, slippage, drawdown, trades — <code>backtested_oos</code></span></li>
+        <li><b>thesised</b><span>the thesis as a hypothesis: the move, the horizon</span></li>
+        <li><b>preregistered</b><span>the backtest as an experiment: windows, costs, configurations — before the run</span></li>
+        <li><b>backtested</b><span>oos_return, fees, slippage, <code>trials</code> — out of sample, after costs, declared</span></li>
         <li><em>instrument re-runs the backtest</em><span>every registered value checked</span></li>
-        <li><b>review</b><span>the risk seat judges the method against the code</span></li>
-        <li><b>decision</b><span>a paper position: size, stop, review date — <code>based_on</code> the claim</span></li>
-        <li><em>position recorded</em><span>completion; there is no live-order path to reach</span></li>
+        <li><b>risk-reviewed</b><span>the risk seat judges the method against the code</span></li>
+        <li><b>positioned</b><span>a decision <code>kind=position</code>: size, stop, review date, paper — or <code>no_position</code></span></li>
+        <li><em>monitored</em><span>past its review date with nothing newer: flagged, not forgotten</span></li>
       </ol>
-      <div class="ref"><b>refused on the way</b> a backtest without the costs it charged · "edge" from the fitting window · any live order</div>
+      <div class="ref"><b>refused on the way</b> a backtest without the costs it charged · "edge" from the fitting window, or without trials · a position without a stop · any live order (there is no path)</div>
     </div>
 
     <div class="wf"><div class="wfh"><i class="kn"></i>knowledge <span>researcher · fact_checker · lead</span></div>
       <ol class="flow">
-        <li><b>question</b><span>what the reader wants to know</span></li>
-        <li><b>read</b><span>a page, a paper, a dataset — through a fetch tool the host allowlisted</span></li>
-        <li><b>source</b><span>citation, URL or DOI, the passage, the date — a node the record holds</span></li>
-        <li><b>claim that cites it</b><span><code>sourced</code>; the passage accounts for the numbers in the claim</span></li>
-        <li><b>review</b><span>the fact-checker opens the source and records a verdict</span></li>
-        <li><b>report</b><span>linted: no sentence treats an unreviewed claim as settled</span></li>
-        <li><em>all sourced</em><span>completion</span></li>
+        <li><b>sourced</b><span>a source <code>part_of</code> the question: citation, URL or DOI, <em>the passage</em>, retrieved, kind</span></li>
+        <li><b>claimed</b><span>a claim that cites it; the passage accounts for its numbers</span></li>
+        <li><b>checked</b><span>the fact-checker opens the source and records a verdict</span></li>
+        <li><em>complete</em><span>report linted: no sentence treats an unreviewed claim as settled</span></li>
+        <li><b>no source?</b><span>the search as a run and result ("read 3 of 3 pages; 0 mention it"), a claim <code>kind=inconclusive</code> — checked, it settles the question</span></li>
       </ol>
-      <div class="ref"><b>refused on the way</b> a claim from recall · a settled-sounding sentence on an unreviewed claim</div>
+      <div class="ref"><b>refused on the way</b> a claim from recall · a source without its passage · a settled-sounding sentence on an unreviewed claim</div>
     </div>
 
     <div class="wf"><div class="wfh"><i class="op"></i>optimization <span>modeller · solver · verifier · lead</span></div>
       <ol class="flow">
-        <li><b>question</b><span>what to minimise or maximise, under which constraints</span></li>
-        <li><b>hypothesis + experiment</b><span>the modelling choice; the solve configuration</span></li>
-        <li><b>register_run</b><span>objective, feasible, bound or gap, runtime — <code>feasible_bounded</code></span></li>
+        <li><b>posed</b><span>the instance as an artifact <code>kind=instance</code>, by hash</span></li>
+        <li><b>modelled · configured</b><span>the model as a hypothesis; the solve configuration as an experiment</span></li>
+        <li><b>solved</b><span>register_run <code>uses</code> the instance: objective, feasible, bound or gap — or infeasible</span></li>
         <li><em>instrument re-runs the solve</em><span>objective and gap confirmed</span></li>
-        <li><b>review</b><span>the verifier checks feasibility against the constraints in the order</span></li>
-        <li><b>claim</b><span>"best found, gap x" — or "optimal", only with a bound that meets the objective</span></li>
-        <li><em>incumbent feasible</em><span>completion</span></li>
+        <li><b>verified</b><span>the verifier recomputes feasibility and checks the result</span></li>
+        <li><b>claimed · checked</b><span>"best found, gap x" — or "optimal" with the bound; the verifier checks the claim</span></li>
       </ol>
-      <div class="ref"><b>refused on the way</b> an objective with no feasibility · "optimal" without a bound</div>
+      <div class="ref"><b>refused on the way</b> an objective with no feasibility · a solve that uses no instance · "optimal" without a bound, or on a changed instance</div>
     </div>
-    <p class="sub">Each strip is one of the <a href="examples/">examples</a>, runnable for free.</p>
+    <p class="sub">Each strip is one of the <a href="examples/">examples</a>, runnable for free; the trace shows every stage
+      order. The method each workflow is taken from is quoted in HypGraph's
+      <a href="https://github.com/voodoomods/hypgraph/tree/main/docs/workflows">docs/workflows</a>.</p>
   </div>
 </section>
 
@@ -355,20 +359,22 @@ hypswarm run --task task.toml --profile trading --record-url http://127.0.0.1:87
   <div class="wrap">
     <div class="kicker">Status</div>
     <h2 class="h">Alpha, measured as it's built.</h2>
-    <p class="sub"><span class="alpha">alpha 0.1</span>&nbsp; HypSwarm grew out of the harness the HypGraph harmony
+    <p class="sub"><span class="alpha">alpha 0.1.0a4</span>&nbsp; HypSwarm grew out of the harness the HypGraph harmony
       study runs agent teams on, and it is measured there as a preregistered condition — every change to the
       scheduler is tried against a scripted-model benchmark and against real runs before it's described here. Built:
-      the scheduler, workers, five profiles with rosters, the tool registry, external seats over MCP, the record server
-      with token-bound writes, resume, escalation, instrument reproduction, verified file tools, the OpenAI-compatible
-      and Anthropic adapters, and a test suite that runs every scheduler path in seconds. Every design decision is
-      written down in <a href="https://github.com/voodoomods/hypswarm/tree/main/docs/decisions">docs/decisions</a>.</p>
+      the scheduler that issues each question's stage order, workers, five profiles with rosters and workflows, the
+      tool registry, agent seats for LangChain / LangGraph, PydanticAI and CrewAI, external seats over MCP, the record
+      server with token-bound writes, resume, escalation, instrument reproduction, verified file tools, the
+      OpenAI-compatible, Anthropic, Bedrock and LangChain model adapters, ten runnable examples, and a test suite that
+      runs every scheduler path in seconds. Every design decision is written down in
+      <a href="https://github.com/voodoomods/hypswarm/tree/main/docs/decisions">docs/decisions</a>.</p>
   </div>
 </section>
 </main>
 
 <footer class="foot"><div class="wrap">
   <span>HypSwarm is built on <a href="https://hypgraph.com">HypGraph</a>. Apache-2.0.</span>
-  <span>Made by Nicolas Houghtaling at <a href="https://github.com/voodoomods">VoodooMods LLC</a>.</span>
+  <span>Made by <a href="https://www.linkedin.com/in/nicolas-houghtaling-b68074147">Nicolas Houghtaling</a> at <a href="https://github.com/voodoomods">VoodooMods LLC</a>.</span>
 </div></footer>
 <script>
   document.querySelector('[data-toggle-theme]')?.addEventListener('click',()=>{

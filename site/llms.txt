@@ -4,13 +4,13 @@
 
 ## Profiles
 
-A profile is pinned on the investigation and says what the record accepts and refuses in that discipline. The seats you hold work under it; the record enforces it, not the prompt.
+A profile is pinned on the investigation and says what the record accepts and refuses in that discipline, and, since hypgraph 0.5, its workflow: the stages a question passes through and the gate out of each. The stage is derived, never set; the scheduler issues each question's stage order (the gates up to the next review as the done-when, to the seat the stage names; a review stage to a reviewer on the node the previous gate produced). A name (`trading`) is its newest version, `trading@2`; `trading@1` pins the pre-workflow one. The seats you hold work under it; the record enforces it, not the prompt.
 
-- `scientific@1` — default. A checked claim answers a question; numbers bound to results; no "never" without the count; no "significant" without the test.
-- `software@1` — "it passes" is the instrument's run of the tests (a lab-recorded result), never a report. Order predicate `tests_pass`. Refusal `PASS_WITHOUT_INSTRUMENT_RUN`.
-- `trading@1` — an edge exists out of sample and after costs. Predicate `backtested_oos`. Refusals `BACKTEST_WITHOUT_COSTS`, `EDGE_WITHOUT_OOS_COSTS`. Positions are paper: a sized decision based_on the claim. There is no live-order path.
-- `knowledge@1` — every factual claim cites a source node (citation, url or doi, the passage). Predicate `sourced`. Refusal `CLAIM_WITHOUT_SOURCE`. Recall is not a source.
-- `optimization@1` — a result carries objective, feasible and a bound or gap. Predicate `feasible_bounded`. Refusals `OBJECTIVE_WITHOUT_FEASIBILITY`, `OPTIMAL_WITHOUT_BOUND`.
+- `scientific@2` — default. Stages: conjectured (a hypothesis with predictions) → preregistered (an experiment with data.expected BEFORE any run) → run → evidenced → claimed → reviewed. Numbers bound to results; no "never" without the count; no "significant" without the test; a check on stale evidence does not count.
+- `software@2` — stages: implemented (an artifact kind=diff with meta base_sha, head_sha, files, part_of the question) → verified (`tests_pass_current`: the instrument's run that `uses` the current diff) → claimed → reviewed. Register the run with `uses=[the diff]`. Refusals `PASS_WITHOUT_INSTRUMENT_RUN`, `TESTS_ON_STALE_HEAD`, `REVIEW_BY_AUTHOR`. A failing suite: outcome negative and a claim stating the count; checked, a verified failure settles the requirement.
+- `trading@2` — stages: thesised (hypothesis) → preregistered (experiment: windows, costs, configurations, before the run) → backtested (`backtested`: oos_*, fees/slippage, trials) → claimed → risk-reviewed → positioned (a decision based_on the claim: kind=position with size, stop, review_date, paper=true, or kind=no_position) → monitored. Refusals `BACKTEST_WITHOUT_COSTS`, `EDGE_WITHOUT_OOS_COSTS`, `EDGE_WITHOUT_TRIALS`, `POSITION_WITHOUT_STOP`, `LIVE_ORDER`. There is no live-order path.
+- `knowledge@2` — stages: sourced (a source part_of the question: citation, url or doi, the passage, retrieved, kind) → claimed (`sourced`: the claim cites it) → checked. Refusals `CLAIM_WITHOUT_SOURCE`, `PASSAGE_MISSING`. Recall is not a source. No source: register the search as a run with its result and a claim kind=inconclusive derived from it.
+- `optimization@2` — stages: posed (an artifact kind=instance part_of the question) → modelled (hypothesis) → configured (experiment) → solved (`solved`: a run that `uses` the instance; objective, feasible, bound or gap, or feasible=false) → verified (the verifier reviews the result) → claimed → checked. Refusals `OBJECTIVE_WITHOUT_FEASIBILITY`, `OPTIMAL_WITHOUT_BOUND`, `SOLVED_WITHOUT_INSTANCE`, `OPTIMAL_ON_STALE_INSTANCE`.
 
 ## Examples (github.com/voodoomods/hypswarm/tree/main/examples; hypswarm.com/examples/)
 Ten runnable examples, free on scripted models, cents on a real provider: one per profile, the mixed swarm
@@ -30,7 +30,7 @@ A seat is an author name in the record. You hold it through the HypGraph MCP ser
 - Every reply tells you whether your order is done. When it says every predicate is met, call `return_work` with a note of at most 120 words. Do not work past done.
 - A refused claim says exactly what to fix and gives the honest sentence. Write that.
 - If a value the instrument re-ran is marked contradicted, that is what to recompute; a value merely not printed is not evidence against.
-- `completion` shows what the profile says "done" means for the whole investigation and which criteria are met.
+- `stage` shows where each question stands in the profile's workflow and which gate is next; `completion` shows what the profile says "done" means for the whole investigation and which criteria are met.
 
 ## If you are an engineer
 
