@@ -36,7 +36,8 @@ MEAN_N = round(sum(1.2 + 0.01 * (d % 5) for d in range(30)) / 30, 3)
 MEAN_S = round(sum(2.4 + 0.02 * (d % 5) for d in range(30)) / 30, 3)
 CODE = "import csv\nv = [float(r['mg_l']) for r in csv.DictReader(open('{f}'))]\nprint('mean_{s}', round(sum(v) / len(v), 3))"
 
-TASK = Task(title="Mean concentration at two sites", profile="scientific",
+# scientific@1: the frozen pre-workflow profile (the example is about resume and notices); 01 runs the workflow (scientific@2)
+TASK = Task(title="Mean concentration at two sites", profile="scientific@1",
             mission="site_north.csv and site_south.csv hold 30 daily concentrations (day,mg_l). Report each site's mean in mg/L, from python. "
                     "Read any NOTICES in your order before touching a file.",
             questions=[("Q1", "What is the north site's mean concentration (mg/L)?"), ("Q2", "What is the south site's mean concentration (mg/L)?")],

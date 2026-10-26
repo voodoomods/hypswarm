@@ -13,10 +13,13 @@ from .test_alpha import _target, lead_script, reviewer_script
 
 
 def test_profiles_mirror_the_record_and_carry_rosters():
-    assert set(profiles.names()) == {"scientific@1", "software@1", "trading@1", "knowledge@1", "optimization@1"}
-    sw = profiles.get("software")
-    assert sw.id == "software@1" and [s.name for s in sw.seats] == ["implementer", "tester", "reviewer", "lead"]
-    assert sw.record_profile.predicates == ("tests_pass",) and "files" in sw.toolkits
+    assert {"scientific@1", "software@1", "trading@1", "knowledge@1", "optimization@1",
+            "scientific@2", "software@2", "trading@2", "knowledge@2", "optimization@2"} <= set(profiles.names())
+    sw = profiles.get("software")                                   # the name → the newest version: the workflow
+    assert sw.id == "software@2" and [s.name for s in sw.seats] == ["implementer", "tester", "reviewer", "lead"]
+    assert sw.workflow is not None and [s.name for s in sw.workflow.stages][:3] == ["specified", "implemented", "verified"]
+    assert "tests_pass_current" in sw.record_profile.predicates and "files" in sw.toolkits
+    assert profiles.get("software@1").workflow is None and profiles.get("software@1").record_profile.predicates == ("tests_pass",)
     with pytest.raises(KeyError):
         profiles.get("alchemy")
 
@@ -40,7 +43,9 @@ def knowledge_worker(messages, tools):
         return ("return_work", {"note": "sourced"})
     if "graph_add" not in done:
         return ("graph_add", {"type": "source", "fields": {"citation": "An encyclopaedia entry on the treaty.",
-                                                           "url": "https://example.org/treaty", "passage": "signed in 1648"}})
+                                                           "url": "https://example.org/treaty", "passage": "signed in 1648",
+                                                           "retrieved": "2026-10-26", "kind": "secondary"},
+                              "links": [{"rel": "part_of", "to": _target(messages)}]})
     if done.count("graph_add") == 1:
         return ("graph_add", {"type": "claim", "fields": {"statement": "The treaty was signed in 1648.",
                                                           "scope": "The Peace of Westphalia, 1648, as a date.", "kind": "finding"},
@@ -57,15 +62,17 @@ def test_knowledge_profile_run_pins_profile_and_needs_sources(tmp_path):
     assert res.stopped == "settled"
     g = Graph(str(path))
     try:
-        assert g.get(res.inv)["body"]["profile"] == "knowledge@1"
+        assert g.get(res.inv)["body"]["profile"] == "knowledge@2"
         assert {o["assignee"] for o in g.orders(res.inv)} <= {"researcher", "fact_checker"}
         first = g.orders(res.inv)[0]
-        assert "sourced" in g.order_text(first["id"])              # the profile's predicate is the order's done-when
+        text = g.order_text(first["id"])
+        assert "source_quoted" in text and "sourced" in text and "is at stage 'sourced'" in text   # the stage's gates are the order's done-when
         c = g.completion(res.inv)
-        assert c["profile"] == "knowledge@1" and c["complete"]
+        assert c["profile"] == "knowledge@2" and c["complete"]
+        assert all(x["complete"] for x in g.stages(res.inv))
     finally:
         g.close()
-    assert "PROFILE knowledge@1" in task.preamble() and "Recall is not a source" in task.preamble()
+    assert "PROFILE knowledge@2" in task.preamble() and "kind=inconclusive" in task.preamble()
 
 
 def lazy_edge_worker(messages, tools):

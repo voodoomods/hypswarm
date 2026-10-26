@@ -62,17 +62,31 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter)
             return _err(e)
         return f"added {n['code']} — {n['state']['sentence']}" + _tail(n, meter)
 
+    def graph_link(src: str, rel: str, dst: str, why: str = "") -> str:
+        """Link two nodes you can see: part_of (an artifact or source → a question), uses (a run → an artifact),
+        supports / challenges (why required), supersedes (a newer diff or instance → the old one)."""
+        try:
+            record.link(author=me, src=record.resolve(src, inv), rel=rel, dst=record.resolve(dst, inv), why=why)
+        except (GraphError, KeyError) as e:
+            return _err(e)
+        return f"linked {src} -{rel}-> {dst}"
+
     def register_run(name: str, result_summary: str, values: dict[str, Any] | None = None, outcome: str = "",
                      experiment: str = "", code: str = "", claim: str = "", answers: str = "", scope: str = "",
-                     claim_kind: str = "") -> str:
+                     claim_kind: str = "", uses: list[str] | None = None) -> str:
         """Record a computation you ran and the result it produced: values {name: {value, unit} | {k, n}}; code: the
         exact code you ran — the instrument re-executes it and checks that the output shows every value you register,
         so PRINT each registered value with its name (print("n_items", n_items)). experiment: the experiment it
-        executes, if any. claim (optional): the sentence this result lets you assert — written in the same call,
-        derived from the result, its numbers bound to these values; answers: the question code it answers; scope:
-        under which conditions it holds. The result counts toward your order by itself; a claim settles a question."""
+        executes, if any. uses: artifact codes the run read — the diff it tested, the instance it solved, the data
+        file (a workflow reads 'tests on the current head' and freshness off these). claim (optional): the sentence
+        this result lets you assert — written in the same call, derived from the result, its numbers bound to these
+        values; answers: the question code it answers; scope: under which conditions it holds; claim_kind: finding
+        (default) | exclusion | inconclusive. The result counts toward your order by itself; a claim settles a
+        question."""
         try:
-            links = [{"rel": "executes", "to": record.resolve(experiment, inv)}] if experiment.strip() else []
+            links: list[dict[str, Any]] = [{"rel": "executes", "to": record.resolve(experiment, inv)}] if experiment.strip() else []
+            links += [{"rel": "uses", "to": record.resolve(str(a), inv), "data": {"role": "data"}}
+                      for a in (uses or []) if str(a).strip()]
             rfields: dict[str, Any] = {"kind": "agent", "name": name[:300], "state": "succeeded", "note": code[:1500]}
             if code.strip():
                 rfields["config"] = {"source": code[:18000], "language": "python"}
@@ -141,7 +155,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter)
         return "returned — " + ("every predicate met" if c["all_met"] else "NOT every predicate met: "
                                                                         + "; ".join(x["why"] for x in c["predicates"] if not x["met"]))
 
-    tools = [Tool.from_function(f) for f in (graph_add, register_run, review, show, find, return_work)]
+    tools = [Tool.from_function(f) for f in (graph_add, graph_link, register_run, review, show, find, return_work)]
     for t in tools:
         t.fn.__dict__["_state"] = state     # the worker loop reads whether return_work ran
     return tools

@@ -142,13 +142,26 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
         parts.append(f"the code failed: {err}")
     verdict = "; ".join(parts)
     state = "succeeded" if not err else "failed"
+    # the instrument's run uses what the author's run used (the diff, the instance, the data file): a workflow reads
+    # `tests_pass_current` and freshness off the lab run's own `uses`, not the author's
+    links: list[dict[str, Any]] = [{"rel": "replicates", "to": run["id"], "data": {"differs": "same_code"}}]
+    links += [{"rel": "uses", "to": e["dst"], "data": dict(e.get("data") or {})} for e in run.get("out", [])
+              if e.get("rel") == "uses"]
     lab = record.create(author=INSTRUMENT, type="run", inv=inv, fields={
         "kind": "lab", "name": f"re-execution of {run['code']}", "state": state,
         "note": f"re-ran {run['code']}'s registered code: {verdict}"[:2000],
         "config": {"reproduces": run["id"], "stdout_tail": stdout[-1500:], "confirmed": chk["confirmed"],
                    "unprinted": chk["unprinted"], "contradicted": chk["contradicted"]}},
-        links=[{"rel": "replicates", "to": run["id"], "data": {"differs": "same_code"}}])
-    outcome = "negative" if chk["contradicted"] or err else ("positive" if chk["confirmed"] else "inconclusive")
+        links=links)
+    # the instrument confirms numbers; what they mean is the author's result's outcome. A confirmed "4 of 5 tests
+    # pass" is a confirmed failure, so a negative result re-run stays negative — `tests_pass` reads the outcome.
+    author_outcome = str((res.get("body") or {}).get("outcome") or "")
+    if chk["contradicted"] or err:
+        outcome = "negative"
+    elif not chk["confirmed"]:
+        outcome = "inconclusive"
+    else:
+        outcome = "negative" if author_outcome == "negative" else "positive"
     lab_res = record.create(author=INSTRUMENT, type="result", inv=inv, fields={
         "summary": f"Re-executed {run['code']}'s code: {verdict}.", "kind": "computed", "outcome": outcome,
         "values": {k: v for k, v in values.items() if k in chk["confirmed"]}},

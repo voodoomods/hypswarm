@@ -76,7 +76,8 @@ async def stats_agent(order: AgentOrder) -> AgentOutcome:
 if __name__ == "__main__":
     args = cli("10 · a custom seat and toolkit", HERE)
     work = stage(HERE, {"weather.csv": DATA})
-    task = Task(title="Mean temperature", profile="scientific",
+    # scientific@1: the frozen pre-workflow profile (the example is about a custom seat); 01 runs the workflow (scientific@2)
+    task = Task(title="Mean temperature", profile="scientific@1",
                 mission="weather.csv holds 60 daily temperatures (day,temp_c). Report the mean.",
                 questions=[("Q1", "What is the mean of 'temp_c' in the 60 rows of weather.csv?")], files={"weather.csv": DATA})
     mean = round(statistics.fmean(18 + 6 * ((d * 7) % 11) / 10 for d in range(60)), 3)

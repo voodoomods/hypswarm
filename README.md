@@ -38,54 +38,65 @@ print(result.report)        # the facts from the record, the lead's interpretati
 
 ## Profiles: what counts, per discipline
 
-A profile is a HypGraph governance profile — what the **record** will accept and refuse — plus the seats and tools
-that usually work under it. It is pinned on the investigation and versioned, so a record written under
-`trading@1` means the same thing in a year.
+A profile is a HypGraph governance profile — what the **record** will accept and refuse, and the discipline's own
+**workflow**: the stages a question passes through and the gate out of each — plus the seats and tools that usually
+work under it. It is pinned on the investigation and versioned, so a record written under `trading@2` means the
+same thing in a year. A name (`trading`) is its newest version; `trading@1` pins the pre-workflow one.
 
-| profile | roster | an order is done when… | the record refuses |
+| profile | roster | the stages a question passes through | the record refuses |
 |---|---|---|---|
-| `scientific` | analyst, stats, critic, lead | a checked claim answers the question | numbers no result accounts for; "never" without the count; "significant" without the test |
-| `software` | implementer, tester, reviewer, lead | **the instrument ran the tests** and a claim states it | "it passes" without an instrument-recorded run |
-| `trading` | quant, risk, lead | the backtest is **out of sample and after costs** | a backtest without the costs it charged; "edge" without both; any live order (there is no path) |
-| `knowledge` | researcher, fact_checker, lead | the claim **cites a source node** the record holds | a factual claim with no source — recall is not a source |
-| `optimization` | modeller, solver, verifier, lead | a result carries **objective, feasible, and a bound or gap** | an objective without feasibility; "optimal" without a bound |
+| `scientific` | analyst, stats, critic, lead | asked → conjectured → preregistered → run → evidenced → claimed → reviewed | numbers no result accounts for; "never" without the count; "significant" without the test; a check on stale evidence |
+| `software` | implementer, tester, reviewer, lead | specified → implemented (a diff by hash) → verified (**the instrument ran the tests on that head**) → claimed → reviewed | "it passes" without an instrument-recorded run, or on a superseded head; the diff's author as its reviewer |
+| `trading` | quant, risk, lead | asked → thesised → preregistered → backtested (**out of sample, after costs, trials declared**) → claimed → risk-reviewed → positioned → monitored | a backtest without the costs it charged; "edge" without both, or without the configurations tried; a position without size, stop and review date; any live order (there is no path) |
+| `knowledge` | researcher, fact_checker, lead | asked → (searched) → sourced (**the passage that says it**, retrieved, kind) → claimed → checked | a factual claim with no source; a source without its passage |
+| `optimization` | modeller, solver, verifier, lead | posed (the instance by hash) → modelled → configured → solved → verified → claimed → checked | an objective without feasibility; "optimal" without a bound, or on a changed instance; a solve that uses no instance |
+
+**The stage is derived, never set.** The record reads a question's stage off what has been written
+(`hypgraph`'s `stage()`); the scheduler issues that stage's order — the gates up to the next review as its
+done-when, to the seat the stage names — and a review stage goes to a reviewer on the node the previous gate
+produced. A question is complete when the record says so. An honest "it can't be answered" — a checked claim of kind
+`inconclusive`, derived from what the search did find — completes a question at any stage; declining a thesis is a
+decision (`kind=no_position`).
 
 Every profile adds a paragraph of its rules to each seat's preamble and tells the scheduler what "complete" means
-(`completion()`); `hypswarm profiles` lists them. Adding a discipline is a `Profile` in HypGraph plus a roster here —
-the scheduler does not change.
+(`completion()`); `hypswarm profiles` lists them. Adding a discipline is a `Profile` with a `Workflow` in HypGraph
+plus a roster here — the scheduler does not change. The method each workflow is taken from is quoted in HypGraph's
+[`docs/workflows/`](https://github.com/voodoomods/hypgraph/tree/main/docs/workflows).
 
 ### Workflows, per profile
 
-The scheduler is the same everywhere; what differs is what each order must produce before the record calls it done,
-and what the record refuses on the way. *Italic* steps are mechanical — no model is called.
+What each stage's order asks a seat to write, and what the record refuses on the way. *Italic* steps are
+mechanical — no model is called.
 
-**scientific** — question → `register_run` (run + result + claim, numbers bound) → *instrument re-runs the code* →
-`review` by the critic (judges; recomputes only a contradiction) → *question settled* → report from the facts, linted.
-Refused on the way: a number no result accounts for, "never" without the count, "significant" without the test.
+**scientific** — question → a hypothesis with predictions → an experiment that tests it with the expected outcome,
+**before** any run → `register_run` executing it (run + result + claim, numbers bound) → *instrument re-runs the
+code* → `review` by the critic (judges; recomputes only a contradiction) → *question settled* → report from the facts,
+linted. A corrected data file puts what rested on it at risk; a check on stale evidence doesn't count.
 
-**software** — requirement → the implementer's change as an artifact by hash → `register_run` with the exact test
-command as code → *instrument runs the tests* (a lab run that replicates the tester's: this is `tests_pass`) →
-claim "passes", accepted only now → `review` of method and wording → *requirement verified*.
-Refused on the way: "it passes" before the instrument has run.
+**software** — requirement → the change as an artifact `kind=diff` (base → head sha, files) → `register_run` with
+the exact test command as code and `uses` the diff → *instrument runs the tests on that head* (`tests_pass_current`)
+→ claim "passes", accepted only now → `review` by someone who wrote neither the claim nor the diff → *requirement
+verified*. A newer head supersedes the old diff: the tests go stale and the gate reopens.
 
-**trading** — market question → hypothesis (the thesis and the move it predicts) + experiment (the backtest
-preregistered: window, costs) → `register_run` with oos_return, fees, slippage, drawdown (`backtested_oos`) →
-*instrument re-runs the backtest* → `review` by the risk seat → a `decision` node: paper position, size, stop,
-review date, `based_on` the claim → *position recorded*. Refused on the way: a backtest without the costs it
-charged, "edge" from the fitting window, any live order (there is no path).
+**trading** — market question → the thesis as a hypothesis → the backtest preregistered as an experiment (windows,
+costs, configurations to try) → `register_run` with oos_return, fees, slippage, **trials** → *instrument re-runs the
+backtest* → `review` by the risk seat → a `decision` `based_on` the claim: `kind=position` with size, stop,
+review_date, paper — or `kind=no_position` → *monitored*: past its review date with nothing newer, the position is
+flagged.
 
-**knowledge** — question → read through an allowlisted fetch tool → `source` node (citation, URL or DOI, passage,
-date) → claim that `cites` it (`sourced`; the passage accounts for its numbers) → `review` by the fact-checker,
-who opens the source → report linted so no sentence treats an unreviewed claim as settled → *all sourced*.
-Refused on the way: a claim from recall.
+**knowledge** — question → (the search as an experiment, optional) → `source` node (citation, URL or DOI, **the
+passage**, retrieved, kind) `part_of` the question → claim that `cites` it → `review` by the fact-checker, who opens
+the source → *all checked*. A withdrawn source puts every claim citing it at risk. No source? The search's own result
+("read 3 of 3 pages; 0 mention it") and a claim `kind=inconclusive` derived from it settle the question honestly.
 
-**optimization** — question (objective, constraints) → hypothesis (modelling choice) + experiment (solve
-configuration) → `register_run` with objective, feasible, bound or gap, runtime (`feasible_bounded`) → *instrument
-re-runs the solve* → `review` by the verifier against the constraints → claim "best found, gap x", or "optimal" only
-with a bound that meets the objective → *incumbent feasible*. Refused on the way: an objective with no
-feasibility, "optimal" without a bound.
+**optimization** — question + the instance as an artifact `kind=instance` → the model as a hypothesis → the solve
+configuration as an experiment → `register_run` that `uses` the instance, with objective, feasible, bound or gap →
+*instrument re-runs the solve* → `review` of the result by the verifier against the instance → claim "best found,
+gap x", or "optimal" only with a bound → `review` of the claim → *incumbent verified*. A changed instance supersedes
+the solve.
 
-Each of these is one of the [examples](https://github.com/voodoomods/hypswarm/tree/main/examples), runnable for free.
+Each of these is one of the [examples](https://github.com/voodoomods/hypswarm/tree/main/examples), runnable for free;
+the trace shows every stage order and the refusals on the way.
 
 ## What you get
 

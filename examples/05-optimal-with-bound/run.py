@@ -64,9 +64,17 @@ if __name__ == "__main__":
                         "depot without exceeding capacity, at minimum total cost. Report objective, feasibility and a bound or gap; "
                         "say 'optimal' only with a bound that meets the objective.",
                 questions=[("Q1", "What is the minimum total cost, and is the solution found optimal?")], files={"instance.csv": DATA.encode()})
+    import hashlib
     answers = {"Q1": {
         "first_try": ("register_run", {"name": "greedy", "result_summary": "Q1: A greedy assignment.", "values": {"objective": {"value": obj + 3}},
                                        "claim": f"The minimum cost is {obj + 3}.", "answers": "Q1", "scope": "instance.csv"}),
+        # the optimization workflow: the instance by hash, the model as a hypothesis, the solve configuration as an
+        # experiment, the run uses the instance, a verifier checks the result before the claim
+        "artifact": {"sha256": hashlib.sha256(DATA.encode()).hexdigest(), "path": "instance.csv", "kind": "instance", "size": len(DATA)},
+        "hypothesis": "Assignment as a capacitated facility problem: each customer to one depot, depot capacities binding, cost = the sum of assignment costs.",
+        "prediction": "a feasible assignment exists and full enumeration finds the minimum with a bound equal to the objective",
+        "protocol": "Enumerate every capacity-feasible assignment of the 6 customers to the 3 depots (3^6 candidates); the minimum is the optimum and its own bound.",
+        "expected": "a feasible minimum with gap 0",
         "summary": "Enumerated every capacity-feasible assignment (3^6 = 729 candidates) and kept the cheapest.",
         "values": {"objective": {"value": obj}, "feasible": {"value": True}, "bound": {"value": obj}, "gap": {"value": 0.0},
                    "enumerated_feasible": {"value": nf}}, "code": SOLVE,

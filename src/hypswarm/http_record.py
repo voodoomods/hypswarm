@@ -136,6 +136,11 @@ class HttpRecord:
         out: dict[str, Any] = self._write("withdraw", author, **kw)
         return out
 
+    def link(self, **kw: Any) -> dict[str, Any]:
+        author = str(kw.pop("author"))
+        out: dict[str, Any] = self._write("link", author, **kw)
+        return out
+
     def get(self, nid: str, history: bool = False) -> dict[str, Any]:
         out: dict[str, Any] = self._get(f"node/{nid}", history="1" if history else "")
         return out
@@ -157,6 +162,18 @@ class HttpRecord:
 
     def next_experiments(self, inv: str, limit: int = 10) -> dict[str, Any]:
         out: dict[str, Any] = self._get("next", inv=inv, limit=limit)
+        return out
+
+    def stages(self, inv: str) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = self._get("stages", inv=inv)["stages"]
+        return out
+
+    def stage(self, node: str, inv: str = "") -> dict[str, Any]:
+        out: dict[str, Any] = self._get(f"stage/{node}", inv=inv)
+        return out
+
+    def completion(self, inv: str) -> dict[str, Any]:
+        out: dict[str, Any] = self._get("completion", inv=inv)
         return out
 
     def investigations(self) -> list[dict[str, Any]]:

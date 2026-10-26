@@ -41,15 +41,15 @@ def fetch(url: str) -> str:
 
 toolkits.register("fetch", lambda ctx: [Tool.from_function(fetch)], "GET over an allowlist, text only")
 
-SOURCES = {
+SOURCES = {   # the knowledge workflow's source: citation, url, the passage, retrieved, kind (secondary: encyclopaedias)
     "Q1": ({"citation": "Encyclopaedia Britannica, 'Peace of Westphalia'.", "url": "https://www.britannica.com/event/Peace-of-Westphalia",
-            "passage": "…the treaties were signed on October 24, 1648…", "retrieved": "2026-10-25"},
+            "passage": "…the treaties were signed on October 24, 1648…", "retrieved": "2026-10-25", "kind": "secondary"},
            "The Peace of Westphalia was signed on 24 October 1648.", "The treaties of Osnabrück and Münster.", "24 October 1648"),
     "Q2": ({"citation": "Wikipedia, 'Transistor'.", "url": "https://en.wikipedia.org/wiki/Transistor",
-            "passage": "…the first working transistor was demonstrated at Bell Labs on December 23, 1947…", "retrieved": "2026-10-25"},
+            "passage": "…the first working transistor was demonstrated at Bell Labs on December 23, 1947…", "retrieved": "2026-10-25", "kind": "secondary"},
            "The first working transistor was demonstrated at Bell Labs on 23 December 1947.", "The point-contact transistor of Bardeen and Brattain.", "23 December 1947"),
     "Q3": ({"citation": "Wikipedia, 'Mariana Trench'.", "url": "https://en.wikipedia.org/wiki/Mariana_Trench",
-            "passage": "…the Challenger Deep … maximum known depth of 10,935 m …", "retrieved": "2026-10-25"},
+            "passage": "…the Challenger Deep … maximum known depth of 10,935 m …", "retrieved": "2026-10-25", "kind": "secondary"},
            "The deepest known point of the ocean, the Challenger Deep, is about 10,935 m deep.", "As surveyed in 2021 (GEBCO); earlier surveys differ by tens of metres.", "about 10,935 m"),
 }
 
