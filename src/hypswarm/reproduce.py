@@ -130,6 +130,71 @@ def _claims_on(res: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(out))
 
 
+def _nums_of(v: Any) -> list[float]:
+    """The numbers a registered value carries: its value, or k and n of a count."""
+    if isinstance(v, bool):
+        return []
+    if isinstance(v, (int, float)):
+        return [float(v)]
+    if isinstance(v, dict):
+        return [float(v[k]) for k in ("value", "k", "n") if isinstance(v.get(k), (int, float))
+                and not isinstance(v.get(k), bool)]
+    return []
+
+
+def _same_printed(x: float, dec: int, v: float) -> bool:
+    return round(abs(v), dec) == x or (dec == 0 and abs(abs(v) - x) < 0.5)
+
+
+def claim_rests_on(record: Record, claim_id: str, res: dict[str, Any], values: dict[str, Any]) -> set[str] | None:
+    """The registered values of ``res`` that one claim rests on, or None when that can't be told.
+
+    A claim that binds measurements to this result rests on those keys (the record's claim check already makes its
+    numbers follow from them). A claim that binds none rests on the values its statement states — and only when every
+    number in the statement is one of this result's values; a number it doesn't carry (a p-value, a difference) could
+    depend on any of them, so the answer is None."""
+    from hypgraph.checks import numbers
+    c = record.get(claim_id)
+    body = c.get("body") or {}
+    ids = {res.get("id"), res.get("code")}
+    meas = [m for m in body.get("measurements") or [] if isinstance(m, dict) and m.get("key")]
+    bound = {str(m.get("key")) for m in meas if m.get("result") in ids}
+    # values it binds from other results must still stand: one result reproduced says nothing about another
+    for other in {str(m.get("result")) for m in meas if m.get("result") and m.get("result") not in ids}:
+        try:
+            st = (record.get(record.resolve(other, str(res.get("inv") or ""))).get("state") or {})
+        except Exception:  # noqa: BLE001 — a result that can't be read can't be vouched for
+            return None
+        if st.get("stale") or st.get("lifecycle") != "active":
+            return None
+    if bound:
+        return bound if bound <= set(values) else None
+    printed = numbers(str(body.get("statement") or ""))
+    if not printed:
+        return None
+    keys: set[str] = set()
+    for x, dec, _pct, _p in printed:
+        hit = {k for k, v in values.items() if any(_same_printed(x, dec, n) for n in _nums_of(v))}
+        if not hit:
+            return None
+        keys |= hit
+    return keys
+
+
+def claims_to_support(record: Record, res: dict[str, Any], values: dict[str, Any],
+                      chk: dict[str, Any]) -> list[tuple[str, list[str]]]:
+    """Per value: the claims on ``res`` whose own values all reproduced, though another value of the same result moved
+    (claim id, the keys it rests on). A claim whose values can't be told, or include a moved, unprinted or missing
+    one, isn't listed — it stays stale for a worker to redo."""
+    ok = set(chk.get("confirmed") or [])
+    out = []
+    for c in _claims_on(res):
+        keys = claim_rests_on(record, c, res, values)
+        if keys and keys <= ok:
+            out.append((c, sorted(keys)))
+    return out
+
+
 async def reproduce_result(record: Record, inv: str, result_id: str, reproducer: Reproducer, *,
                            support_claims: bool = False) -> dict[str, Any] | None:
     """Re-run the code behind one result and file the instrument's run + result. None when there is nothing to
@@ -138,8 +203,9 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
     The re-run happens on the files as they are now, so the lab run ``uses`` the live version of every artifact the
     author's run used. ``support_claims`` (re-verification of a stale result): when every registered value is
     reproduced on the current files, the lab result ``supports`` each claim built on the author's result — the
-    claim is fresh again with no model call; when anything is contradicted or unprinted, nothing is linked and the
-    claim stays stale for a worker to redo."""
+    claim is fresh again with no model call. When some value moved, each claim whose own values (claim_rests_on) all
+    reproduced gets a lab result of just those values that supports it — a claim about A's count comes back though B's
+    moved; the others stay stale for a worker to redo."""
     res = record.get(result_id)
     runs = [e["src"] for e in res.get("in", []) if e["rel"] == "produced"]
     if not runs:
@@ -207,9 +273,24 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
                 supported.append(record.get(c)["code"])
             except Exception as e:  # noqa: BLE001 — a claim that can't take the link stays stale; a worker redoes it
                 log.info("re-verified %s but could not support %s: %s", lab_res["code"], c, e)
+    elif support_claims and not err and chk["confirmed"]:
+        for c, keys in claims_to_support(record, res, values, chk):
+            try:
+                code = record.get(c)["code"]
+                part = record.create(author=INSTRUMENT, type="result", inv=inv, fields={
+                    "summary": f"Re-executed {run['code']}'s code: the values {code} rests on ({', '.join(keys)}) "
+                               f"reproduced on the current files; moved: {', '.join(chk['contradicted']) or 'none'}.",
+                    "kind": "computed", "outcome": author_outcome or "positive",
+                    "values": {k: values[k] for k in keys}},
+                    links=[{"rel": "produced", "from": lab["id"]}])
+                record.link(author=INSTRUMENT, src=part["id"], rel="supports", dst=c,
+                            why=f"re-run of {run['code']}'s code reproduced every value this claim rests on")
+                supported.append(code)
+            except Exception as e:  # noqa: BLE001 — as above: it stays stale
+                log.info("re-verified %s but could not support %s by value: %s", lab_res["code"], c, e)
     return {"run": lab["code"], "result": lab_res["code"], "ok": chk["ok"], "confirmed": chk["confirmed"],
             "unprinted": chk["unprinted"], "contradicted": chk["contradicted"], "missing": chk["missing"], "error": err,
             "supported": supported}
 
 
-__all__ = ["Reproducer", "check_output", "live_version", "reproduce_result"]
+__all__ = ["Reproducer", "check_output", "claim_rests_on", "claims_to_support", "live_version", "reproduce_result"]

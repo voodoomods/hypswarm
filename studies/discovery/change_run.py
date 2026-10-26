@@ -45,6 +45,13 @@ class Changer:
     def __init__(self, inst: CInstance, work: Path, server: PageServer | None):
         self.inst, self.work, self.server = inst, work, server
         self.fired: dict[str, Any] = {}
+        # every call of the tools both conditions share, in order: what was run, what it printed, and whether the
+        # world had already moved — so a run that saw something odd can be read back (C2 seed 0 couldn't)
+        self.calls: list[dict[str, Any]] = []
+
+    def note(self, tool: str, arg: str, out: str) -> None:
+        self.calls.append({"t": round(time.time(), 3), "tool": tool, "after_change": bool(self.fired),
+                           "in": arg[:4000], "out": out[:4000]})
 
     def fire(self, by: str) -> None:
         if self.fired:
@@ -66,6 +73,7 @@ def changing_python(work: Path, log: list[str], ch: Changer) -> Tool:
     def python(code: str) -> str:
         """Run python 3 in your working folder (the data files are there; you may write files). Print what you need."""
         out = str(base.fn(code))
+        ch.note("python", code, out)
         if ch.inst.change.python and re.search(ch.inst.change.python, code) and "Traceback" not in out \
                 and ch.saw_old_answer(out):
             ch.fire("python")                               # the old answer was just computed: now the world moves
@@ -79,6 +87,7 @@ def changing_fetch(server: PageServer, ch: Changer) -> Tool:
     def fetch(url: str) -> str:
         """GET a page on the local source host and return its visible text. Only this host exists; the index lists its pages."""
         out = str(base.fn(url))
+        ch.note("fetch", url, out)
         if ch.inst.change.fetch and url.rstrip("/").endswith(ch.inst.change.fetch) and ch.saw_old_answer(out):
             ch.fire("fetch")
         return out
@@ -206,6 +215,7 @@ async def run_one(inst: CInstance, cond: str, out: Path, model: Any, *, stub: bo
         if server:
             server.close()
     row["fired"] = ch.fired
+    row["tool_calls"] = ch.calls
     row["seconds"] = round(time.time() - t0, 1)
     row["score"] = check_change(inst, row.get("artifact") or "")
     (out / "run.json").write_text(json.dumps(row, indent=1, default=str), encoding="utf-8")
@@ -302,6 +312,22 @@ def selftest() -> int:
             bad += (not ok) + (not ok_s)
             print(f"{fam} seed {seed}{' harmless' if inst.harmless else ''}: honest {'OK' if ok else 'FAIL'} | "
                   f"stale {'OK' if ok_s else 'FAIL'}{note}")
+    # the shared tool fires the change once, on the call that shows the old answer, and logs every call
+    inst = make_change("C1", 0)
+    d = HERE / "runs" / "selftest-change" / "calllog"
+    shutil.rmtree(d, ignore_errors=True)
+    d.mkdir(parents=True)
+    for path, data in inst.files.items():
+        (d / path).write_bytes(data)
+    ch = Changer(inst, d, None)
+    tool = changing_python(d, [], ch)
+    count_b = "import csv\nprint(sum(int(r['b']) for r in csv.DictReader(open('items.csv'))))"
+    first, second = str(tool.fn(code=count_b)), str(tool.fn(code=count_b))
+    log_ok = (bool(ch.fired) and [c["after_change"] for c in ch.calls] == [False, True]
+              and first.strip() != second.strip() and ch.calls[0]["in"] == count_b)
+    bad += not log_ok
+    print(f"call log: {'OK' if log_ok else 'FAIL'} ({len(ch.calls)} calls, fired={bool(ch.fired)}, "
+          f"B's count {first.strip()} then {second.strip()})")
     print("selftest:", "PASS" if not bad else f"{bad} FAILURES")
     return bad
 
