@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hypswarm"
-version = "0.1.0a5"
+version = "0.1.0a6"
 description = "Many agents, one record: run one agent or a swarm of them — on a research, software, trading, knowledge or optimization task — with a HypGraph record as the only shared state."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -28,7 +28,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
     "Typing :: Typed",
 ]
-dependencies = ["hypgraph>=0.5.2", "httpx>=0.27"]
+dependencies = ["hypgraph>=0.5.3", "httpx>=0.27"]
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.40"]

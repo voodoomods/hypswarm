@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.0a6 — 2026-10-26: the report from the record, re-verification per value
+
+Needs hypgraph 0.5.3 (a result that names no file it read goes stale when an input file changes after it).
 
 - **The harness writes the report when the lead's doesn't pass** (`assemble.py`, `run(..., assemble_report=True)`,
   on by default). A run can end with a current, checked claim on every question and still lose its report, because
