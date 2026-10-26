@@ -29,6 +29,7 @@ from typing import Any
 
 from hypgraph import GraphError
 
+from .assemble import assembled_report
 from .budget import BudgetExhausted, Meter
 from .messages import Message, Tool
 from .providers.base import ChatModel
@@ -63,7 +64,8 @@ class SchedulerResult:
     refreshes: int = 0                      # orders to recompute an answer whose evidence moved
     lead_calls: int = 0
     report: str = ""
-    report_accepted: bool = False
+    report_accepted: bool = False           # the lead's report passed the record's check
+    report_source: str = ""                 # "lead" | "assembled" (the harness, from the current claims) | ""
     workers: list[WorkerResult] = field(default_factory=list)
     events: list[dict[str, Any]] = field(default_factory=list)
     lead_log: list[dict[str, Any]] = field(default_factory=list)   # one row per lead model call
@@ -76,7 +78,7 @@ class Scheduler:
                  lease_minutes: int = 240, lead_turns: int = 6,
                  on_return: Callable[[Scheduler, int], None] | None = None, external_poll_s: float = 1.0,
                  external_timeout_s: float | None = None, header: str = "", reproducer: Reproducer | None = None,
-                 world: World | None = None, on_write: OnWrite | None = None):
+                 world: World | None = None, on_write: OnWrite | None = None, assemble_report: bool = True):
         self.r, self.inv, self.seats = record, inv, list(seats)
         self.model_for, self.meter = model_for, meter
         self.data_tools, self.preamble, self.header = list(data_tools), preamble, header
@@ -84,6 +86,7 @@ class Scheduler:
         self._reproduced: set[str] = set()
         self.world = world                                  # host-supplied: keeps the record in step with the files
         self.on_write = on_write                            # host hook on every accepted write by a seat
+        self.assemble_report = assemble_report              # no passing report from the lead: write it from the record
         self._reverified: set[tuple[str, str]] = set()      # (result, why it was stale) already re-run
         self.max_reworks, self.lease_minutes, self.lead_turns = max_reworks, lease_minutes, lead_turns
         self.workers = [s for s in seats if s.role == "worker"]
@@ -679,6 +682,17 @@ class Scheduler:
         except Exception as e:  # noqa: BLE001
             self._ev("report_error", why=str(e)[:200])
         if box.get("text"):
+            self.res.report_source = "lead"
             return str(box["text"]), True
         self._ev("report_missing", refusals=box.get("refusals", 0), refused=(box.get("refused") or [])[-3:])
+        if self.assemble_report:
+            try:
+                text = assembled_report(self.r, self.inv)
+            except Exception as e:  # noqa: BLE001 — a failed assembly leaves the facts, as before
+                self._ev("report_assembly_error", why=str(e)[:200])
+                text = ""
+            if text:
+                self.res.report_source = "assembled"
+                self._ev("report_assembled")
+                return text, False
         return facts + "\n\n*(The lead did not submit an interpretation that passed the record's check.)*", False

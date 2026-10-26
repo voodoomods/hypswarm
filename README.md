@@ -107,6 +107,9 @@ instrument re-runs them on the current files; the ones that still reproduce come
 answers whose evidence really moved are redone. Nobody has to tell the team that a teammate pushed a commit or the
 vendor corrected a file — the record holds the hashes.
 
+When the lead never gets a report past the record's check, the harness writes one from the record itself — the facts
+and the answers the current claims give, labelled as assembled (`res.report_source == "assembled"`).
+
 ```python
 res = await run(task, None, model, record="desk.hypgraph", folder="work/", reproducer=my_sandbox,
                 watch=True, refetch=my_fetch)          # the change suite: studies/discovery/PLAN-CHANGE.md

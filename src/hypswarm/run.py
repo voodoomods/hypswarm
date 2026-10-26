@@ -56,13 +56,14 @@ class RunResult:
     record_path: str
     stopped: str
     report: str
-    report_accepted: bool
+    report_accepted: bool                   # the lead's report passed the record's check
     board: list[dict[str, Any]]
     orders: list[dict[str, Any]]
     usage: dict[str, Any]
     scheduler: SchedulerResult
     seconds: float
     run_node: str
+    report_source: str = ""                 # "lead", or "assembled" by the harness from the current claims
 
     def answers(self) -> dict[str, Any] | None:
         import re
@@ -103,7 +104,7 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
               external_poll_s: float = 1.0, external_timeout_s: float | None = None,
               resume: str = "", reproducer: Any = None, folder: str | Path | None = None,
               toolkits: Sequence[str] | None = None, watch: bool = False, refetch: Any = None,
-              on_write: Any = None) -> RunResult:
+              on_write: Any = None, assemble_report: bool = True) -> RunResult:
     """Run ``task`` with ``seats`` on a record at ``record`` — a path, in memory, or a record client such as
     ``HttpRecord`` for a record served by ``hypgraph serve --writable`` — under ``budget``.
     ``models``: one model for every seat, a mapping by seat name / role / model id, or a function of the seat.
@@ -116,7 +117,10 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
     ``watch``: keep the record in step with the world each round (world.py) — files in ``folder`` whose bytes
     changed, and under the software workflow the working tree as a head that a commit supersedes; ``refetch(url) ->
     text`` adds the sources' pages. Stale results are then re-run on the current files and only the answers whose
-    evidence moved are redone. ``on_write(kind, payload)`` is told after every write a seat makes."""
+    evidence moved are redone. ``on_write(kind, payload)`` is told after every write a seat makes.
+    ``assemble_report``: when the lead submits no report that passes the record's check, the harness writes one from
+    the record — facts, a labelled note, and the answers the current claims give (assemble.py); ``report_source``
+    says which it was."""
     sp = None
     if task.profile:
         from .profiles import get as _profile
@@ -159,7 +163,7 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
     sched = Scheduler(rec, inv, seats, model_for, meter, data_tools=data_tools, preamble=task.preamble(),
                       on_return=on_return, lease_minutes=lease_minutes, external_poll_s=external_poll_s,
                       external_timeout_s=external_timeout_s, header=task.header, reproducer=reproducer,
-                      world=world, on_write=on_write)
+                      world=world, on_write=on_write, assemble_report=assemble_report)
     for s in seats:
         if s.external:
             log.info("external seat %s: %s", s.name, s.mcp_hint(str(rec.path)))
@@ -171,6 +175,7 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
         raise
     out = RunResult(inv=inv, record_path=str(rec.path), stopped=sr.stopped, report=sr.report,
                     report_accepted=sr.report_accepted, board=rec.question_board(inv), orders=rec.orders(inv),
-                    usage=meter.summary(), scheduler=sr, seconds=round(time.time() - t0, 1), run_node=rid)
+                    usage=meter.summary(), scheduler=sr, seconds=round(time.time() - t0, 1), run_node=rid,
+                    report_source=sr.report_source)
     log.info("run %s: %s in %d calls, $%.4f", inv, sr.stopped, meter.total.calls, meter.usd)
     return out
