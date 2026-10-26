@@ -387,6 +387,13 @@ def check_change(inst: CInstance, text: str) -> dict[str, Any]:
     """current: every affected answer is the post-change one. stale: an affected answer is the pre-change one (and
     that differs from the post-change one). unaffected_ok: the questions the change didn't touch are right."""
     ans = _answers(text or "")
+    # question keys in any case ({"q1": …}) — found when scoring the full model run (P wrote lowercase keys on C2
+    # seed 4 and was marked wrong); applied to both conditions alike
+    ans = {(k.upper() if isinstance(k, str) and re.fullmatch(r"[qQ]\d+", k) else k): v for k, v in ans.items()}
+    if ans and not any(q in ans for q in inst.post):
+        # a flat block ({"a_correct": 821, "b_correct": 788, …}) — the field names say which question each answers;
+        # found in the first model lane (both conditions wrote it), applied to both alike
+        ans = {q: ans for q in inst.post}
     answered = all(ans.get(q) is not None for q in inst.post)
     current = all(_matches(ans.get(q), inst.post[q]) for q in inst.affected)
     stale = False

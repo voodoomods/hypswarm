@@ -193,7 +193,10 @@ async def run_one(inst: CInstance, cond: str, out: Path, model: Any, *, stub: bo
                        reverified=[{k: e.get(k) for k in ("result", "confirmed", "contradicted", "supported")}
                                    for e in ev if e["kind"] == "reverified"],
                        board={q["code"]: q["status"] for q in res.board},
-                       redo_questions=redone(rec_path, res.inv, ch.fired))
+                       redo_questions=redone(rec_path, res.inv, ch.fired),
+                       # a lost report shows why: the scheduler's report events and the lead's report turns
+                       report_events=[e for e in ev if str(e["kind"]).startswith("report")],
+                       report_turns=[t for t in res.scheduler.lead_log if t.get("unit") == "report"])
     finally:
         if server:
             server.close()
@@ -309,6 +312,8 @@ async def main() -> None:
     ap.add_argument("--stale-p", action="store_true", help="stub only: P writes the pre-change answers (exercises the checker)")
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--merge", nargs="*", default=None, help="lane folders under runs/ to combine into --out")
+    ap.add_argument("--rescore", action="store_true",
+                    help="with --merge: score every row's stored artifact again with the current checker")
     ap.add_argument("--cap-usd", type=float, default=3.0)
     ap.add_argument("--out", default="")
     args = ap.parse_args()
@@ -323,6 +328,13 @@ async def main() -> None:
         root = HERE / "runs" / (args.out or "change-merged")
         root.mkdir(parents=True, exist_ok=True)
         rows.sort(key=lambda r: (r["family"], r["seed"], r["cond"]))
+        if args.rescore:                        # deterministic: the stored artifact, the instance, the checker
+            for r in rows:
+                old = r["score"]
+                r["score"] = check_change(make_change(r["family"], r["seed"]), r.get("artifact") or "")
+                if {k: old.get(k) for k in ("current", "stale", "unaffected_ok")} != \
+                        {k: r["score"].get(k) for k in ("current", "stale", "unaffected_ok")}:
+                    print(f"rescored {r['family']}-{r['seed']}-{r['cond']}: {old} -> {r['score']}")
         (root / "rows.json").write_text(json.dumps(rows, indent=1, default=str), encoding="utf-8")
         (root / "results.md").write_text(results_md(rows), encoding="utf-8")
         print(f"merged {len(rows)} rows into {root / 'results.md'}; spent ${sum(r.get('usd', 0) for r in rows):.3f}")
