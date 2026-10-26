@@ -12,6 +12,14 @@
   `RunResult.report_source` / `SchedulerResult.report_source` say whose report it is (`lead` | `assembled`);
   `report_accepted` still means the lead's passed. Replayed on the change suite's 13 lost reports: 11 assembled,
   none stale, no field filled with a wrong value.
+- **Re-verification per value.** When one value of a stale result moved, a claim whose own values all reproduced on
+  the current files now comes back: the instrument files a result of just those values that supports it, so a claim
+  about A's count isn't redone because B's moved in the same run. What a claim rests on is its measurements bound to
+  that result; for a claim that binds none, the values its statement states, only when every number in it is one
+  of them. Any other bound result must itself be fresh. Replayed on the change suite's stored re-executions: 6
+  claims would have come back, all with the post-change values, saving 2 of the 11 redos of untouched questions.
+- The change-suite runner logs every call of the tools both conditions share (`tool_calls`: what ran, what it
+  printed, whether the change had fired), so an odd run can be read back.
 - The change-suite runner keeps `report_source` and scores an assembled report beside the locked score (which counts
   only the lead's).
 
