@@ -50,6 +50,19 @@ cost, what to change. Items move to CHANGELOGs when fixed.
     a question whose only claim is an accepted "no answer available" (a claim of kind `inconclusive`) should count
     as settled-as-unanswerable, and the run should end `settled`.
 
+13. **A correct answer refused to death (real run, T1-3).** The one seed where A *is* significantly better: the
+    stats seat ran an exact McNemar test (p = 0.017), was refused 15 times with `SIGNIFICANCE_WITHOUT_TEST`, and the
+    run ended at the budget with no report. Item 1 is not cosmetic: a named test with a bound p must satisfy the word.
+14. **Measurement shape is the second-largest friction** (`MEASUREMENT_MALFORMED` ×19, `MEASUREMENT_UNKNOWN_FIELD` ×4
+    over 25 runs). Models write `{"name": …, "value": …}` without `result`/`key`, or name a field the result doesn't
+    have. *Change:* when `result` is omitted and exactly one of the author's results has the field, bind to it; when
+    the key is unknown, list the result's fields in the refusal.
+15. **Restating is the third** (`RESULT_RESTATES` ×19): models re-register the same numbers to "finalise". The refusal
+    is right; the tool docstring should say "the record keeps your result; bind claims to it, don't re-register".
+16. **"No feasible assignment exists" fought `ABSOLUTE_WITHOUT_COUNT` seven times (T5-4).** The model had enumerated
+    all 6,561 assignments and found 0 feasible — that *is* the count. "exists" after "no" should bind to a 0-of-n
+    measurement the way "never" does, and the refusal should say so.
+
 ## HypSwarm
 
 1. **A refused report is a lost report.** The 06 lead's report was refused three times and the run ended with no
@@ -79,6 +92,14 @@ cost, what to change. Items move to CHANGELOGs when fixed.
 8. **Examples' stub sleeps.** `examples/_common.py` sleeps 1.05 s per order because of HypGraph item 3. Remove when
    that is fixed.
 9. **`stopped` was empty after `stop()`** — fixed ("stopped"). A `RunResult.stopped` enum would have caught it.
+
+10. **Budget hits are silent failures.** 6 of 25 R runs ended "budget: warning threshold"; 5 had no accepted report.
+    The run should end with the facts report regardless (item 1 above) and the summary line should say which
+    orders were open and what they were refused on, so a budget hit reads as a diagnosis, not a blank.
+11. **Per-order calls for small work are high even when nothing is refused.** T4 (two lookups) took 28–43 calls
+    under R and 2 under P: list_files, read_file, fetch, show, find, register, claim, return, review, report. The
+    order should carry the files and the sources already in the record (item 7), and a question with a sourced
+    claim should settle without a separate review when the profile says so.
 
 ## The discovery harness itself
 

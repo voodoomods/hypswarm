@@ -231,7 +231,9 @@ async def run_one(inst: Instance, cond: str, out: Path, model: Any, *, stub: boo
                        usd=res.usage["usd"], stopped=res.stopped, refusals=refusals, contradicted=contradicted, confirmed=confirmed,
                        board={q["code"]: q["status"] for q in res.board})
         row["seconds"] = round(time.time() - t0, 1)
-        row["score"] = check(inst, row["artifact"], "\n".join(stdout_log), folder=work, sources=sources)
+        row["stdout"] = "\n".join(stdout_log)[-20000:]
+        row["sources"] = sources
+        row["score"] = check(inst, row["artifact"], row["stdout"], folder=work, sources=sources)
     finally:
         if server:
             server.close()
@@ -337,6 +339,9 @@ async def main() -> None:
     ap = argparse.ArgumentParser(description="discovery study runner")
     ap.add_argument("--families", default=",".join(FAMILIES))
     ap.add_argument("--seeds", type=int, default=5)
+    ap.add_argument("--seed-from", type=int, default=0, help="first seed (lanes)")
+    ap.add_argument("--merge", nargs="*", default=None, help="lane folders under runs/ to combine into --out")
+    ap.add_argument("--rescore", nargs="*", default=None, help="lane folders: re-run the checkers over saved artifacts into --out")
     ap.add_argument("--conditions", default="P,R")
     ap.add_argument("--model", default="")
     ap.add_argument("--stub", action="store_true")
@@ -346,6 +351,35 @@ async def main() -> None:
     args = ap.parse_args()
     if args.selftest:
         raise SystemExit(selftest())
+    if args.rescore is not None:
+        rows = []
+        for lane in args.rescore:
+            f = HERE / "runs" / lane / "rows.json"
+            for r in json.loads(f.read_text(encoding="utf-8")) if f.exists() else []:
+                inst = make(r["family"], r["seed"])
+                work = HERE / "runs" / lane / f"{r['family']}-{r['seed']}-{r['cond']}" / "work"
+                r["score"] = check(inst, r.get("artifact") or "", r.get("stdout") or "", folder=work, sources=r.get("sources"))
+                rows.append(r)
+        root = HERE / "runs" / (args.out or "rescored")
+        root.mkdir(parents=True, exist_ok=True)
+        rows.sort(key=lambda r: (r["family"], r["seed"], r["cond"]))
+        (root / "rows.json").write_text(json.dumps(rows, indent=1, default=str), encoding="utf-8")
+        (root / "results.md").write_text(results_md(rows), encoding="utf-8")
+        print(f"rescored {len(rows)} rows into {root / 'results.md'}")
+        return
+    if args.merge is not None:
+        rows = []
+        for lane in args.merge:
+            f = HERE / "runs" / lane / "rows.json"
+            if f.exists():
+                rows += json.loads(f.read_text(encoding="utf-8"))
+        root = HERE / "runs" / (args.out or "merged")
+        root.mkdir(parents=True, exist_ok=True)
+        rows.sort(key=lambda r: (r["family"], r["seed"], r["cond"]))
+        (root / "rows.json").write_text(json.dumps(rows, indent=1, default=str), encoding="utf-8")
+        (root / "results.md").write_text(results_md(rows), encoding="utf-8")
+        print(f"merged {len(rows)} rows into {root / 'results.md'}; spent ${sum(r.get('usd', 0) for r in rows):.3f}")
+        return
     if not args.stub and not args.model:
         raise SystemExit("--model <id> for a real run, or --stub")
     model: Any = None
@@ -356,7 +390,7 @@ async def main() -> None:
     root = HERE / "runs" / stamp
     rows, spent = [], 0.0
     for fam in args.families.split(","):
-        for seed in range(args.seeds):
+        for seed in range(args.seed_from, args.seeds):
             inst = make(fam, seed)
             for cond in args.conditions.split(","):
                 if spent >= args.cap_usd:
