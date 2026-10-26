@@ -5,12 +5,14 @@ cost, what to change. Items move to CHANGELOGs when fixed.
 
 ## HypGraph
 
-1. **Significance knows only its own test.** `SIGNIFICANCE_WITHOUT_TEST` is satisfied only by the record's
+*Items 1, 2, 4, 5 and 10 shipped in hypgraph 0.4.3 (2026-10-26); the rest are open.*
+
+1. ~~**Significance knows only its own test.**~~ **Fixed in hypgraph 0.4.3** (a named p / p_value / p_<test> field, bound or on a supporting result, backs the word). `SIGNIFICANCE_WITHOUT_TEST` is satisfied only by the record's
    two-proportion z-test on bound counts. A model that ran an exact McNemar test (the right test for paired items)
    and bound `p_exact = 0.0001` was refused twice and had to drop the word. *Change:* accept a bound measurement
    named `p` / `p_value` with a stated test (`test:` field on the result or claim) below the threshold; keep the
    record's own test as the fallback and record which one backed the word.
-2. **"No live support" with measurements bound.** A claim written with explicit `measurements` pointing at a result,
+2. ~~**"No live support" with measurements bound.**~~ **Fixed in 0.4.3** (a bound measurement's result supports the claim). A claim written with explicit `measurements` pointing at a result,
    but no `derived_from` / `supports` link, passes the checks and shows "no live support" in its standing. The
    writer did bind the evidence; the derive step doesn't count it. *Change:* count a measurement's result as a
    line of support, or add the `derived_from` edge when measurements bind (as auto-binding already does).
@@ -18,12 +20,12 @@ cost, what to change. Items move to CHANGELOGs when fixed.
    write in the same second as the order doesn't count. Only scripted models are that fast, but the examples sleep
    1.05 s per order to dodge it. *Change:* microseconds in `created_at`, or a per-write sequence number compared
    instead of time.
-4. **Link-grammar refusals cost real models 5–10 calls a run.** `executes can't join run → question`, `supports
+4. ~~**Link-grammar refusals cost real models 5–10 calls a run.**~~ **Fixed in 0.4.3** (the refusal names the relations that join, both ways); `register_run(experiment=Q1)` is still HypSwarm's to handle. `executes can't join run → question`, `supports
    can't join claim → run`, `derived_from can't join claim → experiment`: all seen in one software run. The messages
    are correct but the model keeps guessing. *Change:* on a wrong relation, name the relation that *would* join
    those two types ("a claim rests on a result: derived_from claim → result"), and let `register_run(experiment=Q1)`
    with a question code answer the question instead of refusing.
-5. **Enum refusals on every run.** `outcome must be one of positive, negative, …` and `kind must be one of finding,
+5. ~~**Enum refusals on every run.**~~ **Fixed in 0.4.3** (`schema.SYNONYMS`); the docstring part is HypSwarm's. `outcome must be one of positive, negative, …` and `kind must be one of finding,
    exclusion, …` appeared in every real run (01, 02, 03, 05, 06). *Change:* accept synonyms (`success` → positive,
    `pass` → positive, `fact` → finding) and put the list in the tool docstrings HypSwarm exposes (done partly in
    `register_run`'s description; `graph_add` should carry both lists).
@@ -39,7 +41,7 @@ cost, what to change. Items move to CHANGELOGs when fixed.
 8. **`hypgraph --help` crashed on a `%`** — fixed in 0.4.1; argparse help strings need `%%`. A test that renders
    every subcommand's help would have caught it.
 
-10. **Small integers that are not counts.** Seen live in the stub run: "produced 0 trades" (`oos_trades = 0` as a
+10. ~~**Small integers that are not counts.**~~ **Fixed in 0.4.3** (a small integer binds to a value field the sentence names). Seen live in the stub run: "produced 0 trades" (`oos_trades = 0` as a
     value) and "capacity is 7 for 8 customers" (`capacity_total = 7`) are `UNBOUND_NUMBER` because an integer ≤ 12
     binds only to a k/n count. The honest sentence has to move the number into the scope. *Change:* let a small
     integer bind to a value field whose *name* is in the sentence ("trades", "capacity"), not only to counts.
