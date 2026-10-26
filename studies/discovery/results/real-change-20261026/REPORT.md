@@ -128,8 +128,13 @@ did not bring every unchanged answer back.
   answers is refused on 19 of 20 instances; 11 of R's 12 accepted reports still pass, and all 20 accepted reports of
   the 2026-10-25 discovery run do. The refused one (C2 seed 0) is right to be refused: the record's only current
   claim on Q2 says "6 of the 6 tests passed" while the report says 5. That is also the one stale answer set it
-  passes. The claim rests on a result whose run has no `uses` link to the code tree, so it never goes stale: **a
-  result with no provenance is fresh forever**, and that is the next hole to close in the record.
+  passes. **Corrected:** this said the claim's result had no `uses` link to the code tree. It has one: run RUN13
+  names A8, the tree after the commit, and ran `python -m pytest -q tests`; the instrument re-ran that code and also
+  got 6 passed. Running the same command in that run's folder now gives 5 passed, 1 failed, and replaying the change
+  in a fresh copy gives 5 right after it (not Python's bytecode cache). What made the run see 6 isn't recoverable
+  from what was kept (the workers' tool calls weren't logged). A HypGraph rule for results that name no file (stale
+  once an input file changes after them) was built on a branch and measured: of 647 results in these records, 41
+  name no file and none was written before a file changed, so it changes nothing here and is not pushed.
 - **The R failure to fix is the report step.** The record was right in all 13 lost reports, and a plain report
   would have passed. The next run logs the report turns. A harness fallback is also worth testing: when the lead
   submits nothing that passes, assemble the answers from checked, fresh claims.
