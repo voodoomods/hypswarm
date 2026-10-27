@@ -549,10 +549,22 @@ class Scheduler:
             if seat and self._issue(seat, xid, f"Run {x['experiment']['code']}: {x['experiment']['title']}"):
                 busy_targets.add(xid)
 
+    def _record_complete(self) -> bool:
+        try:
+            c = self.r.completion(self.inv)
+        except (GraphError, KeyError, AttributeError):
+            return False
+        return bool(c.get("complete")) and bool(c.get("pinned", True))
+
     def _done(self) -> str:
         rows = self._stage_rows()
         if rows is not None:                                # the workflow's word on done, question by question
             if all(q["complete"] for q in rows) and not self.inflight:
+                return "settled"
+            if not self.inflight and self._record_complete():
+                # The profile's completion criteria are its definition of done: a trading desk that declined once
+                # is done, even if one question's own `positioned` gate wants a decision based on its claim
+                # (studies T2: complete at the record, then three reworks and the rest of the budget on Q3)
                 return "settled"
             if not self.inflight and not self._pending_lead:
                 open_orders = [o for o in self.r.orders(self.inv) if o["status"] in ("open", "overdue", "returned")]
