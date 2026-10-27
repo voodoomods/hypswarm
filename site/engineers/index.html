@@ -167,7 +167,7 @@ print(res.report)</pre></div>
   --token "$SWARM_TOKEN=harness,implementer,tester,reviewer,lead" \
   --token "$NIC_TOKEN=nicolas"
 hypswarm run --task task.toml --profile software --record-url http://127.0.0.1:8765      # HYPSWARM_TOKEN or HttpRecord(token=)</pre></div>
-<p>Keep the server on localhost or behind your own TLS/reverse proxy; reads are open (the Atlas needs them), writes
+<p>Keep the server on localhost or behind your own TLS/reverse proxy; reads are open (the HypGraph UI needs them), writes
   are 401 without a known token and 403 for an author the token isn't bound to.</p>
 
 <h2 id="external">People and outside agents as seats</h2>
@@ -200,8 +200,8 @@ external = true
   <li><code>res.report</code> — the facts generated from the record, the lead's interpretation under them, the
     answers block; <code>res.answers()</code> parses it; <code>res.scheduler.events</code> is the timeline (dispatch,
     returned, reproduced, settled, rework, escalate, notice, report_missing with the refusal texts).</li>
-  <li><code>hypgraph --db issue-412.hypgraph serve</code> — the Atlas: the graph, claims with their standing,
-    provenance, the work map, the refusal log ("overclaims caught"). <code>hypgraph brief</code> compiles the
+  <li><code>hypgraph --db issue-412.hypgraph serve</code> — the HypGraph UI: the graph, claims with their standing,
+    provenance, the work orders, overclaims refused, and the run replayed live in <b>Live</b>. <code>hypgraph brief</code> compiles the
     orchestrator's view; <code>hypgraph orders</code> lists orders; <code>hypgraph check report.md</code> lints a
     write-up against the record.</li>
   <li><code>GET /api/graph/stages?inv=…</code> — each question's stage and every gate's status;

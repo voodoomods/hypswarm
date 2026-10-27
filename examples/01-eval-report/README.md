@@ -36,7 +36,7 @@ p = 0.49 (two-proportion z-test) — not significant at 0.05; say the difference
 ## Afterwards
 
 ```bash
-hypgraph --db record.hypgraph serve       # the Atlas: claims, standing, provenance, the refusal log
+hypgraph --db record.hypgraph serve       # the HypGraph UI: claims, standing, provenance, the run replayed live
 hypgraph --db record.hypgraph orders      # every order, its predicates, who held it
 hypgraph --db record.hypgraph check report.md
 ```

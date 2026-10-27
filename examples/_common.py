@@ -324,7 +324,7 @@ def show(res: RunResult, *, quiet: bool = False, trace: bool = False) -> None:
     if not quiet:
         print("\n--- report ---")
         print(res.report[-2500:] if res.report else "(no report: see report_missing above)")
-    print(f"\nrecord: {res.record_path}\n  hypgraph --db {res.record_path} serve        # the Atlas\n"
+    print(f"\nrecord: {res.record_path}\n  hypgraph --db {res.record_path} serve        # the HypGraph UI (Live replays the run)\n"
           f"  hypgraph --db {res.record_path} orders      # every order and its status\n"
           f"  hypgraph --db {res.record_path} refusals    # the refusal log")
 

@@ -3,7 +3,7 @@
 **Profile** `scientific` · **seats** analyst, critic, lead · **record** served by `hypgraph serve --writable`
 
 The record is served with two tokens: one for the swarm (bound to `harness` and its seats), one for a person
-(bound to `nicolas`). The swarm runs in this process over HTTP through `HttpRecord(url, token=…)`. The Atlas is
+(bound to `nicolas`). The swarm runs in this process over HTTP through `HttpRecord(url, token=…)`. The HypGraph UI is
 open on the same server while it runs.
 
 ```bash
@@ -14,7 +14,7 @@ python run.py --model deepseek-ai/DeepSeek-V4.1-Flash --fresh
 ## What you see
 
 ```
-record server: http://127.0.0.1:8765   (the Atlas; open it while the run goes)
+record server: http://127.0.0.1:8765   (the HypGraph UI; open it while the run goes)
 write with no token      → 401
 write as analyst with the person's token → 403
 === SETTLED in 2.7s — 6 calls ===
@@ -23,7 +23,7 @@ write as analyst with the person's token → 403
 
 Two probes before the run show the boundary: a write without a token is 401; a write *as analyst* with the
 person's token is 403 — a token writes only as the authors it is bound to, and the harness name is reserved (no
-wildcard includes it). Reads stay open, so the Atlas and `my_work` work without a token.
+wildcard includes it). Reads stay open, so the HypGraph UI and `my_work` work without a token.
 
 ## The command the example runs for you
 

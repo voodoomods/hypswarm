@@ -107,7 +107,10 @@ where a work order's time went.
 
 ```bash
 hypgraph --db desk.hypgraph serve        # then run the swarm against desk.hypgraph and open Live
+hypgraph --db desk.hypgraph export --telemetry -o desk.bundle.json   # a bundle that replays the run with no server
 ```
+
+See it on five finished runs, one per profile: [hypgraph.com/examples](https://hypgraph.com/examples/).
 
 `otel=True` sends the same spans and metrics to OpenTelemetry (`pip install 'hypswarm[otel]'`). Prompts, replies and
 tool arguments stay out unless `capture_content=True`.

@@ -136,7 +136,7 @@ node types.
 - **Resumable, idempotent.** A restarted run reads the board and continues; orders carry leases with expiry;
   nothing is re-issued that is open, nothing re-done that is settled.
 - **Observable.** Structured logs (one JSON line per scheduler action and model call, with the order code),
-  optional OpenTelemetry spans, and `hypswarm status` reading the board. The Atlas gets an *Orders* card.
+  optional OpenTelemetry spans, and `hypswarm status` reading the board. HypGraph's UI shows the orders (its *Work orders* view).
 - **Typed, tested, versioned.** A typed public API (`hypswarm.run(task, seats, record, budget)`), `py.typed`,
   mypy-clean, a test suite that runs every scheduler path on a stub model in seconds, the same preregistered
   task suite as the harmony study for end-to-end checks, semantic versioning, Apache-2.0.
@@ -161,7 +161,7 @@ which is sequential by nature.
 2. **Port condition C** from the study runner into it, then make the study harness run condition E through
    hypswarm. Measure (§5).
 3. **MCP workers**: external agents join a run by holding an MCP session; the scheduler sees them as seats.
-4. **Operator surface**: `hypswarm status`, the Atlas Orders card, operator questions through the record.
+4. **Operator surface**: `hypswarm status`, HypGraph's *Work orders* view, operator questions through the record.
 5. **Building adapter**: CI as instrument, the commit-as-artifact convention, one worked example repo.
 
 Step 2 is the one that produces a number; everything after it is shaped by that number.

@@ -13,7 +13,8 @@ cd examples/01-eval-report && python run.py --fresh
 ```
 
 Every `run.py` takes `--fresh` (empty record), `--trace` (every tool call and reply, per order), `--quiet`,
-`--budget-calls`, `--budget-usd`, `--pricing`. Afterwards: `hypgraph --db record.hypgraph serve` opens the Atlas.
+`--budget-calls`, `--budget-usd`, `--pricing`. Afterwards: `hypgraph --db record.hypgraph serve` opens the HypGraph UI, where the **Live** view replays the run
+from its telemetry. Each of 01–05 is also on [hypgraph.com/examples](https://hypgraph.com/examples/), replayed live.
 
 | # | example | profile | what it shows | the refusal it provokes |
 |---|---|---|---|---|
