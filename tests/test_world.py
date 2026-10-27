@@ -169,3 +169,23 @@ def test_a_correction_mid_run_redoes_only_the_answer_that_moved(tmp_path):
             g.get(a["id"])["body"]["sha256"] for a in g.search("", "artifact", res.inv, 20)}
     finally:
         g.close()
+
+
+def test_a_seat_cannot_register_its_own_diff_while_the_tree_is_watched(tmp_path):
+    """E1: seats' own diffs made a second line of heads (one an empty file mid-write) beside the watcher's."""
+    from hypswarm.budget import Meter
+    from hypswarm.tools import worker_tools
+
+    (tmp_path / "mod.py").write_text("def f(x):\n    return x + 1\n", encoding="utf-8")
+    rec, inv = _rec(tmp_path, profile="software@2", files={"mod.py": (tmp_path / "mod.py").read_bytes()})
+    q = rec.resolve("Q1", inv)
+    order = rec.issue_work(author=HARNESS, inv=inv, target=q, assignee="analyst", objective="Fix f.")["order"]
+    add = next(t for t in worker_tools(rec, Seat("analyst", "worker"), inv, order, Meter(Budget(max_calls=10)))
+               if t.name == "graph_add")
+    diff = {"kind": "diff", "path": "mod.py", "sha256": "ab" * 32,
+            "meta": {"base_sha": "0" * 7, "head_sha": "ab" * 32, "files": ["mod.py"]}}
+    assert not add.fn(type="artifact", fields=diff).startswith("refused")      # no watcher: a seat registers it
+    World(rec, inv, tmp_path, tree=True).sync()
+    out = add.fn(type="artifact", fields=dict(diff, sha256="cd" * 32))
+    assert out.startswith("refused") and "Edit the files" in out
+    rec.close()
