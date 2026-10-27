@@ -104,7 +104,7 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
               on_return: Callable[[Scheduler, int], None] | None = None, lease_minutes: int = 240,
               external_poll_s: float = 1.0, external_timeout_s: float | None = None,
               resume: str = "", reproducer: Any = None, folder: str | Path | None = None,
-              toolkits: Sequence[str] | None = None, watch: bool = False, refetch: Any = None,
+              toolkits: Sequence[str] | None = None, watch: bool | None = None, refetch: Any = None,
               on_write: Any = None, assemble_report: bool = True, telemetry: Any = "auto", otel: bool = False,
               capture_content: bool = False) -> RunResult:
     """Run ``task`` with ``seats`` on a record at ``record`` — a path, in memory, or a record client such as
@@ -117,7 +117,10 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
     ``seats=None`` takes the task's profile roster; ``toolkits`` names registry bundles built for the run (the
     profile's by default) over ``folder``, added to ``data_tools``.
     ``watch``: keep the record in step with the world each round (world.py) — files in ``folder`` whose bytes
-    changed, and under the software workflow the working tree as a head that a commit supersedes; ``refetch(url) ->
+    changed, and under the software workflow the working tree as a head that a commit supersedes. ``None`` (default)
+    turns it on for a workflow that tracks diffs (software) when there is a ``folder``: the task's files are then the
+    starting head, so a question that only verifies or measures has a head without anyone inventing a diff, and a
+    seat's edit supersedes it, so a claim checked on the old code goes stale (studies E1, E2, E4); ``refetch(url) ->
     text`` adds the sources' pages. Stale results are then re-run on the current files and only the answers whose
     evidence moved are redone. ``on_write(kind, payload)`` is told after every write a seat makes.
     ``assemble_report``: when the lead submits no report that passes the record's check, the harness writes one from
@@ -168,9 +171,11 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
                          budget=config["budget"], record=str(getattr(rec, "path", "") or ""),
                          capture_content=capture_content or None)
     world = None
+    wf = getattr(sp.record_profile, "workflow", None) if sp else None
+    if watch is None:
+        watch = bool(folder and wf and "diff" in getattr(wf, "artifacts", {}))
     if watch or refetch:
         from .world import World
-        wf = getattr(sp.record_profile, "workflow", None) if sp else None
         world = World(rec, inv, folder if watch else None, refetch=refetch,
                       tree=bool(watch and folder and wf and "diff" in getattr(wf, "artifacts", {})))
     sched = Scheduler(rec, inv, seats, model_for, meter, data_tools=data_tools, preamble=task.preamble(),
