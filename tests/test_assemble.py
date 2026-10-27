@@ -111,3 +111,21 @@ def test_the_harness_assembles_the_report_when_the_lead_s_never_passes():
 def test_a_lead_s_passing_report_is_the_lead_s():
     res = asyncio.run(run(TASK, SEATS, make_models(), record=None, budget=Budget(max_calls=60)))
     assert res.report_accepted and res.report_source == "lead"
+
+
+def test_a_lead_that_keeps_reading_submits_on_its_last_turn():
+    """A lead that would call show forever is left with only submit_report on its last report turn (E1)."""
+    from .test_alpha import lead_script
+
+    def reader(messages, tools):                       # the facts first, then reading for as long as it may
+        if "report_facts" not in calls_made(messages):
+            return ("report_facts", {})
+        if "show" in {t.name for t in tools}:
+            return ("show", {"node": "CL1"})
+        return lead_script(messages, tools)
+
+    models = make_models()
+    models["lead"] = StubModel(reader, "reading-lead")
+    res = asyncio.run(run(TASK, SEATS, models, record=None, budget=Budget(max_calls=60)))
+    assert res.report_source == "lead", res.scheduler.events
+    assert res.scheduler.lead_log[-1]["tools"] == ["submit_report"]

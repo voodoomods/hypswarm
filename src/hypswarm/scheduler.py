@@ -628,7 +628,15 @@ class Scheduler:
         messages = [Message("system", (self.header + "\n" if self.header else "") + self.lead.prompt() + "\n\n"
                             + self._preamble()), Message("user", user)]
         by = {t.name: t for t in tools}
-        for _ in range(turns):
+        for turn in range(turns):
+            offered = tools
+            if turn == turns - 1 and "submit_report" in by and len(by) > 1:
+                # the last turn of the report phase submits: a careful lead otherwise reads (show, briefing) until
+                # its turns run out and leaves the run without a report (studies/challenges E1)
+                offered = [by["submit_report"]]
+                messages.append(Message("user", "This is your last turn. Submit the report now with submit_report: "
+                                                "the facts you have, your interpretation under them, and the answers. "
+                                                "Nothing else is available."))
             try:
                 self.meter.reserve(unit)
             except BudgetExhausted:
@@ -637,7 +645,7 @@ class Scheduler:
             mid = self.tel.start("model", parent=self.tel_parent, seat=self.lead.name, order=unit,
                                  model=getattr(model, "name", ""))
             try:
-                reply = await model.complete(messages, tools, temperature=self.lead.temperature, unit=unit)
+                reply = await model.complete(messages, offered, temperature=self.lead.temperature, unit=unit)
             except Exception as e:
                 self.tel.end(mid, ok=False, error=f"{type(e).__name__}: {e}")
                 self.meter.release(unit)
@@ -657,9 +665,12 @@ class Scheduler:
             messages.append(reply.as_message())
             if not reply.tool_calls:
                 return
+            avail = {t.name for t in offered}
             for tc in reply.tool_calls:
-                tool = by.get(tc.name)
-                out = await tool.call(tc.args) if tool else f"error: no tool {tc.name!r}"
+                tool = by.get(tc.name) if tc.name in avail else None
+                out = (await tool.call(tc.args) if tool else
+                       f"error: only {', '.join(sorted(avail))} is available now" if tc.name in by else
+                       f"error: no tool {tc.name!r}")
                 messages.append(Message("tool", out[:12000], tool_call_id=tc.id))
                 if tc.name == "submit_report" and out == "report accepted":
                     return
