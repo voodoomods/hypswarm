@@ -51,11 +51,12 @@ def _closing(seat: Seat, state: dict[str, Any], turns_left: int) -> bool:
 
 async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, order: str, *, meter: Meter,
                     data_tools: Sequence[Tool] = (), preamble: str = "", header: str = "",
-                    on_write: OnWrite | None = None, tel: Telemetry | None = None, tel_parent: str = "") -> WorkerResult:
+                    on_write: OnWrite | None = None, tel: Telemetry | None = None, tel_parent: str = "",
+                    runs_code: bool = True) -> WorkerResult:
     tel = tel or NULL
     code = record.get(order)["code"]
     res = WorkerResult(order=order, code=code, seat=seat.name)
-    rtools = worker_tools(record, seat, inv, order, meter, on_write=on_write)
+    rtools = worker_tools(record, seat, inv, order, meter, on_write=on_write, runs_code=runs_code)
     state = rtools[-1].fn.__dict__["_state"]
     tools = trace_tools([t for t in data_tools if seat.may_use(t.name)] + rtools, tel, parent=tel_parent,
                         seat=seat.name, order=code)

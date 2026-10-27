@@ -36,6 +36,16 @@ def test_a_copy_of_an_open_question_is_refused():
     assert why.startswith("refused: Q2 already asks this")
 
 
+def test_a_copy_with_a_clause_added_is_refused():
+    """T2 (evening): Q4 was Q3 with "— given the honest out-of-sample, after-cost result …" added."""
+    existing = [("Q3", "Should the desk take a paper position on the crossover, or decline?")]
+    why = _not_a_question("Should the desk take a paper position on the crossover, or decline — given the honest "
+                          "out-of-sample, after-cost result for the best of 20 settings and the risk review's figures?",
+                          existing)
+    assert why.startswith("refused: Q3 already asks this")
+    assert _not_a_question("Would a slower crossover (fast=50, slow=200) survive the costs out of sample?", existing) == ""
+
+
 def test_a_new_question_is_allowed():
     assert _not_a_question("Is the steps_k difference larger in participants over 60?", EXISTING) == ""
 
