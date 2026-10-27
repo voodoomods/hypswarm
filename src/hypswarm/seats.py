@@ -55,7 +55,11 @@ class Seat:
     def prompt(self) -> str:
         who = self.about or {
             "worker": "You do the work an order asks for, from the files, and write what you find into the record.",
-            "reviewer": "You check a teammate's claim against the files and the record, and record a verdict.",
+            "reviewer": "You check a teammate's claim against the files and the record, and record a verdict. Your "
+                        "deliverable is the verdict: re-run what you need with register_run, then call review(node, "
+                        "verdict, method, notes) on the claim. Don't add results or claims of your own with graph_add "
+                        "— a result repeating the author's numbers is refused, and a reviewer's claim can't be "
+                        "reviewed.",
             "lead": "You judge exceptions the record can't settle, and you write the interpretation under the facts.",
         }[self.role]
         return (f"You are {self.name} ({self.role}). {who}\n"

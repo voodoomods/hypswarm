@@ -43,6 +43,30 @@ def _live(n: dict[str, Any]) -> bool:
     return (st.get("lifecycle") or "active") == "active" and not st.get("fallen")
 
 
+_TIME_UNIT = re.compile(r"^(?:s|secs?|seconds?|ms|msecs?|milliseconds?|us|µs|μs|microseconds?|ns|nanoseconds?)$",
+                        re.IGNORECASE)
+_TIME_KEY = re.compile(r"(?:_|^)(?:s|sec|secs|seconds|ms|us|ns)$|(?:^|_)(?:time|timing|elapsed|duration|latency)(?:_|$)",
+                       re.IGNORECASE)
+
+
+_METHOD_MAX = 1500                     # a review's method, as the record's schema caps it
+
+
+def _timings_without_spread(values: dict[str, Any]) -> list[str]:
+    """Values that are timings (a time unit, or a key such as median_slow_s / elapsed_ms) and carry no spread."""
+    out = []
+    for k, v in values.items():
+        if isinstance(v, dict):
+            if "spread" in v or "rel_tol" in v or "k" in v or not isinstance(v.get("value"), (int, float)):
+                continue
+            unit = str(v.get("unit") or "").strip()
+            if _TIME_UNIT.match(unit) or (not unit and _TIME_KEY.search(k)):
+                out.append(k)
+        elif isinstance(v, (int, float)) and not isinstance(v, bool) and _TIME_KEY.search(k):
+            out.append(k)
+    return out
+
+
 def implied_uses(record: Record, inv: str, order: str, code: str) -> list[str]:
     """The artifacts a registered run used, as far as the record can tell without the author saying so: every live
     file artifact whose path the code names, and — under a workflow — the live diff or instance that is part of the
@@ -147,6 +171,13 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         values; answers: the question code it answers; scope: under which conditions it holds; claim_kind: finding
         (default) | exclusion | inconclusive. The result counts toward your order by itself; a claim settles a
         question."""
+        bare = _timings_without_spread(values or {})
+        if bare and code.strip():
+            # the instrument re-runs the code: a re-timed value never lands on the same digits, and every timing
+            # registered bare came back CONTRADICTED while the ones with a spread were confirmed (studies E2)
+            return (f"refused: {', '.join(bare)} {'is a timing' if len(bare) == 1 else 'are timings'} — a re-run "
+                    "never prints the same digits, so the instrument would contradict it. Give each its spread over "
+                    "your repeats: {value, unit, spread: [lo, hi]} or rel_tol (a fraction)")
         try:
             links: list[dict[str, Any]] = [{"rel": "executes", "to": record.resolve(experiment, inv)}] if experiment.strip() else []
             declared = [record.resolve(str(a), inv) for a in (uses or []) if str(a).strip()]
@@ -188,6 +219,12 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
     def review(node: str, verdict: str, method: str, notes: str) -> str:
         """Review a claim or result: checked | pass | fail | objection | resolved | inconclusive | comment. Say how
         you checked and what you found. Never your own author's work."""
+        if len(method) > _METHOD_MAX:
+            # a thorough method over the record's limit lost the whole review (studies E3): the rest goes in notes
+            cut = method.rfind(" ", 0, _METHOD_MAX - 40)
+            cut = cut if cut > 0 else _METHOD_MAX - 40
+            method, notes = (method[:cut] + " … (continued in notes)",
+                             f"Method, continued: {method[cut:].strip()}\n\n{notes}"[:4000])
         try:
             out = record.review(author=me, target=record.resolve(node, inv), verdict=verdict.strip().lower(),
                                 method=method, notes=notes)
@@ -244,9 +281,15 @@ def lead_tools(record: Record, seat: Seat, inv: str, meter: Meter, *, report_box
 
     def add(type: str, fields: dict[str, Any], links: list[dict[str, Any]] | None = None) -> str:
         """Plan: a hypothesis {statement, predictions[]} or an experiment {aim, protocol, success_criteria} with
-        tests links [{"rel": "tests", "to": "H1", "data": {"expected": …}}]; or a question {text}."""
+        tests links [{"rel": "tests", "to": "H1", "data": {"expected": …}}]; or a question {text, asks?: "measure"}
+        (asks=measure when it wants a number or a check of what exists: no change, hypothesis or backtest)."""
         if type not in ("hypothesis", "experiment", "question"):
             return "the lead plans (hypothesis, experiment, question); results and claims come from workers"
+        if type == "question" and "?" not in str((fields or {}).get("text") or ""):
+            # a lead once added "Assign it to risk as a REVIEW of CL2 …" as a question, and the run then owed it a
+            # whole trading workflow (studies/challenges T1 Q4)
+            return ("refused: a question asks what the run must find out, ending with '?'. To send work to a seat, "
+                    "rework its order (rework) with done_when; a question owes the whole workflow")
         try:
             ls = [dict(l, to=record.resolve(str(l["to"]), inv)) if l.get("to") else l for l in (links or [])]
             n = record.create(author=me, type=type, inv=inv, fields=fields, links=ls)
