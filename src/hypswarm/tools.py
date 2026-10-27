@@ -102,7 +102,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
     """What a worker or reviewer can do to the record while holding an order. ``on_write(kind, payload)`` is told
     after every accepted ``graph_add`` / ``register_run`` (a host's hook; it never changes the reply)."""
     me = seat.name
-    state = {"returned": False}
+    state = {"returned": False, "reviewed": False}
 
     def _told(kind: str, payload: dict[str, Any]) -> None:
         if on_write:
@@ -230,6 +230,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                                 method=method, notes=notes)
         except (GraphError, KeyError) as e:
             return _err(e)
+        state["reviewed"] = True
         return f"{out['code']}: {out['state']['sentence']}" + _tail(out, meter)
 
     def show(node: str) -> str:
@@ -260,7 +261,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
 
     tools = [Tool.from_function(f) for f in (graph_add, graph_link, register_run, review, show, find, return_work)]
     for t in tools:
-        t.fn.__dict__["_state"] = state     # the worker loop reads whether return_work ran
+        t.fn.__dict__["_state"] = state     # the worker loop reads whether return_work / review ran
     return tools
 
 

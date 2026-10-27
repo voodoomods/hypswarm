@@ -40,6 +40,15 @@ class WorkerResult:
     call_log: list[dict[str, Any]] = field(default_factory=list)   # one row per model call: t, s, in, cached, out
 
 
+CLOSING_REVIEW = ("Two turns are left on this order, and the only tool now is review. Record your verdict on the "
+                  "node this order names: checked if it holds as written, objection if it doesn't (say what is wrong), "
+                  "inconclusive if the files can't tell. Your method is what you re-ran and compared so far.")
+
+
+def _closing(seat: Seat, state: dict[str, Any], turns_left: int) -> bool:
+    return seat.role == "reviewer" and not state.get("reviewed") and turns_left <= 2
+
+
 async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, order: str, *, meter: Meter,
                     data_tools: Sequence[Tool] = (), preamble: str = "", header: str = "",
                     on_write: OnWrite | None = None, tel: Telemetry | None = None, tel_parent: str = "") -> WorkerResult:
@@ -54,17 +63,27 @@ async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, orde
     messages = [Message("system", (header + "\n" if header else "") + seat.prompt()
                         + ("\n\n" + preamble if preamble else "")),
                 Message("user", record.order_text(order))]
+    closing = False
     for _turn in range(seat.max_turns):
         try:
             meter.reserve(code)                     # the claim on the budget is made before the call, not after
         except BudgetExhausted as e:
             res.stopped = f"budget: {e}"
             break
+        offered = tools
+        if _closing(seat, state, seat.max_turns - _turn) and "review" in by:
+            # A reviewer's order ends on its verdict, not on its turn limit: reviewers re-ran the claim's code turn
+            # after turn and the order ran out with no review (studies E6: 1 review in 5 reviewer orders). The last
+            # two turns offer only `review` — two, so a refused review gets its retry.
+            offered = [by["review"]]
+            if not closing:
+                messages.append(Message("user", CLOSING_REVIEW))
+                closing = True
         t0 = time.time()
         mid = tel.start("model", parent=tel_parent, seat=seat.name, order=code, model=getattr(model, "name", ""),
                         turn=res.turns + 1)
         try:
-            reply = await model.complete(messages, tools, temperature=seat.temperature, unit=code)
+            reply = await model.complete(messages, offered, temperature=seat.temperature, unit=code)
         except Exception as e:  # noqa: BLE001 — a provider failure ends the order, never the run
             tel.end(mid, ok=False, error=f"{type(e).__name__}: {e}")
             meter.release(code)
