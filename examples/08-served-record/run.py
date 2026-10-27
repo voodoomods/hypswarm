@@ -2,8 +2,8 @@
 08 · One record server, many processes — token-bound writes.
 
 The record is served by `hypgraph serve --writable` with two tokens: one for the swarm (bound to the harness and
-its seats), one for a person. The swarm runs in this process over HTTP; the Atlas is open in your browser on the
-same server while it runs; a write without a known token gets 401, a write as an author the token isn't bound to
+its seats), one for a person. The swarm runs in this process over HTTP; the HypGraph UI is open in your browser on
+the same server while it runs; a write without a known token gets 401, a write as an author the token isn't bound to
 gets 403. The example starts the server for you, runs, shows the refusals it provoked on purpose, and stops it.
 
     python run.py
@@ -52,7 +52,7 @@ if __name__ == "__main__":
     swarm_token, person_token = "swarm-" + secrets.token_hex(12), "nic-" + secrets.token_hex(12)
     srv = serve(args.record, {swarm_token: "harness,analyst,critic,lead", person_token: "nicolas"})
     base = f"http://127.0.0.1:{PORT}"
-    print(f"\nrecord server: {base}   (the Atlas; open it while the run goes)\n")
+    print(f"\nrecord server: {base}   (the HypGraph UI; open it while the run goes)\n")
     try:
         # the boundary, shown before the run: no token → 401; a token writing as someone it isn't bound to → 403
         body = {"author": "analyst", "type": "question", "fields": {"text": "probe"}}
@@ -70,7 +70,7 @@ if __name__ == "__main__":
         rec = HttpRecord(base, token=swarm_token)
         res = main(run(task, seats, models(args, answers), record=rec, budget=budget(args), pricing=pricing(args)))
         show(res, quiet=args.quiet, trace=args.trace)
-        print(f"\nthe Atlas is still up at {base} for 20 s …")
+        print(f"\nthe HypGraph UI is still up at {base} for 20 s …")
         time.sleep(20 if not os.environ.get("CI") else 0)
     finally:
         srv.kill()

@@ -138,7 +138,7 @@ seats and what held them:
 <div class="ex"><div class="n">08</div><div>
   <h3><a href="https://github.com/voodoomods/hypswarm/tree/main/examples/08-served-record">served-record</a> <span class="pill">tokens</span></h3>
   <p>One <code>hypgraph serve --writable</code> with two tokens — the swarm's, bound to the harness and its seats, and
-    a person's, bound to one name. The swarm runs over HTTP; the Atlas is open on the same server. Two probes
+    a person's, bound to one name. The swarm runs over HTTP; the HypGraph UI is open on the same server. Two probes
     before the run show the boundary: no token → 401; the person's token writing as the analyst → 403.</p>
 </div></div>
 
@@ -172,8 +172,9 @@ seats and what held them:
   <li><b>Done is the record's call.</b> Every reply says MET / NOT MET per predicate and "return_work now" when all
     are; reworks say what was missing.</li>
   <li><b>The budget is a rule</b>, counted with calls in flight and printed in every reply.</li>
-  <li><b>Afterwards</b>, <code>hypgraph --db record.hypgraph serve</code> opens the Atlas: claims and their standing,
-    provenance, the work map, the refusal log.</li>
+  <li><b>Afterwards</b>, <code>hypgraph --db record.hypgraph serve</code> opens the HypGraph UI: claims and their standing,
+    provenance, the work orders, and the run replayed live. Each of 01–05 also runs live on
+    <a href="https://hypgraph.com/examples/">hypgraph.com/examples</a>.</li>
 </ul>
 </article>
 </div>

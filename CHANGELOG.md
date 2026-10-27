@@ -2,6 +2,8 @@
  
 ## Unreleased
 
+- **"Atlas" is now the HypGraph UI** in the examples, their READMEs, the site and the design notes, as in hypgraph
+  0.6. The examples point to [hypgraph.com/examples](https://hypgraph.com/examples/), where 01–05 replay live.
 - **Telemetry: everything a run does that the record can't see** (`telemetry.py`). Every model call, tool call, work
   order and scheduler decision, as spans (run → order → model / tool), with tokens in, cached and out, $ at the run's
   pricing, seconds, ok or error, and the tool calls each reply asked for.
