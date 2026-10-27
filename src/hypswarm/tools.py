@@ -120,7 +120,9 @@ def _not_a_question(text: str, existing: list[tuple[str, str]]) -> str:
     mine = _words(text)
     for code, other in existing:
         theirs = _words(other)
-        if mine and theirs and len(mine & theirs) / len(mine | theirs) >= 0.8:
+        # a copy, or a copy with a clause added ("… or decline — given the honest out-of-sample result …": the
+        # added words diluted the overlap below 0.8, and the run owed Q3 twice; studies T2, evening)
+        if mine and theirs and (len(mine & theirs) / len(mine | theirs) >= 0.8 or len(mine & theirs) / len(theirs) >= 0.9):
             return (f"refused: {code} already asks this. To get it answered, rework the order on {code} (rework) — "
                     "a second copy owes the whole workflow again")
     return ""

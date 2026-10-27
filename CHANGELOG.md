@@ -8,6 +8,9 @@
   rewrote the code under test; the new head made every check stale and nothing settled.
 - **A value in seconds is a timing only when the code measures time** (`perf_counter`, `timeit`, …). A duration
   that is the data (`parse_duration("2.6s")` returns 2) re-runs to the same digits; it was refused for a spread.
+- **A copy of a question with a clause added is a copy.** The lead's `add` refuses a question that holds 90 % of
+  an existing one's words ("… or decline — given the honest out-of-sample result …" for Q3), as well as one that
+  overlaps it by 80 %.
 - **Every unchecked answer gets its review under a workflow.** A seat working on Q1 also answered Q2; that claim
   was in no gate's evidence, so the review stage could only go to the newest claim (already checked) and the run
   stopped stuck with Q2 held open. The review stage now takes the board's unchecked answers too.
