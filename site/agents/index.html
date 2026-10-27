@@ -25,7 +25,7 @@
 <header class="nav"><div class="wrap">
   <a class="brand" href="../"><img src="../assets/hypswarm.svg" alt=""><span>Hyp<b>Swarm</b></span></a>
   <nav aria-label="Site"><a href="../agents/" aria-current="page">Agents</a><a href="../examples/" class="hide-sm">Examples</a><a href="../engineers/">Engineers</a>
-    <a href="../#profiles" class="hide-sm">Profiles</a><a href="../#workflows" class="hide-sm">Workflows</a><a href="../#seats" class="hide-sm">Seats</a><a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
+    <a href="../#profiles" class="hide-sm">Profiles</a><a href="../#seats" class="hide-sm">Seats</a><a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
     <a href="https://github.com/voodoomods/hypswarm" class="hide-sm">GitHub</a>
     <button class="iconbtn" data-toggle-theme type="button" aria-label="Toggle light and dark">◐</button></nav>
 </div></header>
@@ -310,10 +310,6 @@ register_run(name="CBC solve, 40 sites", uses=["A1"], experiment="X1",
   <span>HypSwarm is built on <a href="https://hypgraph.com">HypGraph</a>. Apache-2.0.</span>
   <span>Made by <a href="https://www.linkedin.com/in/nicolas-houghtaling-b68074147">Nicolas Houghtaling</a> at <a href="https://github.com/voodoomods">VoodooMods LLC</a>.</span>
 </div></footer>
-<script>
-  document.querySelector('[data-toggle-theme]')?.addEventListener('click',()=>{
-    const d=document.documentElement,cur=d.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
-    d.dataset.theme=cur==='dark'?'light':'dark';try{localStorage.setItem('hg-theme',d.dataset.theme)}catch(e){}});
-</script>
+<script src="../assets/site.js" defer></script>
 </body>
 </html>

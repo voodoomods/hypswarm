@@ -18,7 +18,9 @@
   .ref{border-left:3px solid var(--red);background:var(--panel2);padding:10px 12px;border-radius:8px;font:13px/1.5 var(--mono);white-space:pre-wrap;margin:10px 0}
   .ref.ok{border-left-color:var(--green)}
   .ex{display:grid;grid-template-columns:52px 1fr;gap:0 14px;align-items:start;padding:14px 0;border-bottom:1px solid var(--line)}
+  .ex > *{min-width:0} .ex .pill{white-space:normal;margin-bottom:4px}   /* a long code line scrolls in its box, not the page */
   .ex .n{font:700 22px var(--mono);color:var(--ink3)} .ex h3{margin:2px 0 6px} .ex p{margin:6px 0}
+  @media (max-width:520px){ .ex{grid-template-columns:1fr} .ex .n{font-size:16px} }
   .ex .meta{font:12px var(--mono);color:var(--ink3)}
 </style>
 </head>
@@ -27,7 +29,7 @@
 <header class="nav"><div class="wrap">
   <a class="brand" href="../"><img src="../assets/hypswarm.svg" alt=""><span>Hyp<b>Swarm</b></span></a>
   <nav aria-label="Site"><a href="../examples/" aria-current="page">Examples</a><a href="../agents/">Agents</a><a href="../engineers/">Engineers</a>
-    <a href="../#profiles" class="hide-sm">Profiles</a><a href="../#workflows" class="hide-sm">Workflows</a><a href="../#seats" class="hide-sm">Seats</a><a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
+    <a href="../#profiles" class="hide-sm">Profiles</a><a href="../#seats" class="hide-sm">Seats</a><a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
     <a href="https://github.com/voodoomods/hypswarm" class="hide-sm">GitHub</a>
     <button class="iconbtn" data-toggle-theme type="button" aria-label="Toggle light and dark">◐</button></nav>
 </div></header>
@@ -184,10 +186,6 @@ seats and what held them:
   <span>HypSwarm is built on <a href="https://hypgraph.com">HypGraph</a>. Apache-2.0.</span>
   <span>Made by <a href="https://www.linkedin.com/in/nicolas-houghtaling-b68074147">Nicolas Houghtaling</a> at <a href="https://github.com/voodoomods">VoodooMods LLC</a>.</span>
 </div></footer>
-<script>
-  document.querySelector('[data-toggle-theme]')?.addEventListener('click',()=>{
-    const d=document.documentElement,cur=d.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
-    d.dataset.theme=cur==='dark'?'light':'dark';try{localStorage.setItem('hg-theme',d.dataset.theme)}catch(e){}});
-</script>
+<script src="../assets/site.js" defer></script>
 </body>
 </html>
