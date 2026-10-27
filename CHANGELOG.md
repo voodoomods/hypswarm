@@ -1,5 +1,16 @@
 # Changelog
  
+## Unreleased
+
+- **hypswarm.com in the HypGraph app's design system,** the same stylesheet as hypgraph.com, light by default, across
+  every page. The homepage opens on the Live view of a HypSwarm run replaying (one per profile, `dev/site_examples.py`),
+  and can switch to the page's own record.
+- **The homepage proves its figures with its own HypGraph record** (`dev/site_record.py`, run at every deploy):
+  tests passing, runtime dependencies, how many of the five example runs settled, and how many writes the record
+  refused in them. The lab reads each run's telemetry; a reviewer re-runs the five examples from scratch and reads
+  each record's completion and refusal log. The page's text is checked against the record with `hypgraph check`, and
+  a copy error fails the deploy. `dev/build_site.py` copies the HypGraph UI from the released `hypgraph`.
+
 ## 0.1.0a7 — 2026-10-26: watch a run
 
 Needs hypgraph 0.6.0, whose HypGraph UI streams the telemetry into its Live view and replays a finished run

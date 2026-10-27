@@ -1,10 +1,9 @@
-# hypswarm.com: publish site/ to GitHub Pages. Runs on push to main once Pages is enabled for the repository
-# (Settings → Pages → Source: GitHub Actions) and the domain's DNS points at GitHub, as hypgraph.com's does.
+# hypswarm.com: build the homepage's record and the app copy, then publish site/ to GitHub Pages on every push to main
+# (the record measures the code, so a code change is a site change).
 name: pages
 on:
   push:
     branches: [main]
-    paths: ["site/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
@@ -24,13 +23,15 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: no root-absolute paths (the page must also work under /hypswarm/ on github.io)
-        shell: python
-        run: |
-          import re, sys
-          s = open("site/index.html", encoding="utf-8").read()
-          bad = re.findall(r'(?:href|src)="/(?!/)', s)
-          sys.exit(f"root-absolute paths: {len(bad)}" if bad else 0)
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e ".[dev]"
+      # the homepage's own record: measured, re-measured, and the page's text checked against it (fails the deploy
+      # on a copy error)
+      - run: python dev/site_record.py
+      # the HypGraph UI from the released hypgraph, and no root-absolute paths (the site also works under /hypswarm/)
+      - run: python dev/build_site.py
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -4,383 +4,278 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HypSwarm — many agents, one record</title>
-<meta name="description" content="hypswarm runs one agent or a swarm of them on a research, engineering, trading, knowledge or optimisation task with a HypGraph record as the only shared state: the record schedules, accepts, reproduces, stops and reports; models only do work and judge exceptions.">
+<meta name="description" content="HypSwarm runs one agent or a swarm on a research, engineering, trading, knowledge or optimisation task, with a HypGraph record as the only shared state: the record schedules, accepts, re-runs and reports.">
 <meta property="og:title" content="HypSwarm — many agents, one record">
-<meta property="og:description" content="Run one agent or a swarm on a task with a HypGraph record as the only shared state. Five disciplines, one record: the record decides what counts, the prompt doesn't have to.">
+<meta property="og:description" content="Run one agent or a swarm on a task with a HypGraph record as the only shared state. The record decides what counts as done, not a prompt.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://hypswarm.com/">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="assets/hypswarm.svg" type="image/svg+xml">
 <link rel="alternate" type="text/plain" href="llms.txt" title="For language models">
 <link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="app/hypgraph.css">
 <script>try{const t=localStorage.getItem('hg-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
-<style>
-  .seats td:first-child{white-space:nowrap}
-  .trace{font-family:var(--mono);font-size:13px;line-height:1.55}
-  .trace .k{color:var(--violet)} .trace .ok{color:var(--green)} .trace .no{color:var(--red)} .trace .dim{opacity:.6}
-  .alpha{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;opacity:.8}
-  .prof{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
-  .prof .card h3{display:flex;align-items:center;gap:8px;margin:0 0 6px}
-  .prof .card h3 i{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--accent)}
-  .prof .card .tag{font-family:var(--mono);font-size:11px;color:var(--ink3);letter-spacing:.06em}
-  .prof .card p{margin:6px 0 0;font-size:14.5px;color:var(--ink2)}
-  .prof .card .ref{margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--red)}
-  .prof .card .ref b{color:var(--ink2);font-weight:600}
-  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;counter-reset:s}
-  .steps .st{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px}
-  .steps .st::before{counter-increment:s;content:counter(s);display:inline-block;width:24px;height:24px;border-radius:50%;background:var(--panel2);border:1px solid var(--line2);font:600 12px/24px var(--mono);text-align:center;color:var(--accent);margin-bottom:8px}
-  .steps .st h4{margin:0 0 4px;font-size:15px} .steps .st p{margin:0;font-size:14px;color:var(--ink2)}
-  .quiet{color:var(--ink3);font-size:14px}
-</style>
 </head>
 <body>
+<!-- The figures on this page are claims in its own HypGraph record (data/site-record.bundle.json), built and
+     re-measured by dev/site_record.py, which also checks this page's text against the record with `hypgraph check`.
+     A figure goes in a data-fact slot; a word quoted as an example of what gets refused is marked data-quote; a phrase
+     true by design is marked data-ok="<why>" and listed on the page. -->
 <a class="skip" href="#main">Skip to content</a>
 <header class="nav"><div class="wrap">
   <a class="brand" href="./"><img src="assets/hypswarm.svg" alt=""><span>Hyp<b>Swarm</b></span></a>
-  <nav aria-label="Site"><a href="#profiles">Profiles</a><a href="#workflows" class="hide-sm">Workflows</a><a href="examples/">Examples</a><a href="agents/">Agents</a><a href="engineers/">Engineers</a>
-    <a href="#seats" class="hide-sm">Seats</a>
-    <a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
+  <nav aria-label="Site"><a href="#profiles">Profiles</a><a href="examples/">Examples</a><a href="agents/">Agents</a><a href="engineers/">Engineers</a>
+    <a href="#seats" class="hide-sm">Seats</a><a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
     <a href="https://github.com/voodoomods/hypswarm" class="hide-sm">GitHub</a>
     <button class="iconbtn" data-toggle-theme type="button" aria-label="Toggle light and dark">◐</button></nav>
 </div></header>
 
 <main id="main">
-<section class="hero">
-  <canvas id="hero-graph" aria-hidden="true"></canvas>
-  <div class="wrap">
-    <span class="eyebrow"><i></i> alpha · built on HypGraph · five disciplines · Python 3.11+</span>
-    <h1 class="title">Many agents.<span class="l2">One record.</span></h1>
-    <p class="lede">HypSwarm runs one agent or a swarm of them on a research, engineering, trading, knowledge or
-      optimisation task, with a <a href="https://hypgraph.com">HypGraph</a> record as the only shared state. The record
-      schedules the work, accepts it against predicates it checks itself, re-runs what the authors computed, stops what
-      a fallen premise made pointless, and writes the report. Models are called to do work and to judge exceptions —
-      and what counts as done is the record's rule, not a line in a prompt.</p>
+<section class="hero"><div class="wrap">
+  <div class="hero-tags"><span class="pill accent" data-fact="version-pill"></span><span class="pill">alpha</span>
+    <span class="pill">built on HypGraph</span><span class="pill">Open source · <span data-fact="licence"></span></span>
+    <span class="pill">Python <code>3.11+</code></span></div>
+  <h1>Many agents. One record.</h1>
+  <p class="lede">HypSwarm runs one agent or a swarm of them on a research, engineering, trading, knowledge or
+    optimisation task, with a <a href="https://hypgraph.com">HypGraph</a> record as the only shared state. The record
+    schedules the work, accepts it against predicates it checks itself, re-runs what the authors computed, and writes
+    the report. Models do the work and judge exceptions; what counts as done is the record's rule, not a line in a prompt.</p>
+  <div class="row"><a class="btn primary" href="#product">Watch a swarm work</a><a class="btn" href="engineers/">Run a swarm</a>
+    <a class="btn" href="agents/">Take a seat</a></div>
 
-    <div class="door" role="group" aria-label="Choose your way in">
-      <a class="portal agent" href="agents/">
-        <div class="who">For agents &amp; people</div>
-        <h2>Take a seat</h2>
-        <p>A seat is a name in the record. Hold it over MCP from Claude Code, Cursor or any client: the scheduler
-          issues you orders, every reply tells you when each one is done, and the record holds you to the same rules
-          as every other seat — a person or a model, it can't tell. Machine-readable: <code>/llms.txt</code>.</p>
-        <pre>hypgraph --db study.hypgraph --as nicolas mcp
+  <div class="stage" id="product">
+    <div class="stage-bar"><div class="stage-tabs" role="group" aria-label="Choose a run" id="stage-tabs"></div>
+      <span class="pill" id="stage-chain">verifying…</span></div>
+    <div class="stage-app"><div id="app"></div></div>
+    <div class="stage-foot" id="stage-foot"></div>
+  </div>
+</div></section>
+
+<section class="block" id="start"><div class="wrap">
+  <div class="kicker">Two ways in</div>
+  <h2 class="h">Hold a seat, or run the swarm.</h2>
+  <div class="door">
+    <a class="portal" href="agents/">
+      <div class="who">For agents &amp; people</div>
+      <h2>Take a seat</h2>
+      <p>A seat is a name in the record. Hold it over MCP from Claude Code, Cursor or any client: the scheduler issues
+        you orders, each reply says whether your order is done, and the record holds you to the same rules as the
+        other seats, whether you're a person or a model. Machine-readable: <code>/llms.txt</code>.</p>
+      <pre>hypgraph --db study.hypgraph --as nicolas mcp
 # my_work → do it → return_work</pre>
-        <span class="go">The how-to for agents &amp; people</span>
-      </a>
-      <a class="portal human" href="engineers/">
-        <div class="who">For engineers</div>
-        <h2>Run a swarm</h2>
-        <p>A task, a profile, a budget. The roster comes with the profile, the tools from a registry you control, the
-          scheduler makes no model calls, workers hold no state, and the record is the audit log — it verifies by
-          hash. Any OpenAI-compatible endpoint or Anthropic as the model.</p>
-        <pre>pip install hypswarm
+      <span class="go">The how-to for agents &amp; people</span>
+    </a>
+    <a class="portal" href="engineers/">
+      <div class="who">For engineers</div>
+      <h2>Run a swarm</h2>
+      <p>A task, a profile, a budget. The roster comes with the profile, the tools from a registry you control, the
+        scheduler <span data-ok="design: the scheduler (scheduler.py) reads the record's derived state and calls no model">makes no model calls</span>,
+        workers hold no state, and the record is the audit log. Any OpenAI-compatible endpoint, Anthropic or Bedrock.</p>
+      <pre>pip install --pre hypswarm
 hypswarm run --task task.toml --profile trading --record desk.hypgraph</pre>
-        <span class="go">The how-to for engineers</span>
-      </a>
-    </div>
+      <span class="go">The how-to for engineers</span>
+    </a>
   </div>
-</section>
+</div></section>
 
-<section class="block" id="profiles">
-  <div class="wrap">
-    <div class="kicker">Profiles</div>
-    <h2 class="h">Five disciplines. One record. The record decides what counts.</h2>
-    <p class="sub">A profile is pinned on the investigation and versioned: it says what the record refuses the moment
-      it's written, who usually sits at the table, what "complete" means — and, since hypgraph 0.5, the discipline's own
-      <b>workflow</b>: the stages a question passes through and the gate out of each. A record written under
-      <code>trading@2</code> means the same thing in a year (<code>trading@1</code> pins the pre-workflow one). Nobody has
-      to follow an instruction for any of it to hold — the record won't take the write.</p>
-    <div class="prof">
-      <div class="card"><h3><i></i>scientific</h3><div class="tag">analyst · stats · critic · lead</div>
-        <p>A hypothesis with predictions; an experiment preregistered <b>before</b> any run; numbers bound to measured
-          results; a reviewer's check on fresh evidence settles it.</p>
-        <div class="ref"><b>refuses</b> 812 of 1000 with no result behind it · "never" without the count · "significant" without the test · a check on stale evidence</div></div>
-      <div class="card"><h3><i></i>software</h3><div class="tag">implementer · tester · reviewer · lead</div>
-        <p>The change as a diff by hash. "It passes" is the <b>instrument's</b> run of the tests <b>on that head</b> — a
-          lab-recorded result — never a report of one. A newer commit supersedes the diff; the tests go stale.</p>
-        <div class="ref"><b>refuses</b> "all tests pass" without an instrument run, or on a superseded head · the diff's author as its reviewer</div></div>
-      <div class="card"><h3><i></i>trading</h3><div class="tag">quant · risk · lead</div>
-        <p>A thesis is a hypothesis; the backtest is preregistered. An edge exists <b>out of sample, after costs, with the
-          configurations tried declared</b>. A position is a decision with size, stop and review date — paper, or declined.</p>
-        <div class="ref"><b>refuses</b> a backtest without the fees it charged · "edge" from the in-sample window, or without trials · a position without a stop · any live order (there is no path)</div></div>
-      <div class="card"><h3><i></i>knowledge</h3><div class="tag">researcher · fact_checker · lead</div>
-        <p>A source carries <b>the passage that says it</b>, when it was read, what kind it is; the claim cites it; the
-          fact-checker opens it. No source? A checked inconclusive answer settles the question honestly.</p>
-        <div class="ref"><b>refuses</b> a claim from recall · a source without its passage · a sentence that treats an unreviewed claim as settled</div></div>
-      <div class="card"><h3><i></i>optimization</h3><div class="tag">modeller · solver · verifier · lead</div>
-        <p>The instance by hash; the model as a hypothesis; a result with the objective, <b>feasible</b>, and a <b>bound or
-          gap</b>; the verifier recomputes feasibility before the claim.</p>
-        <div class="ref"><b>refuses</b> an objective with no feasibility · "optimal" without a bound, or on a changed instance · a solve that uses no instance</div></div>
-      <div class="card"><h3><i></i>yours</h3><div class="tag">one Profile · one Workflow · one roster</div>
-        <p>Vocabulary, predicates, refusals, completion criteria and a workflow: one object in HypGraph. A roster and its
-          toolkits here. The scheduler doesn't change — it issues whatever stage the record names.</p>
-        <div class="ref" style="color:var(--ink3)"><b>see</b> hypswarm profiles · /api/graph/profiles · /api/graph/stages</div></div>
-    </div>
+<section class="block" id="facts"><div class="wrap">
+  <div class="kicker">What you can check</div>
+  <h2 class="h">Facts, each with its source.</h2>
+  <p class="sub">Each figure here is a claim in this page's own HypGraph record, bound to the measurement it came from
+    and re-measured another way by a reviewer before the page was built. Click a claim to open it in the record.</p>
+  <div class="grid4">
+    <div class="card fact"><div class="k">Tests</div><div class="v" data-fact="tests"></div><div class="s" data-fact="tests-s"></div>
+      <div class="src" data-claim="tests"></div></div>
+    <div class="card fact"><div class="k">Runtime dependencies</div><div class="v" data-fact="deps"></div><div class="s"><code>hypgraph</code> and <code>httpx</code></div>
+      <div class="src" data-claim="deps"></div></div>
+    <div class="card fact"><div class="k">Example runs settle</div><div class="v" data-fact="settled"></div><div class="s">the five above, one per profile, on scripted models</div>
+      <div class="src" data-claim="settled"></div></div>
+    <div class="card fact"><div class="k">Writes refused in those runs</div><div class="v" data-fact="refused"></div><div class="s">by the record, as they were written; each run still settled</div>
+      <div class="src" data-claim="refused"></div></div>
   </div>
-</section>
+</div></section>
 
-<section class="block" id="workflows">
-  <div class="wrap">
-    <div class="kicker">Workflows</div>
-    <h2 class="h">The stage is derived, never set. The scheduler issues it.</h2>
-    <p class="sub">Each profile's workflow is the discipline's own method — the scientific method with preregistration,
-      continuous integration and code review, preregistered backtesting and risk management, source criticism,
-      operations research — written as gates the record checks. A question is in the first stage whose gate the record
-      does not meet. The scheduler asks the record where each question stands and issues <b>that stage's order</b>: the
-      gates up to the next review as its done-when, to the seat the stage names; a review stage goes to a reviewer on the
-      node the previous gate produced. Nothing is complete until the record says so. <b>Bold</b> steps are writes the
-      record checks; <em>slanted</em> steps are mechanical — no model is called.</p>
-
-    <div class="wf"><div class="wfh"><i class="sci"></i>scientific <span>analyst · stats · critic · lead</span></div>
-      <ol class="flow">
-        <li><b>conjectured</b><span>a hypothesis with predictions answers the question</span></li>
-        <li><b>preregistered</b><span>an experiment tests it, expected outcome stated — <em>before</em> any run</span></li>
-        <li><b>run · evidenced</b><span>register_run executes it: run + result + claim, numbers bound</span></li>
-        <li><em>instrument re-runs the code</em><span>values confirmed, unprinted or contradicted</span></li>
-        <li><b>reviewed</b><span>the critic's order carries claim, code and verdict; judges, doesn't recompute</span></li>
-        <li><em>complete</em><span>a checked claim on fresh evidence; report from the facts, linted</span></li>
-      </ol>
-      <div class="ref"><b>refused on the way</b> a number no result accounts for · "never" without the count · "significant" without the test · a check on evidence a corrected file made stale</div>
-    </div>
-
-    <div class="wf"><div class="wfh"><i class="sw"></i>software <span>implementer · tester · reviewer · lead</span></div>
-      <ol class="flow">
-        <li><b>implemented</b><span>the change as an artifact <code>kind=diff</code>: base → head sha, files</span></li>
-        <li><b>register_run</b><span>the exact test command as code, <code>uses</code> the diff; passed k of n, exit code</span></li>
-        <li><em>instrument runs the tests on that head</em><span>the lab run uses the same diff — this is <code>tests_pass_current</code></span></li>
-        <li><b>claimed</b><span>"passes", accepted only now: it rests on the instrument's run</span></li>
-        <li><b>reviewed</b><span>by someone who wrote neither the claim nor the diff</span></li>
-        <li><em>verified</em><span>or a verified failure: a checked claim on an instrument-recorded negative result</span></li>
-      </ol>
-      <div class="ref"><b>refused on the way</b> "it passes" before the instrument has run, or on a superseded head · a diff without base, head and files · the diff's author reviewing</div>
-    </div>
-
-    <div class="wf"><div class="wfh"><i class="tr"></i>trading <span>quant · risk · lead</span></div>
-      <ol class="flow">
-        <li><b>thesised</b><span>the thesis as a hypothesis: the move, the horizon</span></li>
-        <li><b>preregistered</b><span>the backtest as an experiment: windows, costs, configurations — before the run</span></li>
-        <li><b>backtested</b><span>oos_return, fees, slippage, <code>trials</code> — out of sample, after costs, declared</span></li>
-        <li><em>instrument re-runs the backtest</em><span>every registered value checked</span></li>
-        <li><b>risk-reviewed</b><span>the risk seat judges the method against the code</span></li>
-        <li><b>positioned</b><span>a decision <code>kind=position</code>: size, stop, review date, paper — or <code>no_position</code></span></li>
-        <li><em>monitored</em><span>past its review date with nothing newer: flagged, not forgotten</span></li>
-      </ol>
-      <div class="ref"><b>refused on the way</b> a backtest without the costs it charged · "edge" from the fitting window, or without trials · a position without a stop · any live order (there is no path)</div>
-    </div>
-
-    <div class="wf"><div class="wfh"><i class="kn"></i>knowledge <span>researcher · fact_checker · lead</span></div>
-      <ol class="flow">
-        <li><b>sourced</b><span>a source <code>part_of</code> the question: citation, URL or DOI, <em>the passage</em>, retrieved, kind</span></li>
-        <li><b>claimed</b><span>a claim that cites it; the passage accounts for its numbers</span></li>
-        <li><b>checked</b><span>the fact-checker opens the source and records a verdict</span></li>
-        <li><em>complete</em><span>report linted: no sentence treats an unreviewed claim as settled</span></li>
-        <li><b>no source?</b><span>the search as a run and result ("read 3 of 3 pages; 0 mention it"), a claim <code>kind=inconclusive</code> — checked, it settles the question</span></li>
-      </ol>
-      <div class="ref"><b>refused on the way</b> a claim from recall · a source without its passage · a settled-sounding sentence on an unreviewed claim</div>
-    </div>
-
-    <div class="wf"><div class="wfh"><i class="op"></i>optimization <span>modeller · solver · verifier · lead</span></div>
-      <ol class="flow">
-        <li><b>posed</b><span>the instance as an artifact <code>kind=instance</code>, by hash</span></li>
-        <li><b>modelled · configured</b><span>the model as a hypothesis; the solve configuration as an experiment</span></li>
-        <li><b>solved</b><span>register_run <code>uses</code> the instance: objective, feasible, bound or gap — or infeasible</span></li>
-        <li><em>instrument re-runs the solve</em><span>objective and gap confirmed</span></li>
-        <li><b>verified</b><span>the verifier recomputes feasibility and checks the result</span></li>
-        <li><b>claimed · checked</b><span>"best found, gap x" — or "optimal" with the bound; the verifier checks the claim</span></li>
-      </ol>
-      <div class="ref"><b>refused on the way</b> an objective with no feasibility · a solve that uses no instance · "optimal" without a bound, or on a changed instance</div>
-    </div>
-    <p class="sub">Each strip is one of the <a href="examples/">examples</a>, runnable for free; the trace shows every stage
-      order. The method each workflow is taken from is quoted in HypGraph's
-      <a href="https://github.com/voodoomods/hypgraph/tree/main/docs/workflows">docs/workflows</a>.</p>
+<section class="block" id="run"><div class="wrap">
+  <div class="kicker">The record is the orchestrator</div>
+  <h2 class="h">What a run looks like when nobody has to coordinate.</h2>
+  <p class="sub">The scheduler issues an order per open question to the seat that fits; workers write runs, results and
+    claims; the instrument re-runs each author's code; the record accepts each order once its predicates are met; a
+    reviewer's check settles each question; and the lead writes the interpretation under the facts.</p>
+  <div class="steps">
+    <div class="st"><h3>Order</h3><p>A task node: the target, premises pinned to their versions, done-when predicates, a budget and a lease.</p></div>
+    <div class="st"><h3>Write</h3><p>Runs with their code, results with values, claims with numbers bound to them, checked as they're written.</p></div>
+    <div class="st"><h3>Reproduce</h3><p>The instrument re-runs the code: each value confirmed, not printed, or contradicted, with no model in the loop.</p></div>
+    <div class="st"><h3>Settle</h3><p>Predicates met → a decision on the evidence; a reviewer's check settles the question.</p></div>
   </div>
-</section>
-
-<section class="block">
-  <div class="wrap grid2" style="align-items:center">
-    <div>
-      <div class="kicker">The record is the orchestrator</div>
-      <h2 class="h">What a run looks like when nobody has to coordinate.</h2>
-      <p class="sub">Four questions, three workers, a critic, a lead. The scheduler issues an order per open question to
-        whichever seat fits, the workers write runs, results and claims, the instrument re-runs each author's code,
-        the record accepts each order the moment its predicates are met, a critic's review settles each question, and
-        the lead is called once — to write the interpretation under the facts. From a real run on a suite instance.</p>
-      <div class="steps">
-        <div class="st"><h4>Order</h4><p>A task node: target, premises pinned to their versions, done-when predicates, budget, lease.</p></div>
-        <div class="st"><h4>Write</h4><p>Runs with their code, results with values, claims with numbers bound to them. Checked as written.</p></div>
-        <div class="st"><h4>Reproduce</h4><p>The instrument re-runs the code. Confirmed, not printed, or contradicted — zero model calls.</p></div>
-        <div class="st"><h4>Settle</h4><p>Every predicate met → a decision based on the evidence. A review settles the question.</p></div>
-      </div>
-    </div>
-    <div class="term" aria-label="A scheduler trace from a real hypswarm run">
-      <div class="bar"><i></i><i></i><i></i><span>hypswarm run — F1 seed 0</span></div>
-      <pre class="trace"><span class="k">dispatch</span>  T1 → analyst    Q1 What is A's accuracy?
-<span class="k">dispatch</span>  T2 → stats      Q3 Is A significantly better than B?
-<span class="k">dispatch</span>  T3 → engineer   Q4 In which subset is A's advantage largest?
-<span class="k">returned</span>  T2 stats · 6 calls · returned itself
-<span class="k">reproduce</span> RS2 ← RUN3   all 3 registered values confirmed
-<span class="ok">settled </span>  T2 → D1   claim_made: CL2
-<span class="k">dispatch</span>  T4 → critic     review CL2 (reproduced — judge the method)
-<span class="k">returned</span>  T1 analyst · 8 calls
-<span class="no">refused </span>  CL? "significantly" — p = 0.31 on the bound counts [SIGNIFICANCE_NOT_SHOWN]
-<span class="ok">settled </span>  T1 → D2   claim_made: CL1  (the honest sentence)
-<span class="k">returned</span>  T4 critic · 6 calls
-<span class="ok">settled </span>  T4 → D3   reviewed: RV1
-<span class="dim">… 8 orders, 0 reworks, 0 escalations, lead: 4 calls (the report)</span>
-<span class="ok">BOARD   </span>  Q1 SETTLED · Q2 SETTLED · Q3 SETTLED · Q4 SETTLED — 4 of 4
-<span class="ok">report  </span>  accepted (linted against the record)</pre>
-    </div>
+  <div class="grid4" style="margin-top:16px">
+    <div class="card"><div class="n">scheduler</div><h3>Code, not a model</h3><p>Issues from the question board, settles met
+      orders, reworks the rest twice, cancels what became moot, escalates at exceptions.</p></div>
+    <div class="card"><div class="n">instrument</div><h3>Reproduce, don't recompute</h3><p>A registered run's code is
+      re-executed in your sandbox before review; a reviewer recomputes only a contradicted value.</p></div>
+    <div class="card"><div class="n">workers</div><h3>Stateless</h3><p>A worker's context is its order and its own turns.
+      Kill it and the lease expires; a run that died resumes from the record.</p></div>
+    <div class="card"><div class="n">budget</div><h3>A rule, not a hope</h3><p>Calls and dollars, per run and per order,
+      counted with calls in flight, enforced by the scheduler and shown to each seat in each reply.</p></div>
   </div>
-</section>
+</div></section>
 
-<section class="block">
-  <div class="wrap">
-    <div class="kicker">What the record does for the team</div>
-    <h2 class="h">Coordination that isn't a prompt.</h2>
-    <div class="grid4">
-      <div class="card"><div class="n">scheduler</div><h3>No model calls</h3><p>Issue from the question board, settle met
-        orders, rework the rest twice, cancel what became moot, escalate only at exceptions. Code over the record's
-        derived state.</p></div>
-      <div class="card"><div class="n">instrument</div><h3>Reproduce, don't recompute</h3><p>Every registered run's code is
-        re-executed in your sandbox before review. Values confirmed, not printed, or <i>contradicted</i> — and a
-        reviewer recomputes only the last.</p></div>
-      <div class="card"><div class="n">claims</div><h3>Can't be flattered</h3><p>HypGraph's checks and the profile's run on
-        every write: numbers bound to results, no "never" without the count, no edge without costs, no "optimal"
-        without a bound. The record binds what it already holds before it refuses anything.</p></div>
-      <div class="card"><div class="n">workers</div><h3>No state</h3><p>A worker's context is its order and its own turns.
-        It can be killed; the lease expires and another takes the order. A run that died resumes from the record.</p></div>
-      <div class="card"><div class="n">budget</div><h3>A rule, not a hope</h3><p>Calls and dollars, per run and per order,
-        counted including calls in flight, enforced by the scheduler and shown to every seat in every reply.</p></div>
-      <div class="card"><div class="n">escalation</div><h3>The record decides</h3><p>A seat may name a deeper model. It is
-        used from the first time the record sends that seat's work back NOT MET — never on the model's say-so.</p></div>
-      <div class="card"><div class="n">files</div><h3>Vouched for</h3><p>A worker reads a file only when its bytes match a
-        live artifact. A file the record withdrew is refused with the reason, and a planted file is not evidence.</p></div>
-      <div class="card"><div class="n">audit</div><h3>You didn't write it</h3><p>Orders are task nodes, acceptance is a
-        decision, the run files its own provenance. The record <i>is</i> the log, and it verifies by hash.</p></div>
-    </div>
+<section class="block" id="profiles"><div class="wrap">
+  <div class="kicker">Profiles</div>
+  <h2 class="h">Five disciplines. One record. The record decides what counts.</h2>
+  <p class="sub">A profile is pinned on the investigation and versioned: what the record refuses as it's written, who
+    sits at the table, what complete means, and the discipline's workflow — the stages a question passes through and
+    the gate out of each. The record won't take a write that breaks it, so none of it depends on a prompt being followed.</p>
+  <div class="prof">
+    <div class="card"><h3><i></i>scientific</h3><div class="tag">analyst · stats · critic · lead</div>
+      <p>A hypothesis with predictions; an experiment preregistered before a run; numbers bound to measured results; a
+        reviewer's check on fresh evidence settles it.</p>
+      <div class="refuses"><b>refuses</b> a number with no result behind it · <span data-quote>“never”</span> without the count · <span data-quote>“significant”</span> without the test</div></div>
+    <div class="card"><h3><i></i>software</h3><div class="tag">implementer · tester · reviewer · lead</div>
+      <p>The change as a diff by hash. A pass is the instrument's run of the tests on that head, a lab-recorded result,
+        not a report of one. A newer commit supersedes the diff and its tests go stale.</p>
+      <div class="refuses"><b>refuses</b> <span data-quote>“it passes”</span> without an instrument run, or on a superseded head · the diff's author as its reviewer</div></div>
+    <div class="card"><h3><i></i>trading</h3><div class="tag">quant · risk · lead</div>
+      <p>A thesis is a hypothesis; the backtest is preregistered. An edge is out of sample, after costs, with the
+        configurations tried declared. A position has size, stop and review date — paper, or declined.</p>
+      <div class="refuses"><b>refuses</b> a backtest without its costs · <span data-quote>“edge”</span> in sample · a position without a stop · a live order</div></div>
+    <div class="card"><h3><i></i>knowledge</h3><div class="tag">researcher · fact_checker · lead</div>
+      <p>A source carries the passage that says it, when it was read and what kind it is; the claim cites it; the
+        fact-checker opens it. With no source, a checked inconclusive answer settles the question.</p>
+      <div class="refuses"><b>refuses</b> a claim from recall · a source without its passage</div></div>
+    <div class="card"><h3><i></i>optimization</h3><div class="tag">modeller · solver · verifier · lead</div>
+      <p>The instance by hash; the model as a hypothesis; a result with the objective, its feasibility and a bound or
+        gap; the verifier recomputes feasibility before the claim.</p>
+      <div class="refuses"><b>refuses</b> an objective without feasibility · <span data-quote>“optimal”</span> without a bound</div></div>
+    <div class="card"><h3><i></i>yours</h3><div class="tag">one Profile · one Workflow · one roster</div>
+      <p>Vocabulary, predicates, refusals, completion criteria and a workflow are one object in HypGraph; a roster and
+        its toolkits, here. The scheduler issues whatever stage the record names.</p>
+      <div class="refuses" style="color:var(--ink2)"><b>see</b> <code>hypswarm profiles</code></div></div>
   </div>
-</section>
+</div></section>
 
-<section class="block" id="seats">
-  <div class="wrap">
-    <div class="kicker">Seats, not personalities</div>
-    <h2 class="h">Three roles, because they're what the record can check.</h2>
-    <p class="sub">A seat is a declared capability bound to an author name in the record: a role, the words it
-      <code>takes</code>, the toolkits it may use, a model, and optionally a deeper one to escalate to. A solo scientist
-      is one worker seat. A swarm is several, under the record's leases. Each profile brings a roster; yours overrides it.</p>
-    <div class="grid4">
-      <div class="card rule"><h3>worker</h3><p>Takes orders from the board; writes runs, results and claims — a result and
-        its claim in one call, with the code; returns when the record says it's done.</p></div>
-      <div class="card rule"><h3>reviewer</h3><p>Takes review orders; its verdicts count. Never on its own author's work, and
-        it writes verdicts, not claims — the record and the scheduler both hold that line.</p></div>
-      <div class="card rule"><h3>lead</h3><p>Called only at exceptions — an order stuck after two reworks, a contested
-        claim, an empty frontier with questions open — and for the report's interpretation.</p></div>
-      <div class="card rule"><h3>instrument</h3><p>Not a model. Re-runs registered code in your sandbox and files
-        lab-recorded runs, so "the tests pass" and "the numbers reproduce" are its findings, not the author's.</p></div>
-      <div class="card rule"><h3>external</h3><p>No model: a person or another agent holds the name over MCP. The scheduler
-        issues it orders like any seat and waits; if the lease runs out, the record returns the order on its behalf.</p></div>
-      <div class="card rule"><h3>operator</h3><p>A person, reached through the record: approves budgets, answers escalations,
-        resolves objections, holds the tokens that bind writes to names.</p></div>
-    </div>
+<section class="block" id="seats"><div class="wrap">
+  <div class="kicker">Seats, not personalities</div>
+  <h2 class="h">Roles the record can check.</h2>
+  <p class="sub">A seat is a declared capability bound to an author name in the record: a role, the words it
+    <code>takes</code>, the toolkits it may use, a model, and optionally a deeper one to escalate to. Each profile
+    brings a roster; yours overrides it.</p>
+  <div class="grid3">
+    <div class="card rule"><h3>worker</h3><p>Takes orders from the board; writes a result and its claim in one call, with
+      the code; returns when the record says the order is done.</p></div>
+    <div class="card rule"><h3>reviewer</h3><p>Takes review orders, and its verdicts count — not on its own work. It writes
+      verdicts, not claims.</p></div>
+    <div class="card rule"><h3>lead</h3><p>Called at exceptions — an order stuck after two reworks, a contested claim — and
+      for the report's interpretation.</p></div>
+    <div class="card rule"><h3>instrument</h3><p>Not a model. Re-runs registered code in your sandbox and files
+      lab-recorded runs, so a pass is its finding, not the author's.</p></div>
+    <div class="card rule"><h3>external</h3><p>A person or another agent holding the name over MCP. Orders come to it like any
+      seat; when the lease runs out, the record returns the order.</p></div>
+    <div class="card rule"><h3>operator</h3><p>A person, reached through the record: approves budgets, answers
+      escalations, holds the tokens that bind writes to names.</p></div>
   </div>
-</section>
+</div></section>
 
-<section class="block" id="agents">
-  <div class="wrap grid2" style="align-items:start">
-    <div>
-      <div class="kicker">For agents &amp; people</div>
-      <h2 class="h">Hold a seat over MCP.</h2>
-      <p class="sub">The HypGraph MCP server is the whole interface. <code>my_work</code> shows your open orders —
-        objective, the target's own content, premises with their standing, what's already been tried, each predicate
-        with how to meet it. You register runs with their code, record results, make claims; every reply tells you
-        whether the order is done; you return it. <code>completion</code> tells you what the profile means by done.</p>
-      <p class="sub"><a class="btn" href="agents/">The full how-to: orders, writes, refusals, an example per profile</a></p>
-      <div class="callout"><b>If you are an agent reading this.</b> Call <code>my_work</code>. Do what the order says,
-        from the files, with the tools you have. Register the exact code you ran and print every value you register,
-        with its name — the instrument re-runs it. Write a claim's numbers from a result; a refusal tells you the honest
-        version. When the reply says every predicate is met, call <code>return_work</code> with a note of at most 120
-        words. Don't work past done.</div>
-    </div>
-    <div class="stack">
-      <div class="code"><span class="lbl">seats.toml</span><pre>[[seats]]
+<section class="block" id="watch"><div class="wrap grid2" style="align-items:start">
+  <div>
+    <div class="kicker">Watching a run</div>
+    <h2 class="h">See each model and tool call as it happens.</h2>
+    <p class="sub">A run writes its telemetry beside the record: each model call, tool call, work order and scheduler
+      decision, with tokens, cost and timing. Serve the record and the HypGraph UI's Live view shows which seat is
+      calling the model or running a tool right now, what each has spent, and where a work order's time went — the
+      view at the top of this page. <code>otel=True</code> sends the same spans to OpenTelemetry; prompts and replies
+      stay out unless you turn them on.</p>
+  </div>
+  <div class="stack">
+    <div class="code"><span class="lbl">watch it live</span><pre>hypgraph --db desk.hypgraph serve
+# run the swarm against desk.hypgraph, open Live</pre></div>
+    <div class="code"><span class="lbl">replay it anywhere</span><pre>hypgraph --db desk.hypgraph export --telemetry -o desk.bundle.json</pre></div>
+  </div>
+</div></section>
+
+<section class="block" id="agents"><div class="wrap grid2" style="align-items:start">
+  <div>
+    <div class="kicker">For agents &amp; people</div>
+    <h2 class="h">Hold a seat over MCP.</h2>
+    <p class="sub">The HypGraph MCP server is the interface. <code>my_work</code> shows your open orders, with each
+      predicate and how to meet it. You register runs with their code, record results, make claims; each reply says
+      whether the order is done; you return it.</p>
+    <div class="callout"><b>If you are an agent reading this.</b> Call <code>my_work</code>. Do what the order says,
+      from the files, with the tools you have. Register the exact code you ran and print each value you register, with
+      its name: the instrument re-runs it. Write a claim's numbers from a result; a refusal tells you the honest
+      version. When the reply says the predicates are met, call <code>return_work</code> and stop there.</div>
+    <p style="margin-top:16px"><a class="btn" href="agents/">The full how-to for agents</a></p>
+  </div>
+  <div class="stack">
+    <div class="code"><span class="lbl">seats.toml</span><pre>[[seats]]
 name = "nicolas"
 role = "worker"
 external = true</pre></div>
-      <div class="code"><span class="lbl">your side</span><pre>pip install "hypgraph[mcp]"
-claude mcp add hypgraph -- hypgraph --db study.hypgraph --as nicolas mcp
-# then, in the session: my_work</pre></div>
-      <div class="code"><span class="lbl">on a served record</span><pre>HYPGRAPH_TOKEN="$NIC_TOKEN=nicolas"   # a token bound to your name, and only yours
-hypgraph --db study.hypgraph serve --writable --token "$HYPGRAPH_TOKEN"</pre></div>
-    </div>
+    <div class="code"><span class="lbl">your side</span><pre>pip install "hypgraph[mcp]"
+claude mcp add hypgraph -- hypgraph --db study.hypgraph --as nicolas mcp</pre></div>
   </div>
-</section>
+</div></section>
 
-<section class="block" id="engineers">
-  <div class="wrap grid2" style="align-items:start">
-    <div>
-      <div class="kicker">For engineers</div>
-      <h2 class="h">A task, a profile, a budget.</h2>
-      <p class="sub">The core depends on <code>hypgraph</code> and <code>httpx</code>. <code>Task(profile=…)</code>
-        pins the governance profile and brings its roster; <code>toolkits.register</code> is how your sandbox, your
-        data access and your CI become tools — nothing that executes or reaches a network ships in the box, and a
-        profile that asks for a toolkit you haven't registered fails loudly.</p>
-      <p class="sub">Workers can share one process or talk to a record served by <code>hypgraph serve --writable</code>
-        with token-bound writes — one record server, stateless workers anywhere, and the file still verifies. A run
-        that died resumes from the record. The OpenAI-compatible adapter covers DeepInfra, OpenAI, NVIDIA NIM, vLLM,
-        Ollama and most gateways; <code>hypswarm[anthropic]</code> adds the Messages API.</p>
-      <div class="row"><a class="btn primary" href="engineers/">The full how-to</a><a class="btn" href="https://github.com/voodoomods/hypswarm">Source &amp; README</a>
-        <a class="btn" href="https://github.com/voodoomods/hypswarm/blob/main/docs/DESIGN.md">The design</a>
-        <a class="btn" href="https://github.com/voodoomods/hypswarm/tree/main/docs/decisions">Decisions</a></div>
-    </div>
-    <div class="stack">
-      <div class="code"><span class="lbl">python</span><pre>from hypswarm import Task, Budget, run, toolkits
-from hypswarm.providers import OpenAICompatible
+<section class="block" id="engineers"><div class="wrap grid2" style="align-items:start">
+  <div>
+    <div class="kicker">For engineers</div>
+    <h2 class="h">A task, a profile, a budget.</h2>
+    <p class="sub"><code>Task(profile=…)</code> pins the governance profile and brings its roster;
+      <code>toolkits.register</code> is how your sandbox, data access and CI become tools. Tools that execute code or
+      reach a network don't ship in the box, and a profile that asks for a toolkit you haven't registered fails loudly.
+      Workers can share one process or talk to a record served with token-bound writes; a run that died resumes from
+      the record.</p>
+    <div class="row"><a class="btn primary" href="engineers/">The full how-to</a><a class="btn" href="https://github.com/voodoomods/hypswarm">Source &amp; README</a>
+      <a class="btn" href="https://github.com/voodoomods/hypswarm/tree/main/docs/decisions">Design decisions</a></div>
+  </div>
+  <div class="stack">
+    <div class="code"><span class="lbl">python</span><pre>from hypswarm import Task, Budget, run, toolkits
 
 toolkits.register("python", lambda ctx: [my_sandboxed_python_tool])
-
 task = Task(title="Is there an edge after costs",
-            mission="Backtest the mean-reversion thesis on bars.csv; out of sample 2022–2024.",
-            questions=[("Q1", "Out-of-sample return after fees?"), ("Q2", "Max drawdown?")],
+            mission="Backtest the thesis on bars.csv, out of sample.",
+            questions=[("Q1", "Out-of-sample return after fees?")],
             files={"bars.csv": open("bars.csv", "rb").read()},
-            profile="trading")                           # quant · risk · lead come with it
-model = OpenAICompatible("deepseek-ai/DeepSeek-V4.1-Flash", base_url="https://api.deepinfra.com/v1/openai")
-res = asyncio.run(run(task, None, model, record="desk.hypgraph", folder="work/",
-                      toolkits=["files", "python"], reproducer=my_sandboxed_python,
-                      budget=Budget(max_calls=150, max_usd=1.0)))
-print(res.report)</pre></div>
-      <div class="code"><span class="lbl">record server, token-bound</span><pre>hypgraph --db desk.hypgraph serve --writable --no-browser \
-  --token "$SWARM_TOKEN=harness,quant,risk,lead" --token "$NIC_TOKEN=nicolas"
-hypswarm run --task task.toml --profile trading --record-url http://127.0.0.1:8765</pre></div>
-    </div>
+            profile="trading")
+res = asyncio.run(run(task, None, model, record="desk.hypgraph",
+                      budget=Budget(max_calls=150, max_usd=1.0)))</pre></div>
   </div>
-</section>
+</div></section>
 
-<section class="block" id="status">
-  <div class="wrap">
-    <div class="kicker">Status</div>
-    <h2 class="h">Alpha, measured as it's built.</h2>
-    <p class="sub"><span class="alpha">alpha 0.1.0a7</span>&nbsp; HypSwarm grew out of the harness the HypGraph harmony
-      study runs agent teams on, and it is measured there as a preregistered condition — every change to the
-      scheduler is tried against a scripted-model benchmark and against real runs before it's described here. Built:
-      the scheduler that issues each question's stage order, workers, five profiles with rosters and workflows, the
-      tool registry, agent seats for LangChain / LangGraph, PydanticAI and CrewAI, external seats over MCP, the record
-      server with token-bound writes, resume, escalation, instrument reproduction, verified file tools, the
-      OpenAI-compatible, Anthropic, Bedrock and LangChain model adapters, ten runnable examples, and a test suite that
-      runs every scheduler path in seconds. Every design decision is written down in
-      <a href="https://github.com/voodoomods/hypswarm/tree/main/docs/decisions">docs/decisions</a>.</p>
-  </div>
-</section>
+<section class="block" id="record"><div class="wrap">
+  <div class="kicker">This page has a record</div>
+  <h2 class="h">We hold this page to the rules it describes.</h2>
+  <p class="sub">The figures above are claims in a HypGraph record built with the page. The build's instrument measures
+    them, a reviewer re-measures each another way — the tests run again, the example runs started fresh — and the
+    page's text is checked against the record with <code>hypgraph check</code>. Open it in the app above with
+    <a href="#product" data-show="page">This page's record</a>, or download <a href="data/site-record.bundle.json">the bundle</a>.</p>
+  <div id="record-claims"></div>
+</div></section>
+
+<section class="block" id="status"><div class="wrap">
+  <div class="kicker">Status</div>
+  <h2 class="h">Alpha.</h2>
+  <p class="sub">The API may change between alphas; each release is tagged, tested in CI, and published to PyPI by
+    trusted publishing. Built: the scheduler that issues each question's stage order, workers, five profiles with
+    rosters and workflows, the tool registry, agent seats for LangChain / LangGraph, PydanticAI and CrewAI, external
+    seats over MCP, token-bound writes on a served record, resume, escalation, instrument reproduction, verified file
+    tools, telemetry with optional OpenTelemetry, model adapters for OpenAI-compatible endpoints, Anthropic, Bedrock
+    and LangChain, and ten runnable examples. Design decisions are written down in
+    <a href="https://github.com/voodoomods/hypswarm/tree/main/docs/decisions">docs/decisions</a>.</p>
+</div></section>
 </main>
 
-<footer class="foot"><div class="wrap">
+<footer><div class="wrap">
   <span>HypSwarm is built on <a href="https://hypgraph.com">HypGraph</a>. Apache-2.0.</span>
-  <span>Made by <a href="https://www.linkedin.com/in/nicolas-houghtaling-b68074147">Nicolas Houghtaling</a> at <a href="https://github.com/voodoomods">VoodooMods LLC</a>.</span>
+  <span>Made by <a href="https://www.linkedin.com/in/nicolas-houghtaling-b68074147">Nicolas Houghtaling</a> · VoodooMods LLC · <a href="https://github.com/voodoomods/hypswarm">GitHub</a> · <a href="llms.txt">llms.txt</a></span>
 </div></footer>
-<script>
-  document.querySelector('[data-toggle-theme]')?.addEventListener('click',()=>{
-    const d=document.documentElement,cur=d.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
-    d.dataset.theme=cur==='dark'?'light':'dark';try{localStorage.setItem('hg-theme',d.dataset.theme)}catch(e){}});
-</script>
+
+<script src="app/vendor/cytoscape.min.js" defer></script>
+<script src="app/vendor/layout-base.js" defer></script>
+<script src="app/vendor/cose-base.js" defer></script>
+<script src="app/vendor/cytoscape-fcose.js" defer></script>
+<script src="app/hypgraph.js" defer></script>
 <script src="assets/site.js" defer></script>
+<script src="assets/site-data.js" defer></script>
+<script src="assets/home.js" defer></script>
 </body>
 </html>
