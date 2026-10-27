@@ -57,6 +57,18 @@ def _to_review(row: dict[str, Any]) -> str:
     return str(pending[-1] if pending else row["answers"][-1])
 
 
+# A stage that changes the watched world (software: the diff). The seats it names are the change-makers: they
+# aren't a fallback for another stage. With the tester busy, a counting question's claim stage went to the
+# implementer, who rewrote the code under test; the new head made every check stale (studies E4, evening run).
+_CHANGE_GATES = frozenset({"diff_registered"})
+READ_ONLY = (" This stage reads the working files as they are: don't edit them — a new head supersedes the code every "
+             "check so far ran on.")
+
+
+def _changers(gates: Sequence[dict[str, Any]]) -> set[str]:
+    return {tok for gt in gates if gt["gate"] in _CHANGE_GATES for tok in re.findall(r"[a-z_]+", str(gt.get("who") or "").lower())}
+
+
 _DECIDE = ("rework", "cancel_work", "add")
 LEAD_DECIDES = ("This is your last turn on this exception: decide now. rework the order with what is missing and, if a "
                 "predicate can't be met as asked, a changed done_when; or cancel_work with the reason. Reading is no "
@@ -376,8 +388,9 @@ class Scheduler:
             return None
         return rows
 
-    def _pick_for_stage(self, pool: Sequence[Seat], who: str, text: str) -> Seat | None:
-        """The seat a stage names (`quant`, `fact_checker`), when it is idle; else the best fit for the question."""
+    def _pick_for_stage(self, pool: Sequence[Seat], who: str, text: str, avoid: set[str] | None = None) -> Seat | None:
+        """The seat a stage names (`quant`, `fact_checker`), when it is idle; else the best fit for the question among
+        the idle seats not in ``avoid`` (the seats a change stage names: see _changers)."""
         idle = self._idle(pool)
         if not idle:
             return None
@@ -385,6 +398,9 @@ class Scheduler:
         named = [s for s in idle if s.name in tokens]
         if named:
             return named[0]
+        idle = [s for s in idle if s.name not in (avoid or set())]
+        if not idle:
+            return None
         return max(idle, key=lambda s: (fit(s, f"{who} {text}", "question"), -self.seats.index(s)))
 
     def _assign_from_stages(self, rows: list[dict[str, Any]]) -> None:
@@ -424,10 +440,11 @@ class Scheduler:
                 if gt["gate"] in _REVIEW_GATES:
                     break
                 run.append(gt)
-            seat = self._pick_for_stage(self.workers, first["who"], text)
+            changes = any(gt["gate"] in _CHANGE_GATES for gt in run)
+            seat = self._pick_for_stage(self.workers, first["who"], text, avoid=None if changes else _changers(gates))
             objective = (f"{q['code']} is at stage '{first['stage']}' ({q['index']}/{q['of']}) of the {q['profile']} "
                          f"workflow — {first['why']}. Move it through {', '.join(gt['stage'] for gt in run)}: "
-                         f"{text}")
+                         f"{text}" + (READ_ONLY if _changers(gates) and not changes else ""))
             if seat and self._issue(seat, q["question"], objective, [{"p": gt["gate"]} for gt in run]):
                 self._ev("stage_order", question=q["code"], stage=first["stage"], gates=[gt["gate"] for gt in run],
                          seat=seat.name)
@@ -495,11 +512,11 @@ class Scheduler:
             return
         why = "; ".join(self._stale(nid)[:2]) or "what it rests on has changed"
         who = next((gt["who"] for gt in gates[:i] if gt["gate"] in _RESULT_GATES), gates[i]["who"])
-        seat = self._pick_for_stage(self.workers, who, text)
+        seat = self._pick_for_stage(self.workers, who, text, avoid=_changers(gates))
         objective = (f"{q['code']}'s answer {code} rests on evidence that is now stale — {why}. The instrument re-ran it on "
                      "the current files and it did not reproduce. Recompute from the files as they are now (the notices "
                      f"say what changed), register the run, and write the claim again; link the new claim supersedes "
-                     f"{code}. The question: {text}")
+                     f"{code}. The question: {text}" + (READ_ONLY if _changers(gates) else ""))
         if seat and self._issue(seat, q["question"], objective, [{"p": "result_exists"}, {"p": "claim_made"}]):
             self.res.refreshes += 1
             self._ev("refresh_order", question=q["code"], stale=code, why=why[:160], seat=seat.name)

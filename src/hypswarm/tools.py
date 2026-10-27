@@ -45,6 +45,10 @@ def _live(n: dict[str, Any]) -> bool:
 
 _TIME_UNIT = re.compile(r"^(?:s|secs?|seconds?|ms|msecs?|milliseconds?|us|µs|μs|microseconds?|ns|nanoseconds?)$",
                         re.IGNORECASE)
+# The code measures time: only then is a value in seconds a timing. A duration that is the data (parse_duration("2.6s")
+# returns 3 seconds) re-runs to the same digits; it was refused as a timing (studies E4, evening run).
+_MEASURES_TIME = re.compile(r"\b(?:perf_counter(?:_ns)?|monotonic(?:_ns)?|process_time(?:_ns)?|thread_time(?:_ns)?|"
+                            r"time_ns|timeit|default_timer|time\.time|datetime\.now|utcnow)\b")
 _TIME_KEY = re.compile(r"(?:_|^)(?:s|sec|secs|seconds|ms|us|ns)$|(?:^|_)(?:time|timing|elapsed|duration|latency)(?:_|$)",
                        re.IGNORECASE)
 
@@ -196,7 +200,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         values; answers: the question code it answers; scope: under which conditions it holds; claim_kind: finding
         (default) | exclusion | inconclusive. The result counts toward your order by itself; a claim settles a
         question."""
-        bare = _timings_without_spread(values or {})
+        bare = _timings_without_spread(values or {}) if _MEASURES_TIME.search(code) else []
         if bare and code.strip():
             # the instrument re-runs the code: a re-timed value never lands on the same digits, and every timing
             # registered bare came back CONTRADICTED while the ones with a spread were confirmed (studies E2)

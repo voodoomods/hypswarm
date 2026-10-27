@@ -63,7 +63,7 @@ def test_a_timing_without_its_spread_is_refused_with_the_fix():
                          objective="Time it.")["order"]
     reg = next(t for t in worker_tools(r, Seat("tester", "worker"), inv, order, Meter(Budget(max_calls=10)))
                if t.name == "register_run")
-    code = "print('median_slow_s', 0.33)"
+    code = "import time\nt = time.perf_counter()\nsum(range(10**6))\nprint('median_slow_s', time.perf_counter() - t)"
     out = reg.fn(name="time", result_summary="Timed dedupe_slow.", values={"median_slow_s": {"value": 0.33, "unit": "s"}},
                  code=code)
     assert out.startswith("refused") and "spread" in out
