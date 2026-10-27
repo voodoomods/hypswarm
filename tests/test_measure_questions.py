@@ -44,3 +44,29 @@ def test_the_lead_cannot_add_an_instruction_as_a_question():
     out = add.fn(type="question", fields={"text": "CL2 is unchecked. Assign it to risk as a review of CL2."})
     assert out.startswith("refused") and "rework" in out
     assert add.fn(type="question", fields={"text": "Does the signal survive a one-day delay?"}).startswith("added")
+
+
+def test_a_timing_without_its_spread_is_refused_with_the_fix():
+    """E2: every timing registered bare was contradicted on re-run; the ones with a spread were confirmed."""
+    from hypswarm import Budget
+    from hypswarm.budget import Meter
+    from hypswarm.tools import _timings_without_spread, worker_tools
+
+    assert _timings_without_spread({"median_slow_s": {"value": 0.33}, "elapsed_ms": 12.5, "t": {"value": 3, "unit": "ms"},
+                                    "ok": {"value": 0.4, "unit": "s", "spread": [0.39, 0.41]},
+                                    "fast": {"value": 4e-4, "unit": "s", "rel_tol": 0.2},
+                                    "n_items": {"value": 10000}, "passed": {"k": 6, "n": 6}}) == \
+        ["median_slow_s", "elapsed_ms", "t"]
+    r = LocalRecord(None, [Seat("tester", "worker"), Seat("critic", "reviewer")])
+    inv = r.start("Time it.", "Time dedupe.", [("Q1", "How long does dedupe_slow take?")])
+    order = r.issue_work(author="harness", inv=inv, target=r.resolve("Q1", inv), assignee="tester",
+                         objective="Time it.")["order"]
+    reg = next(t for t in worker_tools(r, Seat("tester", "worker"), inv, order, Meter(Budget(max_calls=10)))
+               if t.name == "register_run")
+    code = "print('median_slow_s', 0.33)"
+    out = reg.fn(name="time", result_summary="Timed dedupe_slow.", values={"median_slow_s": {"value": 0.33, "unit": "s"}},
+                 code=code)
+    assert out.startswith("refused") and "spread" in out
+    ok = reg.fn(name="time", result_summary="Timed dedupe_slow over 7 repeats.", code=code,
+                values={"median_slow_s": {"value": 0.33, "unit": "s", "spread": [0.32, 0.35]}})
+    assert ok.startswith("run ")

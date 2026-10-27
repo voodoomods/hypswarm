@@ -43,6 +43,27 @@ def _live(n: dict[str, Any]) -> bool:
     return (st.get("lifecycle") or "active") == "active" and not st.get("fallen")
 
 
+_TIME_UNIT = re.compile(r"^(?:s|secs?|seconds?|ms|msecs?|milliseconds?|us|µs|μs|microseconds?|ns|nanoseconds?)$",
+                        re.IGNORECASE)
+_TIME_KEY = re.compile(r"(?:_|^)(?:s|sec|secs|seconds|ms|us|ns)$|(?:^|_)(?:time|timing|elapsed|duration|latency)(?:_|$)",
+                       re.IGNORECASE)
+
+
+def _timings_without_spread(values: dict[str, Any]) -> list[str]:
+    """Values that are timings (a time unit, or a key such as median_slow_s / elapsed_ms) and carry no spread."""
+    out = []
+    for k, v in values.items():
+        if isinstance(v, dict):
+            if "spread" in v or "rel_tol" in v or "k" in v or not isinstance(v.get("value"), (int, float)):
+                continue
+            unit = str(v.get("unit") or "").strip()
+            if _TIME_UNIT.match(unit) or (not unit and _TIME_KEY.search(k)):
+                out.append(k)
+        elif isinstance(v, (int, float)) and not isinstance(v, bool) and _TIME_KEY.search(k):
+            out.append(k)
+    return out
+
+
 def implied_uses(record: Record, inv: str, order: str, code: str) -> list[str]:
     """The artifacts a registered run used, as far as the record can tell without the author saying so: every live
     file artifact whose path the code names, and — under a workflow — the live diff or instance that is part of the
@@ -147,6 +168,13 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         values; answers: the question code it answers; scope: under which conditions it holds; claim_kind: finding
         (default) | exclusion | inconclusive. The result counts toward your order by itself; a claim settles a
         question."""
+        bare = _timings_without_spread(values or {})
+        if bare and code.strip():
+            # the instrument re-runs the code: a re-timed value never lands on the same digits, and every timing
+            # registered bare came back CONTRADICTED while the ones with a spread were confirmed (studies E2)
+            return (f"refused: {', '.join(bare)} {'is a timing' if len(bare) == 1 else 'are timings'} — a re-run "
+                    "never prints the same digits, so the instrument would contradict it. Give each its spread over "
+                    "your repeats: {value, unit, spread: [lo, hi]} or rel_tol (a fraction)")
         try:
             links: list[dict[str, Any]] = [{"rel": "executes", "to": record.resolve(experiment, inv)}] if experiment.strip() else []
             declared = [record.resolve(str(a), inv) for a in (uses or []) if str(a).strip()]
