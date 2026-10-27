@@ -36,6 +36,7 @@ from .providers.base import ChatModel
 from .record import HARNESS, INSTRUMENT, LocalRecord
 from .reproduce import Reproducer, reproduce_result
 from .seats import Seat, fit
+from .telemetry import NULL, Telemetry, trace_tools
 from .tools import OnWrite, lead_tools
 from .worker import WorkerResult, await_external, run_agent_order, run_order
 from .world import World
@@ -78,7 +79,8 @@ class Scheduler:
                  lease_minutes: int = 240, lead_turns: int = 6,
                  on_return: Callable[[Scheduler, int], None] | None = None, external_poll_s: float = 1.0,
                  external_timeout_s: float | None = None, header: str = "", reproducer: Reproducer | None = None,
-                 world: World | None = None, on_write: OnWrite | None = None, assemble_report: bool = True):
+                 world: World | None = None, on_write: OnWrite | None = None, assemble_report: bool = True,
+                 tel: Telemetry | None = None, tel_parent: str = ""):
         self.r, self.inv, self.seats = record, inv, list(seats)
         self.model_for, self.meter = model_for, meter
         self.data_tools, self.preamble, self.header = list(data_tools), preamble, header
@@ -87,6 +89,8 @@ class Scheduler:
         self.world = world                                  # host-supplied: keeps the record in step with the files
         self.on_write = on_write                            # host hook on every accepted write by a seat
         self.assemble_report = assemble_report              # no passing report from the lead: write it from the record
+        self.tel, self.tel_parent = tel or NULL, tel_parent  # telemetry: spans for orders, model and tool calls
+        self._order_spans: dict[asyncio.Task[WorkerResult], str] = {}
         self._reverified: set[tuple[str, str]] = set()      # (result, why it was stale) already re-run
         self.max_reworks, self.lease_minutes, self.lead_turns = max_reworks, lease_minutes, lead_turns
         self.workers = [s for s in seats if s.role == "worker"]
@@ -140,6 +144,10 @@ class Scheduler:
         e = {"t": round(time.time(), 3), "kind": kind, **kw}
         self.res.events.append(e)
         log.info("%s %s", kind, kw)
+        if self.tel.on:                                     # every scheduler decision, as telemetry too
+            said: dict[str, Any] = {k: v if isinstance(v, (int, float, bool)) or v is None else str(v)[:300]
+                                    for k, v in kw.items() if k not in ("span", "parent", "kind")}
+            self.tel.emit("decision", parent=self.tel_parent, event=kind, **said)
 
     def stop(self) -> None:
         self._stop = True
@@ -161,21 +169,33 @@ class Scheduler:
 
     def _dispatch(self, seat: Seat, order: str, escalate: bool = False) -> None:
         self.busy[seat.name] = order
+        code = self.r.get(order)["code"]
+        model: ChatModel | None = None
         if seat.external:
-            task = asyncio.create_task(await_external(seat, self.r, self.inv, order, timeout_s=self.external_timeout_s,
-                                                      poll_s=self.external_poll_s))
             model_name = "external"
         elif seat.agent is not None:
-            task = asyncio.create_task(run_agent_order(seat, self.r, self.inv, order, meter=self.meter,
-                                                       data_tools=self.data_tools, preamble=self._preamble(),
-                                                       header=self.header, on_write=self.on_write))
             model_name = "agent:" + str(getattr(seat.agent, "__name__", type(seat.agent).__name__))
         else:
             model = self._model(seat, escalate)
             model_name = getattr(model, "name", "?")
+        sp = self.tel.start("order", parent=self.tel_parent, seat=seat.name, order=code, role=seat.role, model=model_name,
+                            escalated=bool(escalate) or None)
+        task: asyncio.Task[WorkerResult]
+        if seat.external:
+            task = asyncio.create_task(await_external(seat, self.r, self.inv, order, timeout_s=self.external_timeout_s,
+                                                      poll_s=self.external_poll_s))
+        elif seat.agent is not None:
+            task = asyncio.create_task(run_agent_order(seat, self.r, self.inv, order, meter=self.meter,
+                                                       data_tools=self.data_tools, preamble=self._preamble(),
+                                                       header=self.header, on_write=self.on_write, tel=self.tel,
+                                                       tel_parent=sp))
+        else:
+            assert model is not None
             task = asyncio.create_task(run_order(seat, model, self.r, self.inv, order, meter=self.meter,
                                                  data_tools=self.data_tools, preamble=self._preamble(),
-                                                 header=self.header, on_write=self.on_write))
+                                                 header=self.header, on_write=self.on_write, tel=self.tel,
+                                                 tel_parent=sp))
+        self._order_spans[task] = sp
         self.inflight[task] = (seat, order)
         escalated = bool(escalate and seat.escalate_to and seat.escalate_to != seat.model and not seat.external)
         if escalated:
@@ -581,6 +601,9 @@ class Scheduler:
                 except Exception as e:  # noqa: BLE001
                     wr = WorkerResult(order=order, code=self.r.get(order)["code"], seat=seat.name, stopped=f"error: {e}")
                 self.res.workers.append(wr)
+                self.tel.end(self._order_spans.pop(t, ""), ok=not str(wr.stopped).startswith("error"),
+                             error=wr.stopped if str(wr.stopped).startswith("error") else "", calls=wr.calls,
+                             returned=wr.returned, by_record=wr.returned_by_record or None, stopped=wr.stopped or None)
                 self._ev("returned", seat=seat.name, order=wr.code, calls=wr.calls, returned=wr.returned,
                          by_record=wr.returned_by_record, stopped=wr.stopped)
                 self.returns += 1
@@ -591,6 +614,7 @@ class Scheduler:
                         self._ev("hook_error", why=str(e)[:200])
         for t in list(self.inflight):                       # drain anything still running (budget stop)
             t.cancel()
+            self.tel.end(self._order_spans.pop(t, ""), ok=False, error="cancelled: the run stopped")
         if self._stop and not self.res.stopped:
             self.res.stopped = "stopped"                    # the host called stop(); the record keeps the open orders
         self.res.report, self.res.report_accepted = await self._report()
@@ -600,6 +624,7 @@ class Scheduler:
     async def _lead_turns(self, user: str, tools: list[Tool], unit: str, turns: int) -> None:
         assert self.lead
         model = self.model_for(self.lead)
+        tools = trace_tools(tools, self.tel, parent=self.tel_parent, seat=self.lead.name, order=unit)
         messages = [Message("system", (self.header + "\n" if self.header else "") + self.lead.prompt() + "\n\n"
                             + self._preamble()), Message("user", user)]
         by = {t.name: t for t in tools}
@@ -609,12 +634,20 @@ class Scheduler:
             except BudgetExhausted:
                 return
             t0 = time.time()
+            mid = self.tel.start("model", parent=self.tel_parent, seat=self.lead.name, order=unit,
+                                 model=getattr(model, "name", ""))
             try:
                 reply = await model.complete(messages, tools, temperature=self.lead.temperature, unit=unit)
-            except Exception:
+            except Exception as e:
+                self.tel.end(mid, ok=False, error=f"{type(e).__name__}: {e}")
                 self.meter.release(unit)
                 raise
             self.meter.add(unit, reply.input_tokens, reply.cached_tokens, reply.output_tokens)
+            used: dict[str, Any] = {"in": reply.input_tokens, "cached": reply.cached_tokens,
+                                    "out": reply.output_tokens,
+                                    "usd": self.tel.usd(reply.input_tokens, reply.cached_tokens, reply.output_tokens),
+                                    "tool_calls": [tc.name for tc in reply.tool_calls], "text": self.tel.text(reply.content)}
+            self.tel.end(mid, **used)
             self.res.lead_calls += 1
             self.res.lead_log.append({"t": round(t0, 3), "s": round(time.time() - t0, 3), "unit": unit,
                                       "agent": self.lead.name, "in": reply.input_tokens,

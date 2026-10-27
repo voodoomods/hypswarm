@@ -98,6 +98,20 @@ the solve.
 Each of these is one of the [examples](https://github.com/voodoomods/hypswarm/tree/main/examples), runnable for free;
 the trace shows every stage order and the refusals on the way.
 
+## Watching a run
+
+Every run that writes a record file also writes `<record>.telemetry.jsonl`: each model call, tool call, work order and
+scheduler decision as a span, with tokens, cost and timing. Serve the record and open the HypGraph UI's **Live** view to
+watch the swarm work: which seat is calling the model or running a tool right now, what each has spent, and a trace of
+where a work order's time went.
+
+```bash
+hypgraph --db desk.hypgraph serve        # then run the swarm against desk.hypgraph and open Live
+```
+
+`otel=True` sends the same spans and metrics to OpenTelemetry (`pip install 'hypswarm[otel]'`). Prompts, replies and
+tool arguments stay out unless `capture_content=True`.
+
 ## When the world changes
 
 `run(..., watch=True)` keeps the record in step with the files and pages the run used, with no model call: a file

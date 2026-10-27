@@ -64,6 +64,7 @@ class RunResult:
     seconds: float
     run_node: str
     report_source: str = ""                 # "lead", or "assembled" by the harness from the current claims
+    telemetry: str = ""                     # the telemetry sidecar written, if any
 
     def answers(self) -> dict[str, Any] | None:
         import re
@@ -104,7 +105,8 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
               external_poll_s: float = 1.0, external_timeout_s: float | None = None,
               resume: str = "", reproducer: Any = None, folder: str | Path | None = None,
               toolkits: Sequence[str] | None = None, watch: bool = False, refetch: Any = None,
-              on_write: Any = None, assemble_report: bool = True) -> RunResult:
+              on_write: Any = None, assemble_report: bool = True, telemetry: Any = "auto", otel: bool = False,
+              capture_content: bool = False) -> RunResult:
     """Run ``task`` with ``seats`` on a record at ``record`` — a path, in memory, or a record client such as
     ``HttpRecord`` for a record served by ``hypgraph serve --writable`` — under ``budget``.
     ``models``: one model for every seat, a mapping by seat name / role / model id, or a function of the seat.
@@ -120,7 +122,12 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
     evidence moved are redone. ``on_write(kind, payload)`` is told after every write a seat makes.
     ``assemble_report``: when the lead submits no report that passes the record's check, the harness writes one from
     the record — facts, a labelled note, and the answers the current claims give (assemble.py); ``report_source``
-    says which it was."""
+    says which it was.
+    ``telemetry``: what the run does that the record can't see — every model call, tool call, work order and
+    scheduler decision, as spans (telemetry.py). "auto" writes ``<record>.telemetry.jsonl`` beside a record file
+    (``hypgraph serve`` streams it to the Live view); a path writes there; False is off. ``otel`` also sends spans and
+    metrics to OpenTelemetry (``hypswarm[otel]``). ``capture_content`` adds reply text, tool arguments and outputs
+    (truncated, scrubbed); off by default."""
     sp = None
     if task.profile:
         from .profiles import get as _profile
@@ -154,6 +161,12 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
               "preamble_sha256": hashlib.sha256(task.preamble().encode()).hexdigest(),
               "data_tools": [t.name for t in data_tools], **({"resumes": inv} if resume else {})}
     rid = rec.file_run(inv, config)
+    from .telemetry import build as _telemetry
+    tel = _telemetry(telemetry, record=record, run=rid, inv=inv, otel=otel, capture_content=capture_content,
+                     pricing=pricing)
+    run_span = tel.start("run", title=task.title, profile=sp.id if sp else None, seats=config["seats"],
+                         budget=config["budget"], record=str(getattr(rec, "path", "") or ""),
+                         capture_content=capture_content or None)
     world = None
     if watch or refetch:
         from .world import World
@@ -163,7 +176,7 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
     sched = Scheduler(rec, inv, seats, model_for, meter, data_tools=data_tools, preamble=task.preamble(),
                       on_return=on_return, lease_minutes=lease_minutes, external_poll_s=external_poll_s,
                       external_timeout_s=external_timeout_s, header=task.header, reproducer=reproducer,
-                      world=world, on_write=on_write, assemble_report=assemble_report)
+                      world=world, on_write=on_write, assemble_report=assemble_report, tel=tel, tel_parent=run_span)
     for s in seats:
         if s.external:
             log.info("external seat %s: %s", s.name, s.mcp_hint(str(rec.path)))
@@ -172,10 +185,16 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
         rec.finish_run(rid, "succeeded" if sr.stopped == "settled" else "interrupted", sr.stopped)
     except Exception as e:
         rec.finish_run(rid, "failed", f"{type(e).__name__}: {e}")
+        tel.end(run_span, ok=False, error=f"{type(e).__name__}: {e}", calls=meter.total.calls, usd=round(meter.usd, 6))
+        tel.close()
         raise
+    tel.end(run_span, stopped=sr.stopped, calls=meter.total.calls, usd=round(meter.usd, 6),
+            report_source=sr.report_source or None, seconds=round(time.time() - t0, 1))
+    tel.close()
     out = RunResult(inv=inv, record_path=str(rec.path), stopped=sr.stopped, report=sr.report,
                     report_accepted=sr.report_accepted, board=rec.question_board(inv), orders=rec.orders(inv),
                     usage=meter.summary(), scheduler=sr, seconds=round(time.time() - t0, 1), run_node=rid,
-                    report_source=sr.report_source)
+                    report_source=sr.report_source,
+                    telemetry=str(getattr(tel.sinks[0], "path", "")) if tel.sinks else "")
     log.info("run %s: %s in %d calls, $%.4f", inv, sr.stopped, meter.total.calls, meter.usd)
     return out
