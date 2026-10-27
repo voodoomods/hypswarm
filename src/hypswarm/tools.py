@@ -127,7 +127,9 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
     def register_run(name: str, result_summary: str, values: dict[str, Any] | None = None, outcome: str = "",
                      experiment: str = "", code: str = "", claim: str = "", answers: str = "", scope: str = "",
                      claim_kind: str = "", uses: list[str] | None = None) -> str:
-        """Record a computation you ran and the result it produced: values {name: {value, unit} | {k, n}}; code: the
+        """Record a computation you ran and the result it produced: values {name: {value, unit} | {k, n}} — a value
+        that varies run to run (a timing, an unseeded sample) also takes its spread: {value, unit, spread: [lo, hi]}
+        or rel_tol (a fraction), and the instrument confirms a re-run inside it; code: the
         exact code you ran — the instrument re-executes it and checks that the output shows every value you register,
         so PRINT each registered value with its name (print("n_items", n_items)). experiment: the experiment it
         executes, if any. uses: artifact codes the run read — the diff it tested, the instance it solved, the data

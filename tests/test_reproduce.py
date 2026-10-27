@@ -115,3 +115,18 @@ def test_check_output_three_verdicts():
     assert c["confirmed"] == [] and c["unprinted"] == ["comma_kept"] and not c["ok"] and "ModuleNotFoundError" in c["error"]
     warn = "n 7\n[stderr]\nDeprecationWarning: 3 of 4\n"
     assert check_output({"n": {"value": 7}}, warn)["confirmed"] == ["n"]   # warnings don't fail it
+
+
+def test_a_measured_value_with_its_spread_is_confirmed_within_it():
+    """A timing or a sampled count moves on a re-run; with its spread stated, a re-run inside it is confirmed and named
+    apart (studies E2: every timing contradicted for differing in the third digit; the run never settled)."""
+    out = "slow_median_ms 331.8\nfast_median_ms 0.47\nratio 705.9\nn_items 20000\n"
+    chk = check_output({"slow_median_ms": {"value": 335.4, "unit": "ms", "spread": [310, 360]},
+                        "fast_median_ms": {"value": 0.45, "rel_tol": 0.3}, "ratio": {"value": 741.0},
+                        "n_items": {"value": 20000}}, out)
+    assert chk["confirmed"] == ["slow_median_ms", "fast_median_ms", "n_items"]
+    assert chk["within"] == ["slow_median_ms", "fast_median_ms"] and chk["contradicted"] == ["ratio"]
+    assert check_output({"slow_median_ms": {"value": 345.0, "spread": [340, 350]}}, out)["contradicted"] == ["slow_median_ms"]
+    count = {"repeats": {"k": 97, "n": 1000, "spread": [70, 130]}}
+    assert check_output(count, "repeats 104 of 1000\n")["within"] == ["repeats"]
+    assert check_output(count, "repeats 104 of 999\n")["contradicted"] == ["repeats"]     # a different n isn't the count

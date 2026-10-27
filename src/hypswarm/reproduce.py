@@ -63,6 +63,21 @@ def _labelled(name: str, stdout: str) -> list[float]:
     return out
 
 
+def _spread(v: Any) -> tuple[float, float] | None:
+    """The range a measured value may move in on a re-run, as its author stated it: ``spread`` [lo, hi] or ``rel_tol``
+    (a fraction of the value). For a count {k, n} the range applies to k. None when the author stated neither."""
+    if not isinstance(v, dict):
+        return None
+    centre = v.get("k") if "k" in v and "n" in v else v.get("value")
+    sp = v.get("spread")
+    if isinstance(sp, (list, tuple)) and len(sp) == 2 and all(isinstance(x, (int, float)) for x in sp):
+        return float(min(sp)), float(max(sp))
+    tol = v.get("rel_tol")
+    if isinstance(tol, (int, float)) and isinstance(centre, (int, float)) and tol >= 0:
+        return float(centre) - abs(float(centre)) * float(tol), float(centre) + abs(float(centre)) * float(tol)
+    return None
+
+
 def check_output(values: dict[str, Any], stdout: str) -> dict[str, Any]:
     """What the re-run's output says about each registered value, kept apart because they mean different things:
 
@@ -71,6 +86,10 @@ def check_output(values: dict[str, Any], stdout: str) -> dict[str, Any]:
                  what they register (E′, 2026-10-25: 116 of 258 'not reproduced' were this, and a false negative
                  sent reviewers recomputing more than before)
     contradicted the output prints a *different* number next to this value's name
+    within       a measured value (a timing, a sampled count) whose author stated its ``spread`` or ``rel_tol``: the
+                 re-run printed, next to its name, a number inside that range. Counted as confirmed, and named apart
+                 so a reader can tell "the same number" from "within its stated spread" (studies E2: every timing
+                 was contradicted for differing in the third digit, and the run never settled)
 
     ``ok`` is true when nothing is contradicted and at least one value is confirmed. Only the program's own output
     counts: a ``[stderr]`` section (as a host sandbox appends it) never confirms a value, and a traceback means the
@@ -87,6 +106,7 @@ def check_output(values: dict[str, Any], stdout: str) -> dict[str, Any]:
     confirmed: list[str] = []
     unprinted: list[str] = []
     contradicted: list[str] = []
+    within: list[str] = []
     for name, v in (values or {}).items():
         want: list[float] = []
         if isinstance(v, dict):
@@ -98,13 +118,19 @@ def check_output(values: dict[str, Any], stdout: str) -> dict[str, Any]:
             want = [float(v)]
         if not want:
             continue
+        labelled = _labelled(name, out_part)
+        rng = _spread(v)
         if all(_matches(w, printed) for w in want):
             confirmed.append(name)
-        elif any(not _matches(w, [x]) for w in want for x in _labelled(name, out_part)) and _labelled(name, out_part):
+        elif rng and any(rng[0] <= x <= rng[1] for x in labelled) and \
+                ("n" not in v or _matches(float(v["n"]), printed)):          # a count's n must still be the same
+            confirmed.append(name)
+            within.append(name)
+        elif any(not _matches(w, [x]) for w in want for x in labelled) and labelled:
             contradicted.append(name)
         else:
             unprinted.append(name)
-    return {"confirmed": confirmed, "unprinted": unprinted, "contradicted": contradicted,
+    return {"confirmed": confirmed, "unprinted": unprinted, "contradicted": contradicted, "within": within,
             "found": confirmed, "missing": unprinted + contradicted,          # older names, kept
             "ok": not contradicted and bool(confirmed)}
 
@@ -229,11 +255,15 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
     else:
         chk = check_output(values, stdout)
     n = len([k for k in values if k in chk["confirmed"] or k in chk["unprinted"] or k in chk["contradicted"]])
-    parts = [f"{len(chk['confirmed'])} of {n} registered values confirmed by the output"]
+    parts = [f"{len(chk['confirmed'])} of {n} registered values confirmed by the output"
+             + (f" ({', '.join(chk['within'])} within the spread its author stated)" if chk.get("within") else "")]
     if chk["unprinted"]:
         parts.append(f"not printed by the code (not evidence against): {', '.join(chk['unprinted'])}")
     if chk["contradicted"]:
-        parts.append(f"CONTRADICTED by the output: {', '.join(chk['contradicted'])}")
+        parts.append(f"CONTRADICTED by the output: {', '.join(chk['contradicted'])}"
+                     + ("" if all(_spread(values.get(k)) for k in chk["contradicted"]) else
+                        " — if a value varies run to run (a timing, an unseeded sample), seed it or register it with "
+                        "its spread ([lo, hi]) or rel_tol"))
     if err:
         parts.append(f"the code failed: {err}")
     verdict = "; ".join(parts)
