@@ -50,6 +50,13 @@ _RESULT_GATES = {"result_exists", "tests_pass_current", "tests_pass", "backteste
                  "feasible_bounded", "run_registered"}
 
 
+def _to_review(row: dict[str, Any]) -> str:
+    """The answer a review should go to: the newest the record lists as unchecked (a checked answer beside it doesn't
+    settle the question), else the newest answer (records before the ``unchecked`` field)."""
+    pending = row.get("unchecked") or []
+    return str(pending[-1] if pending else row["answers"][-1])
+
+
 @dataclass
 class SchedulerResult:
     stopped: str = ""                       # settled | budget | stuck | cancelled
@@ -392,12 +399,13 @@ class Scheduler:
             rev = next((k for k, gt in enumerate(gates) if gt["gate"] == "reviewed"), None)
             if q["question"] in answered and rev is not None and not gates[rev]["met"] and i < rev:
                 b = answered[q["question"]]
+                code = _to_review(b)
                 try:
-                    claim = self.r.resolve(b["answers"][-1], self.inv)
+                    claim = self.r.resolve(code, self.inv)
                 except (GraphError, KeyError, IndexError):
                     claim = ""
                 if claim and claim not in busy_targets and not self._stale(claim):
-                    self._issue_review_on(q, gates[rev], claim, b["answers"][-1], text, busy_targets)
+                    self._issue_review_on(q, gates[rev], claim, code, text, busy_targets)
             if q["question"] in busy_targets:
                 continue
             if first["gate"] in _REVIEW_GATES:
@@ -438,10 +446,34 @@ class Scheduler:
             except (GraphError, KeyError):
                 continue
         fresh = [(c, x) for c, x in ids if not self._stale(x)]
+        # a checked answer beside an unchecked one: the unchecked one is what keeps the question open (the record
+        # settles a question once every live answer is checked; studies T1, opposed answers)
+        unchecked = [(c, x) for c, x in fresh if self._review_state(x) != "checked"]
+        if unchecked:
+            fresh = unchecked
         if fresh:
             self._issue_review_on(q, first, fresh[-1][1], fresh[-1][0], text, busy_targets)
         elif ids:
             self._issue_refresh(q, gates, i, text, ids[-1][0], ids[-1][1], busy_targets)
+
+    def _beside(self, question: str, code: str) -> str:
+        """For a review of a second answer: the checked answers it sits beside, and what the reviewer is to judge."""
+        row = next((b for b in self.r.question_board(self.inv) if b["id"] == question), None)
+        if not row or code not in (row.get("unchecked") or []):
+            return ""
+        checked = [a for a in row["answers"] if a not in row["unchecked"]]
+        if not checked:
+            return ""
+        return (f" {code} sits beside {', '.join(checked)}, already checked, on the same question. Read them side by "
+                "side: if they disagree, the files decide which is right — object to the wrong one, even if its numbers "
+                "reproduce (a re-run confirms the numbers, not what they mean). The question settles only when every "
+                "live answer to it is checked.")
+
+    def _review_state(self, nid: str) -> str:
+        try:
+            return str(((self.r.get(nid).get("state") or {}).get("review") or {}).get("state") or "unchecked")
+        except (GraphError, KeyError):
+            return ""
 
     def _stale(self, nid: str) -> list[str]:
         try:
@@ -490,7 +522,8 @@ class Scheduler:
                      f"workflow. Review {code}, the {what} that answers it: the order lists it, its values and "
                      "what it rests on" + (", and what the instrument's re-run confirmed — recompute only a value it "
                      "CONTRADICTED; a value merely not printed is not evidence against" if self.reproducer else "")
-                     + ". Judge the method and the wording against the question; record a verdict.")
+                     + ". Judge the method and the wording against the question; record a verdict."
+                     + self._beside(q["question"], code))
         if seat and self._issue(seat, target, objective, [{"p": first["gate"]}]):
             self._ev("stage_order", question=q["code"], stage=first["stage"], gates=[first["gate"]], seat=seat.name)
             busy_targets.add(target)
@@ -510,7 +543,8 @@ class Scheduler:
                 if seat and self._issue(seat, q["id"], f"Answer {q['code']}: {q['text']}"):
                     busy_targets.add(q["id"])
             elif q["status"] == "answered" and self.reviewers:
-                claim = self.r.resolve(q["answers"][-1], self.inv)
+                code = _to_review(q)
+                claim = self.r.resolve(code, self.inv)
                 if claim in busy_targets:
                     continue
                 author = self.r.get(claim)["by"]
@@ -523,18 +557,19 @@ class Scheduler:
                         continue
                     self._reissued.add(claim)
                     worker = self._pick(self.workers, q["text"], "question")
-                    if worker and self._issue(worker, q["id"], f"Answer {q['code']}: {q['text']} — {q['answers'][-1]} "
+                    if worker and self._issue(worker, q["id"], f"Answer {q['code']}: {q['text']} — {code} "
                                               f"by {author} can't be reviewed (its author is the reviewer); write the "
                                               "answer as your own claim, from the files."):
-                        self._ev("unreviewable", claim=q["answers"][-1], by=author, reissued_to=worker.name)
+                        self._ev("unreviewable", claim=code, by=author, reissued_to=worker.name)
                         busy_targets.add(q["id"])
                     continue
                 seat = self._pick(pool, q["text"], "claim")
-                objective = (f"Review {q['answers'][-1]}, which answers {q['code']}. The order lists the claim, its "
+                objective = (f"Review {code}, which answers {q['code']}. The order lists the claim, its "
                              "measurements and the results it rests on" + (", and what the instrument's re-run of the "
                              "author's code confirmed — recompute only a value it CONTRADICTED; a value merely not "
                              "printed is not evidence against" if self.reproducer else "") +
-                             ". Judge the method and the wording against the question; record a verdict.")
+                             ". Judge the method and the wording against the question; record a verdict."
+                             + self._beside(q["id"], code))
                 if seat and self._issue(seat, claim, objective, [{"p": "reviewed"}]):
                     busy_targets.add(claim)
         try:
