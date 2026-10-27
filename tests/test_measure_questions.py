@@ -70,3 +70,27 @@ def test_a_timing_without_its_spread_is_refused_with_the_fix():
     ok = reg.fn(name="time", result_summary="Timed dedupe_slow over 7 repeats.", code=code,
                 values={"median_slow_s": {"value": 0.33, "unit": "s", "spread": [0.32, 0.35]}})
     assert ok.startswith("run ")
+
+
+def test_a_long_review_method_spills_into_notes_instead_of_losing_the_review():
+    """E3: a reviewer's thorough method ran past the record's 1,500 characters and the whole review was refused."""
+    from hypswarm import Budget
+    from hypswarm.budget import Meter
+    from hypswarm.tools import worker_tools
+
+    r = LocalRecord(None, [Seat("tester", "worker"), Seat("critic", "reviewer")])
+    inv = r.start("Count it.", "Count the rows.", [("Q1", "How many rows are there?")], reviewers=["critic"])
+    g = r.g
+    rs = g.create(author="tester", type="result", inv=inv, fields={"summary": "Counted 12 rows.", "values": {"rows": {"value": 12}}})["id"]
+    cl = g.create(author="tester", type="claim", inv=inv, fields={
+        "statement": "The file has 12 rows.", "scope": "data.csv, every row.",
+        "measurements": [{"name": "rows", "key": "rows", "result": rs}]},
+        links=[{"rel": "answers", "to": r.resolve("Q1", inv)}, {"rel": "derived_from", "to": rs}])["id"]
+    order = r.issue_work(author="harness", inv=inv, target=cl, assignee="critic", objective="Check CL1.")["order"]
+    review = next(t for t in worker_tools(r, Seat("critic", "reviewer"), inv, order, Meter(Budget(max_calls=10)))
+                  if t.name == "review")
+    out = review.fn(node="CL1", verdict="checked", method="Recounted every row with csv.reader. " * 60,
+                    notes="12 rows, as stated.")
+    assert "checked (critic:checked" in out, out
+    rv = next(n for n in (r.get(x["id"]) for x in r.search("", "review", inv, 10)))
+    assert rv["body"]["method"].endswith("(continued in notes)") and rv["body"]["notes"].startswith("Method, continued")

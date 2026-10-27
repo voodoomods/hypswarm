@@ -49,6 +49,9 @@ _TIME_KEY = re.compile(r"(?:_|^)(?:s|sec|secs|seconds|ms|us|ns)$|(?:^|_)(?:time|
                        re.IGNORECASE)
 
 
+_METHOD_MAX = 1500                     # a review's method, as the record's schema caps it
+
+
 def _timings_without_spread(values: dict[str, Any]) -> list[str]:
     """Values that are timings (a time unit, or a key such as median_slow_s / elapsed_ms) and carry no spread."""
     out = []
@@ -216,6 +219,12 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
     def review(node: str, verdict: str, method: str, notes: str) -> str:
         """Review a claim or result: checked | pass | fail | objection | resolved | inconclusive | comment. Say how
         you checked and what you found. Never your own author's work."""
+        if len(method) > _METHOD_MAX:
+            # a thorough method over the record's limit lost the whole review (studies E3): the rest goes in notes
+            cut = method.rfind(" ", 0, _METHOD_MAX - 40)
+            cut = cut if cut > 0 else _METHOD_MAX - 40
+            method, notes = (method[:cut] + " … (continued in notes)",
+                             f"Method, continued: {method[cut:].strip()}\n\n{notes}"[:4000])
         try:
             out = record.review(author=me, target=record.resolve(node, inv), verdict=verdict.strip().lower(),
                                 method=method, notes=notes)
