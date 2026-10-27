@@ -28,7 +28,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       # hypgraph comes from PyPI (>= 0.4.2, the coordination layer); the bridges' frameworks so their tests run
-      - run: pip install -e ".[dev,anthropic,bedrock,langgraph,pydantic-ai,crewai]" "mypy==2.4.0" "ruff==0.17.2" fastmcp
+      - run: pip install -e ".[dev,anthropic,bedrock,langgraph,pydantic-ai,crewai,otel]" "opentelemetry-sdk>=1.20" "mypy==2.4.0" "ruff==0.17.2" fastmcp
       - run: python -m ruff check src tests examples --output-format=github
       - run: python -m mypy --strict src/hypswarm
       # -v names the test that is running; a test past 300 s fails with every thread's stack, not a silent hang

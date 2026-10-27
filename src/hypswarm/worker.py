@@ -20,6 +20,7 @@ from .messages import Message, Tool
 from .providers.base import ChatModel
 from .record import Record
 from .seats import Seat
+from .telemetry import NULL, Telemetry, trace_tools
 from .tools import OnWrite, worker_tools
 
 log = logging.getLogger("hypswarm.worker")
@@ -41,12 +42,14 @@ class WorkerResult:
 
 async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, order: str, *, meter: Meter,
                     data_tools: Sequence[Tool] = (), preamble: str = "", header: str = "",
-                    on_write: OnWrite | None = None) -> WorkerResult:
+                    on_write: OnWrite | None = None, tel: Telemetry | None = None, tel_parent: str = "") -> WorkerResult:
+    tel = tel or NULL
     code = record.get(order)["code"]
     res = WorkerResult(order=order, code=code, seat=seat.name)
     rtools = worker_tools(record, seat, inv, order, meter, on_write=on_write)
     state = rtools[-1].fn.__dict__["_state"]
-    tools = [t for t in data_tools if seat.may_use(t.name)] + rtools
+    tools = trace_tools([t for t in data_tools if seat.may_use(t.name)] + rtools, tel, parent=tel_parent,
+                        seat=seat.name, order=code)
     by = {t.name: t for t in tools}
     messages = [Message("system", (header + "\n" if header else "") + seat.prompt()
                         + ("\n\n" + preamble if preamble else "")),
@@ -58,14 +61,21 @@ async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, orde
             res.stopped = f"budget: {e}"
             break
         t0 = time.time()
+        mid = tel.start("model", parent=tel_parent, seat=seat.name, order=code, model=getattr(model, "name", ""),
+                        turn=res.turns + 1)
         try:
             reply = await model.complete(messages, tools, temperature=seat.temperature, unit=code)
         except Exception as e:  # noqa: BLE001 — a provider failure ends the order, never the run
+            tel.end(mid, ok=False, error=f"{type(e).__name__}: {e}")
             meter.release(code)
             res.stopped = f"error: {type(e).__name__}: {str(e)[:200]}"
             log.warning("worker %s on %s: model error %s", seat.name, code, e)
             break
         meter.add(code, reply.input_tokens, reply.cached_tokens, reply.output_tokens)
+        used: dict[str, Any] = {"in": reply.input_tokens, "cached": reply.cached_tokens, "out": reply.output_tokens,
+                                "usd": tel.usd(reply.input_tokens, reply.cached_tokens, reply.output_tokens),
+                                "tool_calls": [tc.name for tc in reply.tool_calls], "text": tel.text(reply.content)}
+        tel.end(mid, **used)
         res.calls += 1
         res.turns += 1
         res.call_log.append({"t": round(t0, 3), "s": round(time.time() - t0, 3), "unit": code, "agent": seat.name,
@@ -96,17 +106,20 @@ async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, orde
 
 async def run_agent_order(seat: Seat, record: Record, inv: str, order: str, *, meter: Meter,
                           data_tools: Sequence[Tool] = (), preamble: str = "", header: str = "",
-                          on_write: OnWrite | None = None) -> WorkerResult:
+                          on_write: OnWrite | None = None, tel: Telemetry | None = None,
+                          tel_parent: str = "") -> WorkerResult:
     """A seat held by an agent from another framework (``seat.agent``, see hypswarm.agents): it gets the same
     order, prompt and tools a native seat gets, runs its own loop, and reports what it used. One call is reserved
     before it starts (so a run at its budget never starts an agent); the calls it reports are counted when it
     ends, and the order is returned with its note if it did not return it itself."""
     from .agents import AgentOrder, call_agent
+    tel = tel or NULL
     code = record.get(order)["code"]
     res = WorkerResult(order=order, code=code, seat=seat.name)
     rtools = worker_tools(record, seat, inv, order, meter, on_write=on_write)
     state = rtools[-1].fn.__dict__["_state"]
-    tools = [t for t in data_tools if seat.may_use(t.name)] + rtools
+    tools = trace_tools([t for t in data_tools if seat.may_use(t.name)] + rtools, tel, parent=tel_parent,
+                        seat=seat.name, order=code)
     system = (header + "\n" if header else "") + seat.prompt() + ("\n\n" + preamble if preamble else "")
     try:
         meter.reserve(code)
@@ -116,14 +129,21 @@ async def run_agent_order(seat: Seat, record: Record, inv: str, order: str, *, m
         t0 = time.time()
         ao = AgentOrder(seat=seat, code=code, order=order, text=record.order_text(order), system=system, tools=tools,
                         calls_left=meter.calls_left(), record=record, inv=inv)
+        # the framework runs its own loop: its model calls are one span here, with the usage it reports at the end
+        mid = tel.start("model", parent=tel_parent, seat=seat.name, order=code, agent=True,
+                        model="agent:" + str(getattr(seat.agent, "__name__", type(seat.agent).__name__)))
         try:
             out = await call_agent(seat.agent, ao)
         except Exception as e:  # noqa: BLE001 — a framework failure ends the order, never the run
+            tel.end(mid, ok=False, error=f"{type(e).__name__}: {e}")
             meter.release(code)
             res.stopped = f"error: {type(e).__name__}: {str(e)[:200]}"
             log.warning("agent seat %s on %s: %s", seat.name, code, e)
         else:
             n = max(1, out.calls)                   # the reservation becomes the first call; the rest are added
+            used: dict[str, Any] = {"in": out.input_tokens, "cached": out.cached_tokens, "out": out.output_tokens,
+                                    "calls": n, "usd": tel.usd(out.input_tokens, out.cached_tokens, out.output_tokens)}
+            tel.end(mid, **used)
             meter.add(code, out.input_tokens, out.cached_tokens, out.output_tokens)
             for _ in range(n - 1):
                 meter.add(code, 0, 0, 0)

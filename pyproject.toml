@@ -38,6 +38,7 @@ pydantic-ai = ["pydantic-ai-slim>=0.4"]
 crewai = ["crewai>=1.15"]            # custom BaseLLMs return native tool calls from 1.15 on
 bedrock = ["boto3>=1.34"]
 mcp = ["fastmcp>=3.0"]
+otel = ["opentelemetry-api>=1.20"]   # spans and metrics to your OpenTelemetry pipeline (run(..., otel=True))
 dev = ["pytest>=8", "pytest-timeout>=2.3", "mypy>=1.10", "ruff>=0.5"]
 
 [project.urls]

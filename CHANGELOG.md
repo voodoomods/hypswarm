@@ -1,5 +1,25 @@
 # Changelog
  
+## Unreleased
+
+- **Telemetry: everything a run does that the record can't see** (`telemetry.py`). Every model call, tool call, work
+  order and scheduler decision, as spans (run → order → model / tool), with tokens in, cached and out, $ at the run's
+  pricing, seconds, ok or error, and the tool calls each reply asked for.
+  - **Where it goes:**
+    - A record file gets `<record>.telemetry.jsonl` beside it by default (`run(..., telemetry="auto")`); a path writes
+      elsewhere, and `False` is off. `hypgraph serve` streams the sidecar into its Live view, so a running swarm is
+      watched call by call.
+    - `otel=True` also sends OpenTelemetry spans with `gen_ai.*` attributes, plus metrics for calls, tokens and $,
+      through whatever tracer and meter your process configured. Install with `pip install 'hypswarm[otel]'`.
+  - **What it holds:**
+    - By default no reply text, tool argument value or output is written: arguments are summarised as names and value
+      types. `capture_content=True` adds them, truncated.
+    - Secret-looking strings and secret-named arguments are scrubbed either way.
+    - Agent seats from other frameworks are traced too. Their tools are wrapped with the order's span captured, so a
+      tool run on the framework's own thread is still traced, and their model use is one span with the usage they report.
+    - A broken sink never breaks a run.
+  - `RunResult.telemetry` names the sidecar written.
+
 ## 0.1.0a6 — 2026-10-26: the report from the record, re-verification per value
 
 Needs hypgraph 0.5.3 (a result that names no file it read goes stale when an input file changes after it).

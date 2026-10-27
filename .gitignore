@@ -13,3 +13,4 @@ build/
 .venv/
 examples/*/work/
 studies/discovery/runs/
+*.telemetry.jsonl
