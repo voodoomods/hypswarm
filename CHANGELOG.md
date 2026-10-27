@@ -8,6 +8,9 @@
   rewrote the code under test; the new head made every check stale and nothing settled.
 - **A value in seconds is a timing only when the code measures time** (`perf_counter`, `timeit`, …). A duration
   that is the data (`parse_duration("2.6s")` returns 2) re-runs to the same digits; it was refused for a spread.
+- **Every unchecked answer gets its review under a workflow.** A seat working on Q1 also answered Q2; that claim
+  was in no gate's evidence, so the review stage could only go to the newest claim (already checked) and the run
+  stopped stuck with Q2 held open. The review stage now takes the board's unchecked answers too.
 - **A review order says what an objection is for:** the answer, a number in the claim or the method being wrong;
   a wording point goes in the notes of a `checked`. "Judge the method and the wording" drew objections to right
   answers whose numbers reproduced, each a full rework.

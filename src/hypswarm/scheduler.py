@@ -469,6 +469,12 @@ class Scheduler:
         # the profile calls that gate — claim_made, sourced; a result for `result_reviewed`)
         codes = [c for gt in gates[:i] if gt["met"] for c in gt.get("evidence") or []
                  if re.fullmatch(prefix + r"\d+", str(c))]
+        if first["gate"] == "reviewed":
+            # the board names every live answer still unchecked, wherever it came from: a seat working on Q1 also
+            # answered Q2, the claim was in no gate's evidence, the newest (checked) claim was all a review could go
+            # to, and the run stopped stuck with Q2 held open by it (studies O2, evening)
+            row = next((b for b in self.r.question_board(self.inv) if b["id"] == q["question"]), None)
+            codes += [c for c in (row or {}).get("unchecked") or [] if c not in codes]
         if not codes:
             return
         ids: list[tuple[str, str]] = []
