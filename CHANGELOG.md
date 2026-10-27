@@ -29,6 +29,9 @@
   events, `SchedulerResult.benched`). A crashing agent spends nothing, so each return was reworked or cancelled
   for free; once the record's clock moved, a fresh order was issued and the run never ended (it hung CI on a
   slower runner).
+- **`pip install --pre hypswarm` works again.** `--pre` reaches every dependency and resolved httpx 1.0.dev6,
+  which has no `AsyncClient`: the CLI crashed on its first model call. httpx is now `>=0.27,<1`, and CI installs
+  the built wheel the way the README says, in a clean venv, and constructs the provider.
 
 ## 0.1.0a8 — 2026-10-27: measure questions, and the lead writes the report
 
