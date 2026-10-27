@@ -1,0 +1,30 @@
+"""A task question may say it asks for a measurement — (code, text, "measure") — and the record's workflow then skips
+the gates that question doesn't need (hypgraph measure_skips): no diff to verify the code as it is, no preregistered
+hypothesis to count rows (studies: E2, E4, S1, T1)."""
+import pytest
+from hypgraph.profiles import Workflow
+
+from hypswarm import Seat, Task
+from hypswarm.record import LocalRecord
+
+needs_measure = pytest.mark.skipif(not hasattr(Workflow, "measure_skips"),
+                                   reason="needs a hypgraph with measure questions (asks=measure)")
+
+
+@needs_measure
+def test_a_measure_question_reaches_the_record_and_skips_its_gates():
+    r = LocalRecord(None, [Seat("tester", "worker"), Seat("critic", "reviewer")])
+    inv = r.start("Time the dedupe.", "Measure how long dedupe takes.", [("Q1", "How long does dedupe_slow take?", "measure"),
+                                                                          ("Q2", "Make dedupe faster.")],
+                  profile="software@2")
+    qs = {q["code"]: q for q in r.search(type="question", inv=inv)}
+    assert r.get(qs["Q1"]["id"])["body"].get("asks") == "measure"
+    assert "asks" not in r.get(qs["Q2"]["id"])["body"]
+    g1, g2 = (r.g.stage(qs[c]["id"]) for c in ("Q1", "Q2"))
+    assert g1["stage"] == "claimed" and g2["stage"] == "implemented"   # Q1 needs no diff and no suite on a new head
+
+
+def test_the_preamble_says_which_questions_are_measurements():
+    t = Task(title="T", mission="M", questions=[("Q1", "How long?", "measure"), ("Q2", "Why?")])
+    pre = t.preamble()
+    assert "Q1: How long? (a measurement" in pre and "Q2: Why?\n" in pre + "\n"

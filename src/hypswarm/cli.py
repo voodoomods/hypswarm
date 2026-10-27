@@ -46,7 +46,8 @@ from .seats import Seat
 def _load_task(path: str) -> Task:
     d = tomllib.loads(Path(path).read_text(encoding="utf-8"))
     files = {Path(p).name: Path(p).read_bytes() for p in d.get("files", [])}
-    return Task(title=d["title"], mission=d["mission"], questions=[(q["code"], q["text"]) for q in d["questions"]],
+    return Task(title=d["title"], mission=d["mission"],
+                questions=[(q["code"], q["text"], q.get("asks", "")) for q in d["questions"]],
                 files=files, success=d.get("success", ""), notes=d.get("notes", ""), profile=d.get("profile", ""))
 
 

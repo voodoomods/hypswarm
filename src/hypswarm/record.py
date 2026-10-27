@@ -70,7 +70,7 @@ class LocalRecord:
         self.g.close()
 
     # seeding a task
-    def start(self, title: str, objective: str, questions: Iterable[tuple[str, str]], *, success: str = "",
+    def start(self, title: str, objective: str, questions: Iterable[tuple[str, ...]], *, success: str = "",
               strict: bool = True, files: Mapping[str, bytes] | None = None,
               reviewers: Iterable[str] = (), profile: str = "") -> str:
         """Seed the task. ``reviewers`` go on the investigation itself, so their verdicts count wherever the record
@@ -79,8 +79,9 @@ class LocalRecord:
             "title": title[:200], "objective": objective, "success_criteria": success or
             "Every question answered from the evidence, with the evidence in the record.", "strict_claims": strict,
             "reviewers": sorted(set(reviewers)), **({"profile": profile} if profile else {})})["id"]
-        for code, text in questions:
-            self.g.create(author=HARNESS, type="question", inv=inv, code=code, fields={"text": text})
+        for code, text, *asks in questions:      # (code, text) or (code, text, "measure")
+            self.g.create(author=HARNESS, type="question", inv=inv, code=code,
+                  fields={"text": text, **({"asks": asks[0]} if asks and asks[0] else {})})
         for name, data in (files or {}).items():
             self.g.create(author=HARNESS, type="artifact", inv=inv, fields={
                 "sha256": hashlib.sha256(data).hexdigest(), "path": name, "size": len(data),
