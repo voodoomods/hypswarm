@@ -24,6 +24,11 @@
   optimization run's seats wrote "exact DP over capacity" as prose and a wrong optimum settled.
   With no instrument and only the files toolkit, `register_run` refuses code: nothing could have run it (the
   same run registered code and its "output" 14 times).
+- **A seat that returns at no cost can't keep a run alive.** Nothing is dispatched once only the report's calls
+  are left, and a seat whose orders end in an error three times in a row is benched for the run (`benched`
+  events, `SchedulerResult.benched`). A crashing agent spends nothing, so each return was reworked or cancelled
+  for free; once the record's clock moved, a fresh order was issued and the run never ended (it hung CI on a
+  slower runner).
 
 ## 0.1.0a8 — 2026-10-27: measure questions, and the lead writes the report
 
