@@ -28,7 +28,9 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
     "Typing :: Typed",
 ]
-dependencies = ["hypgraph>=0.7.0", "httpx>=0.27"]
+# httpx <1: `pip install --pre hypswarm` (the README's alpha install) applies --pre to every dependency and resolved
+# httpx 1.0.dev6, which has no AsyncClient: the CLI crashed on its first model call
+dependencies = ["hypgraph>=0.7.0", "httpx>=0.27,<1"]
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.40"]

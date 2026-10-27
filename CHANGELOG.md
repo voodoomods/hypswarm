@@ -1,5 +1,11 @@
 # Changelog
  
+## Unreleased
+
+- **`pip install --pre hypswarm` works again.** `--pre` reaches every dependency and resolved httpx 1.0.dev6,
+  which has no `AsyncClient`: the CLI crashed on its first model call. httpx is now `>=0.27,<1`, and CI installs
+  the built wheel the way the README says, in a clean venv, and constructs the provider.
+
 ## 0.1.0a8 — 2026-10-27: measure questions, and the lead writes the report
 
 Needs hypgraph 0.7.0, whose workflows let a question that asks for a measurement skip the gates it doesn't need.

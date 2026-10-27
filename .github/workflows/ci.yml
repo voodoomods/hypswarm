@@ -42,3 +42,25 @@ jobs:
           (cd examples/07-human-reviewer && timeout 600 python run.py --fresh --quiet --auto)
           (cd examples/08-served-record && timeout 600 python run.py --fresh --quiet)
         shell: bash
+
+  readme-install:
+    # install the way the README says, in a clean venv: `pip install --pre` reaches every dependency, and once
+    # resolved httpx 1.0.dev6 (no AsyncClient), so the CLI crashed on its first call while the tests above passed
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: |
+          set -e
+          python -m pip install build
+          python -m build --wheel
+          python -m venv /tmp/fresh
+          /tmp/fresh/bin/pip install --pre dist/*.whl
+          /tmp/fresh/bin/pip list | grep -iE "^(hypswarm|hypgraph|httpx) "
+          cd /tmp
+          /tmp/fresh/bin/hypswarm --version
+          /tmp/fresh/bin/python -c "from hypswarm.providers import OpenAICompatible; OpenAICompatible('m', base_url='http://127.0.0.1:9')"
+        shell: bash
