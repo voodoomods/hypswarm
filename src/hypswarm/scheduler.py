@@ -628,15 +628,18 @@ class Scheduler:
         messages = [Message("system", (self.header + "\n" if self.header else "") + self.lead.prompt() + "\n\n"
                             + self._preamble()), Message("user", user)]
         by = {t.name: t for t in tools}
-        for turn in range(turns):
+        last, retried, turn = turns - 1, False, -1
+        while turn < last:
+            turn += 1
             offered = tools
-            if turn == turns - 1 and "submit_report" in by and len(by) > 1:
+            if turn >= turns - 1 and "submit_report" in by and len(by) > 1:
                 # the last turn of the report phase submits: a careful lead otherwise reads (show, briefing) until
                 # its turns run out and leaves the run without a report (studies/challenges E1)
                 offered = [by["submit_report"]]
                 messages.append(Message("user", "This is your last turn. Submit the report now with submit_report: "
                                                 "the facts you have, your interpretation under them, and the answers. "
-                                                "Nothing else is available."))
+                                                + ("Your last submit was refused: fix exactly what it named. "
+                                                   if retried else "") + "Nothing else is available."))
             try:
                 self.meter.reserve(unit)
             except BudgetExhausted:
@@ -664,6 +667,11 @@ class Scheduler:
                                       "said": (reply.content or "")[:300]})
             messages.append(reply.as_message())
             if not reply.tool_calls:
+                if "submit_report" in by and len(by) > 1 and turn < last:
+                    # a reply with no call doesn't end the report phase: the next turn is the submit-only one
+                    # (studies/challenges S1: an empty fifth turn left the run without a report)
+                    turn = last - 1
+                    continue
                 return
             avail = {t.name for t in offered}
             for tc in reply.tool_calls:
@@ -674,6 +682,10 @@ class Scheduler:
                 messages.append(Message("tool", out[:12000], tool_call_id=tc.id))
                 if tc.name == "submit_report" and out == "report accepted":
                     return
+                if tc.name == "submit_report" and turn == last and not retried:
+                    # refused on the last turn: one more submit-only turn, with the refusal in hand, before the
+                    # harness assembles (studies/challenges E2: refused on turns 5 and 6 of 6, both rightly)
+                    last, retried = last + 1, True
 
     async def _lead_judges(self, o: dict[str, Any], missing: str) -> None:
         assert self.lead
@@ -718,8 +730,10 @@ class Scheduler:
                                                                              "show")]
         kind = self._report_kind()
         user = (f"Write the final report{' — the ' + kind if kind else ''}. Call report_facts and start from it; "
-                "write your interpretation under the facts; end with the answers in the format the task asks for; "
-                "submit_report. If it is refused, fix exactly what it names and submit again. Nothing else can be "
+                "write your interpretation under the facts; end with the answers in the format the task asks for. "
+                "Every number in an answer must be one a claim already binds: copy it from report_facts, don't "
+                "recompute or average it. submit_report. If it is refused, fix exactly what it names and submit "
+                "again. Nothing else can be "
                 "done now: the run is ending.")
         try:
             await self._lead_turns(user, tools, "report", self.lead_turns)
