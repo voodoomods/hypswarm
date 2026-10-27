@@ -1,7 +1,31 @@
 # Changelog
  
-## Unreleased
+## 0.1.0a8 — 2026-10-27: measure questions, and the lead writes the report
 
+Needs hypgraph 0.7.0, whose workflows let a question that asks for a measurement skip the gates it doesn't need.
+Found in real-model runs of harder tasks (a bug fix, a speed claim, a flaky test, a spec check, Simpson's paradox,
+a look-ahead trap).
+
+- **Measure questions.** A task question may be `(code, text, "measure")` (`asks = "measure"` in a `.toml` task): it
+  asks for a number, a timing or a check of what exists, and the record's workflow skips the change, hypothesis and
+  backtest gates it doesn't need. Before, a timing question was reworked for a diff, a count for a preregistered
+  hypothesis, a look-ahead check for a backtest.
+- **The lead writes the report.**
+  - The last report turn offers only `submit_report`. A refused submit there gets one retry with the refusal in hand,
+    and a turn with no call goes straight to that last turn.
+  - The prompt says answers copy the numbers the record binds.
+  - `Budget(report_calls=8)` (at most a fifth of `max_calls`) holds the last calls for the report. The stop reads
+    "budget: only the report's calls are left".
+- **Measurements the instrument can check.** A result value may state its `spread` (or `rel_tol`), and the
+  instrument confirms a re-run inside it. `register_run` with code refuses a timing that has none, and says how to
+  give it.
+- **The software workflow watches the tree by default.** While it watches, a seat can't register its own diff: edits
+  register the next head. Two competing lines of heads had come from both.
+- **A question isn't an order.** The lead's `add` refuses question text with no "?" and points at `rework`.
+- **Reviews land.**
+  - A review method past the record's 1,500 characters spills into notes instead of losing the review.
+  - The reviewer's prompt says the verdict is the deliverable: re-run with `register_run`, then `review`.
+- **The examples' sandbox writes scratch outside the watched tree,** and keeps `SYSTEMDRIVE`.
 - **hypswarm.com in the HypGraph app's design system,** the same stylesheet as hypgraph.com, light by default, across
   every page. The homepage opens on the Live view of a HypSwarm run replaying (one per profile, `dev/site_examples.py`),
   and can switch to the page's own record.

@@ -44,7 +44,7 @@
 <h2 id="install">Install</h2>
 <p>HypSwarm needs HypGraph's coordination layer and workflows, which ship with hypgraph 0.5:</p>
 <div class="code"><pre>python -m venv .venv && . .venv/bin/activate        # .venv\Scripts\activate on Windows
-pip install --pre hypswarm                                      # pulls hypgraph>=0.6; extras: anthropic · bedrock · langchain · pydantic-ai · crewai · otel
+pip install --pre hypswarm                                      # pulls hypgraph>=0.7; extras: anthropic · bedrock · langchain · pydantic-ai · crewai · otel
 hypswarm profiles                                               # the five rosters and their workflows</pre></div>
 <p>Any OpenAI-compatible endpoint is the model (<code>OPENAI_BASE_URL</code>, <code>OPENAI_API_KEY</code>);
   <code>hypswarm[anthropic]</code> adds the Messages API. Nothing in the box executes code or reaches a network on its
