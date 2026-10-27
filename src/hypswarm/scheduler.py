@@ -587,6 +587,8 @@ class Scheduler:
                 self.res.stopped = f"budget: {e}"
                 break
             why = self._done()
+            if (why == "stuck" or (not why and not self.inflight)) and self.meter.orders_spent():
+                why = "budget: only the report's calls are left"
             if (why == "stuck" or (not why and not self.inflight)) and self.meter.warn():
                 why = "budget: warning threshold"           # nothing more is issued past the threshold
             if why or not self.inflight:
@@ -628,7 +630,18 @@ class Scheduler:
         messages = [Message("system", (self.header + "\n" if self.header else "") + self.lead.prompt() + "\n\n"
                             + self._preamble()), Message("user", user)]
         by = {t.name: t for t in tools}
-        for _ in range(turns):
+        last, retried, turn = turns - 1, False, -1
+        while turn < last:
+            turn += 1
+            offered = tools
+            if turn >= turns - 1 and "submit_report" in by and len(by) > 1:
+                # the last turn of the report phase submits: a careful lead otherwise reads (show, briefing) until
+                # its turns run out and leaves the run without a report (studies/challenges E1)
+                offered = [by["submit_report"]]
+                messages.append(Message("user", "This is your last turn. Submit the report now with submit_report: "
+                                                "the facts you have, your interpretation under them, and the answers. "
+                                                + ("Your last submit was refused: fix exactly what it named. "
+                                                   if retried else "") + "Nothing else is available."))
             try:
                 self.meter.reserve(unit)
             except BudgetExhausted:
@@ -637,7 +650,7 @@ class Scheduler:
             mid = self.tel.start("model", parent=self.tel_parent, seat=self.lead.name, order=unit,
                                  model=getattr(model, "name", ""))
             try:
-                reply = await model.complete(messages, tools, temperature=self.lead.temperature, unit=unit)
+                reply = await model.complete(messages, offered, temperature=self.lead.temperature, unit=unit)
             except Exception as e:
                 self.tel.end(mid, ok=False, error=f"{type(e).__name__}: {e}")
                 self.meter.release(unit)
@@ -656,13 +669,25 @@ class Scheduler:
                                       "said": (reply.content or "")[:300]})
             messages.append(reply.as_message())
             if not reply.tool_calls:
+                if "submit_report" in by and len(by) > 1 and turn < last:
+                    # a reply with no call doesn't end the report phase: the next turn is the submit-only one
+                    # (studies/challenges S1: an empty fifth turn left the run without a report)
+                    turn = last - 1
+                    continue
                 return
+            avail = {t.name for t in offered}
             for tc in reply.tool_calls:
-                tool = by.get(tc.name)
-                out = await tool.call(tc.args) if tool else f"error: no tool {tc.name!r}"
+                tool = by.get(tc.name) if tc.name in avail else None
+                out = (await tool.call(tc.args) if tool else
+                       f"error: only {', '.join(sorted(avail))} is available now" if tc.name in by else
+                       f"error: no tool {tc.name!r}")
                 messages.append(Message("tool", out[:12000], tool_call_id=tc.id))
                 if tc.name == "submit_report" and out == "report accepted":
                     return
+                if tc.name == "submit_report" and turn == last and not retried:
+                    # refused on the last turn: one more submit-only turn, with the refusal in hand, before the
+                    # harness assembles (studies/challenges E2: refused on turns 5 and 6 of 6, both rightly)
+                    last, retried = last + 1, True
 
     async def _lead_judges(self, o: dict[str, Any], missing: str) -> None:
         assert self.lead
@@ -707,8 +732,10 @@ class Scheduler:
                                                                              "show")]
         kind = self._report_kind()
         user = (f"Write the final report{' — the ' + kind if kind else ''}. Call report_facts and start from it; "
-                "write your interpretation under the facts; end with the answers in the format the task asks for; "
-                "submit_report. If it is refused, fix exactly what it names and submit again. Nothing else can be "
+                "write your interpretation under the facts; end with the answers in the format the task asks for. "
+                "Every number in an answer must be one a claim already binds: copy it from report_facts, don't "
+                "recompute or average it. submit_report. If it is refused, fix exactly what it names and submit "
+                "again. Nothing else can be "
                 "done now: the run is ending.")
         try:
             await self._lead_turns(user, tools, "report", self.lead_turns)

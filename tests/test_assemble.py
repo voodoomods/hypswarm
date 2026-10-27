@@ -111,3 +111,62 @@ def test_the_harness_assembles_the_report_when_the_lead_s_never_passes():
 def test_a_lead_s_passing_report_is_the_lead_s():
     res = asyncio.run(run(TASK, SEATS, make_models(), record=None, budget=Budget(max_calls=60)))
     assert res.report_accepted and res.report_source == "lead"
+
+
+def test_a_lead_that_keeps_reading_submits_on_its_last_turn():
+    """A lead that would call show forever is left with only submit_report on its last report turn (E1)."""
+    from .test_alpha import lead_script
+
+    def reader(messages, tools):                       # the facts first, then reading for as long as it may
+        if "report_facts" not in calls_made(messages):
+            return ("report_facts", {})
+        if "show" in {t.name for t in tools}:
+            return ("show", {"node": "CL1"})
+        return lead_script(messages, tools)
+
+    models = make_models()
+    models["lead"] = StubModel(reader, "reading-lead")
+    res = asyncio.run(run(TASK, SEATS, models, record=None, budget=Budget(max_calls=60)))
+    assert res.report_source == "lead", res.scheduler.events
+    assert res.scheduler.lead_log[-1]["tools"] == ["submit_report"]
+
+
+def test_a_report_refused_on_the_last_turn_gets_one_retry():
+    """Refused on its last turn, the lead gets one more submit-only turn with the refusal in hand (E2 re-run)."""
+    from .test_alpha import lead_script
+
+    def late(messages, tools):                         # reads until the last turn, overclaims, then fixes it
+        if "report_facts" not in calls_made(messages):
+            return ("report_facts", {})
+        if "show" in {t.name for t in tools}:
+            return ("show", {"node": "CL1"})
+        if "submit_report" not in calls_made(messages):
+            return ("submit_report", {"text": "## Interpretation\n\nA is always right (CL1)."})
+        return lead_script(messages, tools)
+
+    models = make_models()
+    models["lead"] = StubModel(late, "late-lead")
+    res = asyncio.run(run(TASK, SEATS, models, record=None, budget=Budget(max_calls=60)))
+    log = [x for x in res.scheduler.lead_log if x["unit"] == "report"]
+    assert res.report_source == "lead", res.scheduler.events
+    assert [x["tools"] for x in log[-2:]] == [["submit_report"], ["submit_report"]]
+    assert len(log) == 6 + 1                                           # lead_turns=6, one retry past it
+
+
+def test_a_lead_that_stops_without_a_call_is_asked_to_submit():
+    """A report turn with no tool call goes straight to the submit-only turn instead of ending the phase (S1)."""
+    from .test_alpha import lead_script
+
+    def quits(messages, tools):                        # reads once, then answers with nothing until made to submit
+        if "report_facts" not in calls_made(messages):
+            return ("report_facts", {})
+        if "show" in {t.name for t in tools}:
+            return None
+        return lead_script(messages, tools)
+
+    models = make_models()
+    models["lead"] = StubModel(quits, "quitting-lead")
+    res = asyncio.run(run(TASK, SEATS, models, record=None, budget=Budget(max_calls=60)))
+    log = [x for x in res.scheduler.lead_log if x["unit"] == "report"]
+    assert res.report_source == "lead", res.scheduler.events
+    assert [x["tools"] for x in log] == [["report_facts"], [], ["submit_report"]]

@@ -18,6 +18,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -73,12 +74,20 @@ def models(args: argparse.Namespace, answers: dict[str, dict[str, Any]]) -> Any:
 # ── the host's sandbox: a python tool and the instrument's reproducer ───────
 def python_sandbox(folder: Path, seconds: int = 60) -> Any:
     """``python(code)`` runs in ``folder`` as a subprocess with a clean environment and a time limit. This is the
-    example's sandbox, not a secure one: it is your own machine. Register your own for anything stronger."""
+    example's sandbox, not a secure one: it is your own machine. Register your own for anything stronger.
+    Scratch goes to a temp folder outside ``folder`` ($TMPDIR): under the software workflow the folder is the watched
+    tree, and every scratch file a seat wrote there was a new head (studies E1)."""
+    scratch = Path(tempfile.mkdtemp(prefix="hypswarm-scratch-"))
+    env = {"PATH": os.environ.get("PATH", ""), "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
+           "SYSTEMDRIVE": os.environ.get("SYSTEMDRIVE", ""),      # unset, a library made a literal %SystemDrive%/ folder
+           "TMPDIR": str(scratch), "TEMP": str(scratch), "TMP": str(scratch)}
+
     def run_python(code: str) -> str:
-        """Run python 3 in your working folder (the data files are there); print what you need."""
+        """Run python 3 in your working folder (the data files are there); print what you need. Write scratch
+        files (copies, patches, notes) under tempfile.gettempdir(), not the working folder."""
         try:
             p = subprocess.run([sys.executable, "-E", "-s", "-c", code], check=False, cwd=folder, capture_output=True, text=True,
-                               timeout=seconds, env={"PATH": os.environ.get("PATH", ""), "SYSTEMROOT": os.environ.get("SYSTEMROOT", "")})
+                               timeout=seconds, env=env)
         except subprocess.TimeoutExpired:
             return f"error: no output within {seconds} s"
         out = p.stdout + ("\n[stderr]\n" + p.stderr if p.stderr.strip() else "")

@@ -104,6 +104,15 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         {"rel": "derived_from", "to": "RS1"}, {"rel": "supports", "to": "H1", "why": …}]. A claim's numbers are
         bound to your own results when the record can find them; a refused claim says exactly what to fix.
         A reviewer writes reviews, not claims: a claim by the only reviewer could never be reviewed."""
+        if type == "artifact" and (fields or {}).get("kind") == "diff":
+            arts = [record.get(a["id"]) for a in record.search("", "artifact", inv, 500)]
+            heads = [a for a in arts if (a.get("body") or {}).get("format") == "tree" and _live(a)]
+            if heads:
+                # the watcher owns the head: a seat's own diff made a second line of heads, one of them an empty
+                # file registered mid-write, and the tests never ran on "the current head" (studies/challenges E1)
+                return (f"refused: the record watches the working tree — {heads[-1].get('code', 'its head')} is the "
+                        "current head, and an edit to the files registers the next one. Edit the files; don't "
+                        "register a diff")
         if seat.role == "reviewer" and type == "claim":
             return ("refused: you are a reviewer — record a verdict on the claim you were asked to check (review); if "
                     "the right answer is missing, say so in your review notes and return the order, and a worker "
@@ -127,7 +136,9 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
     def register_run(name: str, result_summary: str, values: dict[str, Any] | None = None, outcome: str = "",
                      experiment: str = "", code: str = "", claim: str = "", answers: str = "", scope: str = "",
                      claim_kind: str = "", uses: list[str] | None = None) -> str:
-        """Record a computation you ran and the result it produced: values {name: {value, unit} | {k, n}}; code: the
+        """Record a computation you ran and the result it produced: values {name: {value, unit} | {k, n}} — a value
+        that varies run to run (a timing, an unseeded sample) also takes its spread: {value, unit, spread: [lo, hi]}
+        or rel_tol (a fraction), and the instrument confirms a re-run inside it; code: the
         exact code you ran — the instrument re-executes it and checks that the output shows every value you register,
         so PRINT each registered value with its name (print("n_items", n_items)). experiment: the experiment it
         executes, if any. uses: artifact codes the run read — the diff it tested, the instance it solved, the data

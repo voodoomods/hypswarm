@@ -61,3 +61,18 @@ def test_dollar_cap_counts_calls_in_flight():
     m.reserve("c")                                 # $0.0001 + 2 × $0.0001 = the cap
     with pytest.raises(BudgetExhausted):
         m.reserve("d")
+
+
+def test_the_last_calls_are_held_for_the_report():
+    """T1: orders in flight used the 160th call and the lead never got a report turn."""
+    m = Meter(Budget(max_calls=50, report_calls=8, per_order_calls=100))
+    for _ in range(42):
+        m.reserve("T1")
+        m.add("T1", 10, 0, 10)
+    with pytest.raises(BudgetExhausted, match="held for the report"):
+        m.reserve("T2")
+    for _ in range(8):
+        m.reserve("report")
+        m.add("report", 10, 0, 10)
+    with pytest.raises(BudgetExhausted):
+        m.reserve("report")
