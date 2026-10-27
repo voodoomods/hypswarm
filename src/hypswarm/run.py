@@ -28,7 +28,9 @@ ANSWER_FORMAT = ("End the report with a fenced block that starts with ```answers
 class Task:
     title: str
     mission: str
-    questions: Sequence[tuple[str, str]]          # (code, text): ("Q1", "What is …?")
+    questions: Sequence[tuple[str, ...]]          # (code, text): ("Q1", "What is …?"), or (code, text, "measure") for
+                                                  # a question that asks for a measurement: the workflow's change /
+                                                  # hypothesis / backtest gates don't apply to it
     files: Mapping[str, bytes] = field(default_factory=dict)
     success: str = ""
     answer_format: str = ANSWER_FORMAT
@@ -39,7 +41,8 @@ class Task:
                                                   # optimization (or a pinned id such as software@1); see profiles.py
 
     def preamble(self) -> str:
-        qs = "\n".join(f"- {c}: {t}" for c, t in self.questions)
+        qs = "\n".join(f"- {c}: {t}" + (" (a measurement: no change, hypothesis or backtest is needed)"
+                                         if a[:1] == ["measure"] else "") for c, t, *a in self.questions)
         files = ", ".join(sorted(self.files)) or "none"
         notes = self.notes
         if self.profile:
