@@ -12,5 +12,6 @@ build/
 .env
 .venv/
 examples/*/work/
-studies/discovery/runs/
+# internal studies: kept on the machine that runs them, not published
+studies/
 *.telemetry.jsonl
