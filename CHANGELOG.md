@@ -74,8 +74,8 @@ The record now notices when the files and pages a run used have changed — nobo
 - `on_write(kind, payload)` hook on every accepted seat write; `SchedulerResult` counts `world_changes`,
   `reverifications`, `refreshes`. The examples' scripted seats read notices and refresh orders and recompute once the
   world moved under their question.
-- **The change suite** (`studies/discovery/PLAN-CHANGE.md`, `change.py`, `change_run.py`): five families where a file,
-  a commit, a page or an instance changes silently mid-run; P vs R; predictions locked; self-test and stub run at $0.
+- **The change suite** (an internal study): five families where a file, a commit, a page or an instance changes
+  silently mid-run.
 - Depends on hypgraph >= 0.5.2.
 
 ## 0.1.0a4 — 2026-10-26: orders from stages

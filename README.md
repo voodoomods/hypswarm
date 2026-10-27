@@ -129,7 +129,7 @@ and the answers the current claims give, labelled as assembled (`res.report_sour
 
 ```python
 res = await run(task, None, model, record="desk.hypgraph", folder="work/", reproducer=my_sandbox,
-                watch=True, refetch=my_fetch)          # the change suite: studies/discovery/PLAN-CHANGE.md
+                watch=True, refetch=my_fetch)
 ```
 
 ## What you get
