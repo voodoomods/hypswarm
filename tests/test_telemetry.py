@@ -115,10 +115,17 @@ def test_opentelemetry_spans_nest_and_carry_gen_ai_attributes(tmp_path):
     tp = TracerProvider()
     tp.add_span_processor(SimpleSpanProcessor(exp))
     sink = OtelSink(tracer_provider=tp, meter_provider=MeterProvider(metric_readers=[reader]))
-    res = _run(tmp_path, telemetry=Telemetry([sink], pricing=Pricing(0.2, 0.006, 0.6)))
+    seen: list = []
+    res = _run(tmp_path, telemetry=Telemetry([sink, seen.append], pricing=Pricing(0.2, 0.006, 0.6)))
     spans = exp.get_finished_spans()
     by = collections.Counter(s.name.split(" ")[0] for s in spans)
-    assert by["hypswarm.run"] == 1 and by["order"] >= 2 and by["chat"] == res.usage["calls"] and by["execute_tool"] >= 1
+    import os
+
+    import opentelemetry.version
+    why = (f"spans {dict(by)}; first {[s.name for s in spans[:6]]}; events seen {collections.Counter(e['kind'] for e in seen)}; "
+           f"otel {opentelemetry.version.__version__}; env {[k for k in os.environ if k.startswith('OTEL')]}; "
+           f"tracer {type(sink._tracer).__name__}")
+    assert by["hypswarm.run"] == 1 and by["order"] >= 2 and by["chat"] == res.usage["calls"] and by["execute_tool"] >= 1, why
     root = next(s for s in spans if s.name == "hypswarm.run")
     chat = next(s for s in spans if s.name.startswith("chat") and s.attributes.get("hypswarm.seat") != "lead")
     order = next(s for s in spans if s.context.span_id == chat.parent.span_id)
