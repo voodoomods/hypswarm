@@ -78,3 +78,37 @@ def test_an_exception_ends_on_the_lead_s_decision():
     why = [e.get("why") for e in r.scheduler.events if e["kind"] == "cancelled"]
     assert "undecided by the lead" not in why                              # the lead decided
     assert any(o["status"] == "cancelled" for o in r.orders)
+
+
+def test_a_refused_last_decision_gets_one_retry():
+    """S2 re-run: the lead's last-turn rework was refused and the order was cancelled as undecided."""
+    import asyncio
+
+    from hypswarm import Budget, Seat, Task, run
+    from hypswarm.providers.stub import StubModel, tool_outputs
+
+    from .test_alpha import lead_script
+
+    def lazy(messages, tools):
+        return None
+
+    def clumsy_lead(messages, tools):
+        names = sorted(t.name for t in tools)
+        exception = next((m.content for m in messages if m.role == "user" and "EXCEPTION" in m.content), "")
+        if not exception:
+            return lead_script(messages, tools)
+        code = exception.split("order ")[1].split()[0]
+        if "show" in names:
+            return ("show", {"node": "Q1"})
+        outs = tool_outputs(messages)
+        if outs and outs[-1].startswith("refused") and any("was refused" in m.content for m in messages if m.role == "user"):
+            return ("cancel_work", {"order": code, "why": "the worker can't answer it from the files"})
+        if not any(o.startswith("refused") for o in outs):
+            return ("rework", {"order": code, "missing": "the claim", "done_when": [{"p": "no_such_predicate"}]})
+        return None
+
+    r = asyncio.run(run(Task("Nobody can", "A task nobody can do.", [("Q1", "Unanswerable?")]),
+                        [Seat("analyst", "worker"), Seat("lead", "lead")],
+                        {"worker": StubModel(lazy), "lead": StubModel(clumsy_lead)}, budget=Budget(max_calls=60)))
+    why = [e.get("why") for e in r.scheduler.events if e["kind"] == "cancelled"]
+    assert "undecided by the lead" not in why and any(o["status"] == "cancelled" for o in r.orders)
