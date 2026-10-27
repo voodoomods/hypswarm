@@ -100,6 +100,15 @@ def _model_for(models: ModelSpec, default: ChatModel | None) -> Callable[[Seat],
     return pick
 
 
+# Profiles whose answers are computed. Through the CLI with only the files toolkit, an optimization run's seats wrote
+# "exact DP over capacity" as prose and a wrong optimum settled (studies O1); hypgraph now settles a computed answer
+# only with the code behind it, and the seats are told up front.
+COMPUTED = frozenset({"scientific", "software", "trading", "optimization"})
+NO_CODE = ("Nothing in this run executes code: no seat can compute anything. Don't report a computation you didn't "
+           "run — the record settles a computed answer only with the code behind it. Read off the files what can be "
+           "read off them; for the rest, return the order and say it needs a tool that runs code.")
+
+
 async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, record: str | Path | Any = None,
               budget: Budget | None = None, pricing: Pricing | None = None, data_tools: Sequence[Tool] = (),
               spend: Any = None, external_meter: Callable[[], float] | None = None,
@@ -159,6 +168,15 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
         from .toolkits import ToolContext, build
         data_tools = list(data_tools) + build(kits, ToolContext(rec, inv, Path(folder) if folder else None))
     model_for = _model_for(models, default_model)
+    preamble = task.preamble()
+    if sp and sp.id.split("@")[0] in COMPUTED and reproducer is None:
+        executes = any(t.name == "python" for t in data_tools)
+        log.warning("%s run with %s: %s", sp.id, "no instrument" if executes else "nothing that executes code",
+                    "registered code isn't re-run, so its numbers are the seats' word" if executes else
+                    "no seat can compute anything, and the record settles a computed answer only with the code "
+                    "behind it (hypswarm run --python, or data_tools + reproducer)")
+        if not executes:
+            preamble += "\n\n" + NO_CODE
     from . import __version__
     config = {"hypswarm": __version__,
               "seats": [{"name": s.name, "role": s.role, "model": "external (MCP)" if s.external else ("agent:" + str(getattr(s.agent, "__name__", type(s.agent).__name__)) if s.agent is not None else model_for(s).name),
@@ -181,7 +199,7 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
         from .world import World
         world = World(rec, inv, folder if watch else None, refetch=refetch,
                       tree=bool(watch and folder and wf and "diff" in getattr(wf, "artifacts", {})))
-    sched = Scheduler(rec, inv, seats, model_for, meter, data_tools=data_tools, preamble=task.preamble(),
+    sched = Scheduler(rec, inv, seats, model_for, meter, data_tools=data_tools, preamble=preamble,
                       on_return=on_return, lease_minutes=lease_minutes, external_poll_s=external_poll_s,
                       external_timeout_s=external_timeout_s, header=task.header, reproducer=reproducer,
                       world=world, on_write=on_write, assemble_report=assemble_report, tel=tel, tel_parent=run_span)

@@ -57,6 +57,25 @@ def _to_review(row: dict[str, Any]) -> str:
     return str(pending[-1] if pending else row["answers"][-1])
 
 
+# A stage that changes the watched world (software: the diff). The seats it names are the change-makers: they
+# aren't a fallback for another stage. With the tester busy, a counting question's claim stage went to the
+# implementer, who rewrote the code under test; the new head made every check stale (studies E4, evening run).
+_CHANGE_GATES = frozenset({"diff_registered"})
+READ_ONLY = (" This stage reads the working files as they are: don't edit them — a new head supersedes the code every "
+             "check so far ran on.")
+
+
+def _changers(gates: Sequence[dict[str, Any]]) -> set[str]:
+    return {tok for gt in gates if gt["gate"] in _CHANGE_GATES for tok in re.findall(r"[a-z_]+", str(gt.get("who") or "").lower())}
+
+
+# What a review judges. "Judge the method and the wording" drew objections to right answers over wording — the
+# numbers reproduced, the conclusion stood, and the claim was reworked anyway (studies S3, T2, evening): a full
+# rework for a point a note carries. A wrong number anywhere in the claim is still an objection (studies E4).
+JUDGE = ("Judge whether the method and the numbers answer the question, and record a verdict: checked when they hold "
+         "(put any wording point in your notes); objection only when the answer, a number in the claim or the method "
+         "is wrong — an objection sends the whole claim back for rework.")
+READ_ONLY_TOOLS = frozenset({"list_files", "read_file"})   # the files toolkit: reads, executes nothing
 MAX_CRASHES = 3      # a seat whose orders end in an error this many times in a row is benched for the run
 _DECIDE = ("rework", "cancel_work", "add")
 LEAD_DECIDES = ("This is your last turn on this exception: decide now. rework the order with what is missing and, if a "
@@ -100,6 +119,8 @@ class Scheduler:
         self.model_for, self.meter = model_for, meter
         self.data_tools, self.preamble, self.header = list(data_tools), preamble, header
         self.reproducer = reproducer                        # host-supplied: re-executes registered code (no model)
+        # no instrument and only the files toolkit: nothing here executes code, so code a seat registers wasn't run
+        self.runs_code = reproducer is not None or not all(t.name in READ_ONLY_TOOLS for t in self.data_tools)
         self._reproduced: set[str] = set()
         self.world = world                                  # host-supplied: keeps the record in step with the files
         self.on_write = on_write                            # host hook on every accepted write by a seat
@@ -218,7 +239,7 @@ class Scheduler:
             task = asyncio.create_task(run_order(seat, model, self.r, self.inv, order, meter=self.meter,
                                                  data_tools=self.data_tools, preamble=self._preamble(),
                                                  header=self.header, on_write=self.on_write, tel=self.tel,
-                                                 tel_parent=sp))
+                                                 tel_parent=sp, runs_code=self.runs_code))
         self._order_spans[task] = sp
         self.inflight[task] = (seat, order)
         escalated = bool(escalate and seat.escalate_to and seat.escalate_to != seat.model and not seat.external)
@@ -387,8 +408,9 @@ class Scheduler:
             return None
         return rows
 
-    def _pick_for_stage(self, pool: Sequence[Seat], who: str, text: str) -> Seat | None:
-        """The seat a stage names (`quant`, `fact_checker`), when it is idle; else the best fit for the question."""
+    def _pick_for_stage(self, pool: Sequence[Seat], who: str, text: str, avoid: set[str] | None = None) -> Seat | None:
+        """The seat a stage names (`quant`, `fact_checker`), when it is idle; else the best fit for the question among
+        the idle seats not in ``avoid`` (the seats a change stage names: see _changers)."""
         idle = self._idle(pool)
         if not idle:
             return None
@@ -396,6 +418,9 @@ class Scheduler:
         named = [s for s in idle if s.name in tokens]
         if named:
             return named[0]
+        idle = [s for s in idle if s.name not in (avoid or set())]
+        if not idle:
+            return None
         return max(idle, key=lambda s: (fit(s, f"{who} {text}", "question"), -self.seats.index(s)))
 
     def _assign_from_stages(self, rows: list[dict[str, Any]]) -> None:
@@ -435,10 +460,11 @@ class Scheduler:
                 if gt["gate"] in _REVIEW_GATES:
                     break
                 run.append(gt)
-            seat = self._pick_for_stage(self.workers, first["who"], text)
+            changes = any(gt["gate"] in _CHANGE_GATES for gt in run)
+            seat = self._pick_for_stage(self.workers, first["who"], text, avoid=None if changes else _changers(gates))
             objective = (f"{q['code']} is at stage '{first['stage']}' ({q['index']}/{q['of']}) of the {q['profile']} "
                          f"workflow — {first['why']}. Move it through {', '.join(gt['stage'] for gt in run)}: "
-                         f"{text}")
+                         f"{text}" + (READ_ONLY if _changers(gates) and not changes else ""))
             if seat and self._issue(seat, q["question"], objective, [{"p": gt["gate"]} for gt in run]):
                 self._ev("stage_order", question=q["code"], stage=first["stage"], gates=[gt["gate"] for gt in run],
                          seat=seat.name)
@@ -454,6 +480,12 @@ class Scheduler:
         # the profile calls that gate — claim_made, sourced; a result for `result_reviewed`)
         codes = [c for gt in gates[:i] if gt["met"] for c in gt.get("evidence") or []
                  if re.fullmatch(prefix + r"\d+", str(c))]
+        if first["gate"] == "reviewed":
+            # the board names every live answer still unchecked, wherever it came from: a seat working on Q1 also
+            # answered Q2, the claim was in no gate's evidence, the newest (checked) claim was all a review could go
+            # to, and the run stopped stuck with Q2 held open by it (studies O2, evening)
+            row = next((b for b in self.r.question_board(self.inv) if b["id"] == q["question"]), None)
+            codes += [c for c in (row or {}).get("unchecked") or [] if c not in codes]
         if not codes:
             return
         ids: list[tuple[str, str]] = []
@@ -506,11 +538,11 @@ class Scheduler:
             return
         why = "; ".join(self._stale(nid)[:2]) or "what it rests on has changed"
         who = next((gt["who"] for gt in gates[:i] if gt["gate"] in _RESULT_GATES), gates[i]["who"])
-        seat = self._pick_for_stage(self.workers, who, text)
+        seat = self._pick_for_stage(self.workers, who, text, avoid=_changers(gates))
         objective = (f"{q['code']}'s answer {code} rests on evidence that is now stale — {why}. The instrument re-ran it on "
                      "the current files and it did not reproduce. Recompute from the files as they are now (the notices "
                      f"say what changed), register the run, and write the claim again; link the new claim supersedes "
-                     f"{code}. The question: {text}")
+                     f"{code}. The question: {text}" + (READ_ONLY if _changers(gates) else ""))
         if seat and self._issue(seat, q["question"], objective, [{"p": "result_exists"}, {"p": "claim_made"}]):
             self.res.refreshes += 1
             self._ev("refresh_order", question=q["code"], stale=code, why=why[:160], seat=seat.name)
@@ -539,7 +571,7 @@ class Scheduler:
                      f"workflow. Review {code}, the {what} that answers it: the order lists it, its values and "
                      "what it rests on" + (", and what the instrument's re-run confirmed — recompute only a value it "
                      "CONTRADICTED; a value merely not printed is not evidence against" if self.reproducer else "")
-                     + ". Judge the method and the wording against the question; record a verdict."
+                     + ". " + JUDGE
                      + self._beside(q["question"], code))
         if seat and self._issue(seat, target, objective, [{"p": first["gate"]}]):
             self._ev("stage_order", question=q["code"], stage=first["stage"], gates=[first["gate"]], seat=seat.name)
@@ -585,7 +617,7 @@ class Scheduler:
                              "measurements and the results it rests on" + (", and what the instrument's re-run of the "
                              "author's code confirmed — recompute only a value it CONTRADICTED; a value merely not "
                              "printed is not evidence against" if self.reproducer else "") +
-                             ". Judge the method and the wording against the question; record a verdict."
+                             ". " + JUDGE
                              + self._beside(q["id"], code))
                 if seat and self._issue(seat, claim, objective, [{"p": "reviewed"}]):
                     busy_targets.add(claim)
