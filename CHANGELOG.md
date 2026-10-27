@@ -1,5 +1,13 @@
 # Changelog
  
+## Unreleased
+
+- **A seat that returns at no cost can't keep a run alive.** Nothing is dispatched once only the report's calls
+  are left, and a seat whose orders end in an error three times in a row is benched for the run (`benched`
+  events, `SchedulerResult.benched`). A crashing agent spends nothing, so each return was reworked or cancelled
+  for free; once the record's clock moved, a fresh order was issued and the run never ended (it hung CI on a
+  slower runner).
+
 ## 0.1.0a8 — 2026-10-27: measure questions, and the lead writes the report
 
 Needs hypgraph 0.7.0, whose workflows let a question that asks for a measurement skip the gates it doesn't need.

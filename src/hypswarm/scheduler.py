@@ -57,6 +57,7 @@ def _to_review(row: dict[str, Any]) -> str:
     return str(pending[-1] if pending else row["answers"][-1])
 
 
+MAX_CRASHES = 3      # a seat whose orders end in an error this many times in a row is benched for the run
 _DECIDE = ("rework", "cancel_work", "add")
 LEAD_DECIDES = ("This is your last turn on this exception: decide now. rework the order with what is missing and, if a "
                 "predicate can't be met as asked, a changed done_when; or cancel_work with the reason. Reading is no "
@@ -84,6 +85,7 @@ class SchedulerResult:
     events: list[dict[str, Any]] = field(default_factory=list)
     lead_log: list[dict[str, Any]] = field(default_factory=list)   # one row per lead model call
     notices: list[dict[str, Any]] = field(default_factory=list)
+    benched: list[str] = field(default_factory=list)  # seats taken out after MAX_CRASHES failures in a row
 
 
 class Scheduler:
@@ -121,6 +123,7 @@ class Scheduler:
         self.external_poll_s = external_poll_s
         self.external_timeout_s = external_timeout_s if external_timeout_s is not None else lease_minutes * 60.0
         self.returns = 0
+        self.crashes: dict[str, int] = {}                   # seat → orders ended in an error, in a row
         self.notices: list[str] = []
         self._reissued: set[str] = set()                    # unreviewable claims already re-issued to a worker
 
@@ -181,6 +184,14 @@ class Scheduler:
         return self.model_for(seat)
 
     def _dispatch(self, seat: Seat, order: str, escalate: bool = False) -> None:
+        # A seat that returns at once at no cost — an agent that crashes (its reservation is released), or any seat
+        # once only the report's calls are left — kept a task in flight every round, so the run never reached its
+        # stop: each return was reworked or cancelled for free and, once the clock moved, a fresh order was issued
+        # ("no live claim since the order was issued") and dispatched again. Hung CI on a slower runner.
+        if seat.name in self.res.benched or (not seat.external and self.meter.orders_spent()):
+            self._ev("not_dispatched", seat=seat.name, order=self.r.get(order)["code"],
+                     why="benched" if seat.name in self.res.benched else "only the report's calls are left")
+            return
         self.busy[seat.name] = order
         code = self.r.get(order)["code"]
         model: ChatModel | None = None
@@ -656,6 +667,14 @@ class Scheduler:
                 except Exception as e:  # noqa: BLE001
                     wr = WorkerResult(order=order, code=self.r.get(order)["code"], seat=seat.name, stopped=f"error: {e}")
                 self.res.workers.append(wr)
+                if str(wr.stopped).startswith("error"):
+                    self.crashes[seat.name] = self.crashes.get(seat.name, 0) + 1
+                    if self.crashes[seat.name] >= MAX_CRASHES and seat.name not in self.res.benched:
+                        self.res.benched.append(seat.name)
+                        self._ev("benched", seat=seat.name, why=f"{MAX_CRASHES} orders in a row ended in an error; "
+                                 f"last: {str(wr.stopped)[:160]}")
+                else:
+                    self.crashes[seat.name] = 0
                 self.tel.end(self._order_spans.pop(t, ""), ok=not str(wr.stopped).startswith("error"),
                              error=wr.stopped if str(wr.stopped).startswith("error") else "", calls=wr.calls,
                              returned=wr.returned, by_record=wr.returned_by_record or None, stopped=wr.stopped or None)
