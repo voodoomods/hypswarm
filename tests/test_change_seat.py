@@ -58,3 +58,23 @@ def test_a_value_in_seconds_is_data_unless_the_code_measures_time():
     timed = reg.fn(name="t", result_summary="Timed it.", values={"elapsed_s": {"value": 0.002, "unit": "s"}},
                    code="import time\nt = time.perf_counter()\nprint('elapsed_s', time.perf_counter() - t)")
     assert timed.startswith("refused") and "spread" in timed
+
+
+def test_a_review_order_says_an_objection_is_for_a_wrong_answer():
+    """S3, T2 (evening): the numbers reproduced and the conclusion stood, but "judge the method and the wording" drew
+    objections to the wording, and each cost a full rework."""
+    from hypswarm.scheduler import JUDGE
+    r, inv, s = _scheduler()
+    s._dispatch = lambda seat, order, escalate=False: None   # type: ignore[method-assign]   # issue, don't run
+    q = r.resolve("Q1", inv)
+    run_ = r.create(author="tester", type="run", inv=inv, fields={"kind": "agent", "name": "cases", "state": "succeeded",
+                    "config": {"source": "print('n_satisfied', 7)"}})
+    rs = r.create(author="tester", type="result", inv=inv, fields={"summary": "Ran the 12 cases: 7 satisfy the spec.",
+                  "values": {"n_satisfied": {"k": 7, "n": 12}}, "outcome": "positive"},
+                  links=[{"rel": "produced", "from": run_["id"]}])
+    r.create(author="tester", type="claim", inv=inv, fields={"statement": "parse_duration satisfies 7 of the 12 cases.",
+             "scope": "SPEC.md cases 1-12.", "measurements": [{"name": "n", "key": "n_satisfied", "result": rs["id"]}]},
+             links=[{"rel": "answers", "to": q}, {"rel": "derived_from", "to": rs["id"]}])
+    s._assign_from_stages(s._stage_rows())
+    o = next(o for o in r.orders(inv) if o["assignee"] == "reviewer")
+    assert JUDGE in str(o.get("objective")) and "wording" not in JUDGE.split("(")[0]

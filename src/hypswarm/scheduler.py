@@ -69,6 +69,12 @@ def _changers(gates: Sequence[dict[str, Any]]) -> set[str]:
     return {tok for gt in gates if gt["gate"] in _CHANGE_GATES for tok in re.findall(r"[a-z_]+", str(gt.get("who") or "").lower())}
 
 
+# What a review judges. "Judge the method and the wording" drew objections to right answers over wording — the
+# numbers reproduced, the conclusion stood, and the claim was reworked anyway (studies S3, T2, evening): a full
+# rework for a point a note carries. A wrong number anywhere in the claim is still an objection (studies E4).
+JUDGE = ("Judge whether the method and the numbers answer the question, and record a verdict: checked when they hold "
+         "(put any wording point in your notes); objection only when the answer, a number in the claim or the method "
+         "is wrong — an objection sends the whole claim back for rework.")
 _DECIDE = ("rework", "cancel_work", "add")
 LEAD_DECIDES = ("This is your last turn on this exception: decide now. rework the order with what is missing and, if a "
                 "predicate can't be met as asked, a changed done_when; or cancel_work with the reason. Reading is no "
@@ -545,7 +551,7 @@ class Scheduler:
                      f"workflow. Review {code}, the {what} that answers it: the order lists it, its values and "
                      "what it rests on" + (", and what the instrument's re-run confirmed — recompute only a value it "
                      "CONTRADICTED; a value merely not printed is not evidence against" if self.reproducer else "")
-                     + ". Judge the method and the wording against the question; record a verdict."
+                     + ". " + JUDGE
                      + self._beside(q["question"], code))
         if seat and self._issue(seat, target, objective, [{"p": first["gate"]}]):
             self._ev("stage_order", question=q["code"], stage=first["stage"], gates=[first["gate"]], seat=seat.name)
@@ -591,7 +597,7 @@ class Scheduler:
                              "measurements and the results it rests on" + (", and what the instrument's re-run of the "
                              "author's code confirmed — recompute only a value it CONTRADICTED; a value merely not "
                              "printed is not evidence against" if self.reproducer else "") +
-                             ". Judge the method and the wording against the question; record a verdict."
+                             ". " + JUDGE
                              + self._beside(q["id"], code))
                 if seat and self._issue(seat, claim, objective, [{"p": "reviewed"}]):
                     busy_targets.add(claim)

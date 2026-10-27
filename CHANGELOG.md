@@ -8,6 +8,9 @@
   rewrote the code under test; the new head made every check stale and nothing settled.
 - **A value in seconds is a timing only when the code measures time** (`perf_counter`, `timeit`, …). A duration
   that is the data (`parse_duration("2.6s")` returns 2) re-runs to the same digits; it was refused for a spread.
+- **A review order says what an objection is for:** the answer, a number in the claim or the method being wrong;
+  a wording point goes in the notes of a `checked`. "Judge the method and the wording" drew objections to right
+  answers whose numbers reproduced, each a full rework.
 - **`hypswarm run --python`** gives the seats a python tool in `--folder` and re-runs every registered computation
   with it (the instrument): a subprocess with a time limit on your machine, not a security boundary
   (`hypswarm.sandbox.python_subprocess`). A scientific, software, trading or optimization run with nothing that
