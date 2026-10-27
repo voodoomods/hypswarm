@@ -587,6 +587,8 @@ class Scheduler:
                 self.res.stopped = f"budget: {e}"
                 break
             why = self._done()
+            if (why == "stuck" or (not why and not self.inflight)) and self.meter.orders_spent():
+                why = "budget: only the report's calls are left"
             if (why == "stuck" or (not why and not self.inflight)) and self.meter.warn():
                 why = "budget: warning threshold"           # nothing more is issued past the threshold
             if why or not self.inflight:

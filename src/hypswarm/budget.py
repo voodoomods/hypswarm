@@ -32,6 +32,8 @@ class Budget:
     max_usd: float = 0.0           # 0 = no dollar cap (calls still cap)
     per_order_calls: int = 40
     warn_at: float = 0.85          # tell the lead to submit at this share of the call budget
+    report_calls: int = 8          # calls only the lead's report may use (at most a fifth of max_calls): orders in
+                                   # flight used to spend the last call, and the lead never got a report turn (T1)
 
 
 @dataclass
@@ -83,9 +85,12 @@ class Meter:
         return self.usd / self.total.calls if self.total.calls else 0.0
 
     def check(self, unit: str = "") -> None:
-        """Raise when the next call would break the budget (run or order), counting calls in flight."""
-        if self.total.calls + self.pending >= self.budget.max_calls:
-            raise BudgetExhausted(f"{self.budget.max_calls} model calls")
+        """Raise when the next call would break the budget (run or order), counting calls in flight. The last
+        ``report_calls`` are the report's: any other unit stops short of them."""
+        held = 0 if unit == "report" else min(self.budget.report_calls, self.budget.max_calls // 5)
+        if self.total.calls + self.pending >= self.budget.max_calls - held:
+            raise BudgetExhausted(f"{self.budget.max_calls} model calls"
+                                  + (f" ({held} held for the report)" if held else ""))
         if self.budget.max_usd and self.usd + self.pending * self._avg_usd() >= self.budget.max_usd:
             raise BudgetExhausted(f"${self.budget.max_usd:.2f}")
         if unit and self.by_unit.get(unit, Usage()).calls + self.pending_by_unit.get(unit, 0) \
@@ -104,6 +109,14 @@ class Meter:
         if self.pending_by_unit.get(unit, 0) > 0:
             self.pending -= 1
             self.pending_by_unit[unit] -= 1
+
+    def orders_spent(self) -> bool:
+        """Only the report's calls (or none) are left: no order can make another call."""
+        try:
+            self.check("")
+        except BudgetExhausted:
+            return True
+        return False
 
     def warn(self) -> bool:
         return self.total.calls >= self.budget.warn_at * self.budget.max_calls
