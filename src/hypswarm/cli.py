@@ -89,8 +89,16 @@ def cmd_run(a: argparse.Namespace) -> int:
     if a.record_url:
         from .http_record import HttpRecord
         record = HttpRecord(a.record_url)
+    data_tools, reproducer = [], None
+    if a.python:
+        if not a.folder:
+            raise SystemExit("--python runs code in the working folder: give --folder")
+        from .messages import Tool
+        from .sandbox import python_subprocess
+        reproducer = python_subprocess(Path(a.folder), a.python_seconds)
+        data_tools = [Tool.from_function(reproducer, name="python")]
     r = asyncio.run(run(task, seats, model_for, record=record, budget=budget, pricing=pricing,
-                        folder=a.folder or None))
+                        folder=a.folder or None, data_tools=data_tools, reproducer=reproducer))
     print(r.report)
     print(f"\n--- {r.stopped} · {r.usage['calls']} calls · ${r.usage['usd']:.4f} · {r.seconds}s · record {r.record_path}",
           file=sys.stderr)
@@ -138,6 +146,10 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--seats", default="", help="seats.toml; omit to use the profile's roster")
     r.add_argument("--profile", default="", help="scientific | software | trading | knowledge | optimization")
     r.add_argument("--folder", default="", help="working folder for the files toolkit")
+    r.add_argument("--python", action="store_true",
+                   help="give the seats a python tool in --folder and re-run every registered computation with it (the "
+                        "instrument). A subprocess with a time limit on your machine, not a security boundary")
+    r.add_argument("--python-seconds", type=int, default=60, help="time limit per python call (default 60)")
     r.add_argument("--record", default="")
     r.add_argument("--record-url", default="", help="a record served by `hypgraph serve --writable`")
     r.add_argument("--model", default="", help="default model id for seats without one")

@@ -45,6 +45,10 @@ def _live(n: dict[str, Any]) -> bool:
 
 _TIME_UNIT = re.compile(r"^(?:s|secs?|seconds?|ms|msecs?|milliseconds?|us|µs|μs|microseconds?|ns|nanoseconds?)$",
                         re.IGNORECASE)
+# The code measures time: only then is a value in seconds a timing. A duration that is the data (parse_duration("2.6s")
+# returns 3 seconds) re-runs to the same digits; it was refused as a timing (studies E4, evening run).
+_MEASURES_TIME = re.compile(r"\b(?:perf_counter(?:_ns)?|monotonic(?:_ns)?|process_time(?:_ns)?|thread_time(?:_ns)?|"
+                            r"time_ns|timeit|default_timer|time\.time|datetime\.now|utcnow)\b")
 _TIME_KEY = re.compile(r"(?:_|^)(?:s|sec|secs|seconds|ms|us|ns)$|(?:^|_)(?:time|timing|elapsed|duration|latency)(?:_|$)",
                        re.IGNORECASE)
 
@@ -116,16 +120,21 @@ def _not_a_question(text: str, existing: list[tuple[str, str]]) -> str:
     mine = _words(text)
     for code, other in existing:
         theirs = _words(other)
-        if mine and theirs and len(mine & theirs) / len(mine | theirs) >= 0.8:
+        # a copy, or a copy with a clause added ("… or decline — given the honest out-of-sample result …": the
+        # added words diluted the overlap below 0.8, and the run owed Q3 twice; studies T2, evening)
+        if mine and theirs and (len(mine & theirs) / len(mine | theirs) >= 0.8 or len(mine & theirs) / len(theirs) >= 0.9):
             return (f"refused: {code} already asks this. To get it answered, rework the order on {code} (rework) — "
                     "a second copy owes the whole workflow again")
     return ""
 
 
 def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
-                 on_write: OnWrite | None = None) -> list[Tool]:
+                 on_write: OnWrite | None = None, runs_code: bool = True) -> list[Tool]:
     """What a worker or reviewer can do to the record while holding an order. ``on_write(kind, payload)`` is told
-    after every accepted ``graph_add`` / ``register_run`` (a host's hook; it never changes the reply)."""
+    after every accepted ``graph_add`` / ``register_run`` (a host's hook; it never changes the reply).
+    ``runs_code=False``: nothing the seat holds executes code, so ``register_run`` refuses code — it can't have run.
+    Through the CLI with only the files toolkit, seats registered code with its "output" 14 times in one run; with no
+    instrument nothing checked it, and code text counts as the code behind a result (studies O1, evening)."""
     me = seat.name
     state = {"returned": False, "reviewed": False}
 
@@ -196,7 +205,11 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         values; answers: the question code it answers; scope: under which conditions it holds; claim_kind: finding
         (default) | exclusion | inconclusive. The result counts toward your order by itself; a claim settles a
         question."""
-        bare = _timings_without_spread(values or {})
+        if code.strip() and not runs_code:
+            return ("refused: nothing in this run executes code, so this code wasn't run and isn't evidence. Register "
+                    "only what you read off the files (values, no code), or return the order and say it needs a tool "
+                    "that runs code")
+        bare = _timings_without_spread(values or {}) if _MEASURES_TIME.search(code) else []
         if bare and code.strip():
             # the instrument re-runs the code: a re-timed value never lands on the same digits, and every timing
             # registered bare came back CONTRADICTED while the ones with a spread were confirmed (studies E2)

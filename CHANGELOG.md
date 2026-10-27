@@ -1,5 +1,30 @@
 # Changelog
  
+## Unreleased
+
+- **A stage that reads the code doesn't go to the seat that changes it.** The seat a workflow names for its change
+  stage (software: the implementer, on `diff_registered`) isn't the fallback for another stage, and those orders
+  say not to edit the working files. With the tester busy, a counting question went to the implementer, who
+  rewrote the code under test; the new head made every check stale and nothing settled.
+- **A value in seconds is a timing only when the code measures time** (`perf_counter`, `timeit`, …). A duration
+  that is the data (`parse_duration("2.6s")` returns 2) re-runs to the same digits; it was refused for a spread.
+- **A copy of a question with a clause added is a copy.** The lead's `add` refuses a question that holds 90 % of
+  an existing one's words ("… or decline — given the honest out-of-sample result …" for Q3), as well as one that
+  overlaps it by 80 %.
+- **Every unchecked answer gets its review under a workflow.** A seat working on Q1 also answered Q2; that claim
+  was in no gate's evidence, so the review stage could only go to the newest claim (already checked) and the run
+  stopped stuck with Q2 held open. The review stage now takes the board's unchecked answers too.
+- **A review order says what an objection is for:** the answer, a number in the claim or the method being wrong;
+  a wording point goes in the notes of a `checked`. "Judge the method and the wording" drew objections to right
+  answers whose numbers reproduced, each a full rework.
+- **`hypswarm run --python`** gives the seats a python tool in `--folder` and re-runs every registered computation
+  with it (the instrument): a subprocess with a time limit on your machine, not a security boundary
+  (`hypswarm.sandbox.python_subprocess`). A scientific, software, trading or optimization run with nothing that
+  executes code is told so up front, seats included. Through the CLI with only the files toolkit, an
+  optimization run's seats wrote "exact DP over capacity" as prose and a wrong optimum settled.
+  With no instrument and only the files toolkit, `register_run` refuses code: nothing could have run it (the
+  same run registered code and its "output" 14 times).
+
 ## 0.1.0a8 — 2026-10-27: measure questions, and the lead writes the report
 
 Needs hypgraph 0.7.0, whose workflows let a question that asks for a measurement skip the gates it doesn't need.
