@@ -57,6 +57,12 @@ def _to_review(row: dict[str, Any]) -> str:
     return str(pending[-1] if pending else row["answers"][-1])
 
 
+_DECIDE = ("rework", "cancel_work", "add")
+LEAD_DECIDES = ("This is your last turn on this exception: decide now. rework the order with what is missing and, if a "
+                "predicate can't be met as asked, a changed done_when; or cancel_work with the reason. Reading is no "
+                "longer available.")
+
+
 @dataclass
 class SchedulerResult:
     stopped: str = ""                       # settled | budget | stuck | cancelled
@@ -689,6 +695,12 @@ class Scheduler:
                                                 "the facts you have, your interpretation under them, and the answers. "
                                                 + ("Your last submit was refused: fix exactly what it named. "
                                                    if retried else "") + "Nothing else is available."))
+            elif turn >= turns - 1 and "submit_report" not in by and any(n in by for n in _DECIDE):
+                # an exception ends on a decision: leads read the record (show, two to five a turn) until their turns
+                # ran out, and the order was cancelled as undecided (studies S2, day 2: three of four escalations)
+                offered = [by[n] for n in _DECIDE if n in by]
+                messages.append(Message("user", LEAD_DECIDES + (" Your last decision was refused: fix exactly what it "
+                                                                "named." if retried else "")))
             try:
                 self.meter.reserve(unit)
             except BudgetExhausted:
@@ -734,6 +746,10 @@ class Scheduler:
                 if tc.name == "submit_report" and turn == last and not retried:
                     # refused on the last turn: one more submit-only turn, with the refusal in hand, before the
                     # harness assembles (studies/challenges E2: refused on turns 5 and 6 of 6, both rightly)
+                    last, retried = last + 1, True
+                if tc.name in _DECIDE and turn == last and not retried and out.startswith("refused"):
+                    # the same for an exception's last decision: a refused rework left the order undecided and the
+                    # harness cancelled it (studies S2, day 2)
                     last, retried = last + 1, True
 
     async def _lead_judges(self, o: dict[str, Any], missing: str) -> None:
