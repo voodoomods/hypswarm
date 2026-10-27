@@ -235,9 +235,15 @@ def lead_tools(record: Record, seat: Seat, inv: str, meter: Meter, *, report_box
 
     def add(type: str, fields: dict[str, Any], links: list[dict[str, Any]] | None = None) -> str:
         """Plan: a hypothesis {statement, predictions[]} or an experiment {aim, protocol, success_criteria} with
-        tests links [{"rel": "tests", "to": "H1", "data": {"expected": …}}]; or a question {text}."""
+        tests links [{"rel": "tests", "to": "H1", "data": {"expected": …}}]; or a question {text, asks?: "measure"}
+        (asks=measure when it wants a number or a check of what exists: no change, hypothesis or backtest)."""
         if type not in ("hypothesis", "experiment", "question"):
             return "the lead plans (hypothesis, experiment, question); results and claims come from workers"
+        if type == "question" and "?" not in str((fields or {}).get("text") or ""):
+            # a lead once added "Assign it to risk as a REVIEW of CL2 …" as a question, and the run then owed it a
+            # whole trading workflow (studies/challenges T1 Q4)
+            return ("refused: a question asks what the run must find out, ending with '?'. To send work to a seat, "
+                    "rework its order (rework) with done_when; a question owes the whole workflow")
         try:
             ls = [dict(l, to=record.resolve(str(l["to"]), inv)) if l.get("to") else l for l in (links or [])]
             n = record.create(author=me, type=type, inv=inv, fields=fields, links=ls)
