@@ -263,7 +263,7 @@ scratch. Several make a deliberately wrong first write so the trace shows the re
 HypSwarm needs HypGraph's coordination layer, which ships with hypgraph 0.4:
 
 ```bash
-pip install --pre hypswarm                 # pulls hypgraph>=0.6; --pre while it is an alpha
+pip install --pre hypswarm                 # pulls hypgraph>=0.7; --pre while it is an alpha
 ```
 
 ## Status
