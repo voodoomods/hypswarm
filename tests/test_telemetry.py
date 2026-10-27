@@ -102,8 +102,11 @@ def test_a_broken_sink_never_breaks_a_run(tmp_path):
     assert res.stopped == "settled"
 
 
-def test_opentelemetry_spans_nest_and_carry_gen_ai_attributes(tmp_path):
+def test_opentelemetry_spans_nest_and_carry_gen_ai_attributes(tmp_path, monkeypatch):
     pytest.importorskip("opentelemetry.sdk")
+    # CI sets OTEL_SDK_DISABLED (to keep CrewAI's own telemetry quiet), and the SDK honours it with no-op tracers — as
+    # it should for users. This test is about our spans, so it turns the SDK back on for its own providers.
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import InMemoryMetricReader
     from opentelemetry.sdk.trace import TracerProvider
@@ -119,12 +122,8 @@ def test_opentelemetry_spans_nest_and_carry_gen_ai_attributes(tmp_path):
     res = _run(tmp_path, telemetry=Telemetry([sink, seen.append], pricing=Pricing(0.2, 0.006, 0.6)))
     spans = exp.get_finished_spans()
     by = collections.Counter(s.name.split(" ")[0] for s in spans)
-    import os
-
-    import opentelemetry.version
-    why = (f"spans {dict(by)}; first {[s.name for s in spans[:6]]}; events seen {collections.Counter(e['kind'] for e in seen)}; "
-           f"otel {opentelemetry.version.__version__}; env {[k for k in os.environ if k.startswith('OTEL')]}; "
-           f"tracer {type(sink._tracer).__name__}")
+    why = (f"spans {dict(by)}; events the sink saw {collections.Counter(e['kind'] for e in seen)}; "
+           f"tracer {type(sink._tracer).__name__}")             # if this fails again, it says where the spans went
     assert by["hypswarm.run"] == 1 and by["order"] >= 2 and by["chat"] == res.usage["calls"] and by["execute_tool"] >= 1, why
     root = next(s for s in spans if s.name == "hypswarm.run")
     chat = next(s for s in spans if s.name.startswith("chat") and s.attributes.get("hypswarm.seat") != "lead")
