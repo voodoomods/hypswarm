@@ -12,7 +12,7 @@ window.SITE_DATA = {
  "standing": {
   "tests": {
    "code": "CL1",
-   "id": "nb1b56529a487",
+   "id": "n8edf603a5d45",
    "review": "checked",
    "verdicts": [
     "site-check:replicated"
@@ -22,7 +22,7 @@ window.SITE_DATA = {
   },
   "deps": {
    "code": "CL2",
-   "id": "ne909924fd59a",
+   "id": "n8f6d4107a4c9",
    "review": "checked",
    "verdicts": [
     "site-check:checked"
@@ -32,7 +32,7 @@ window.SITE_DATA = {
   },
   "settled": {
    "code": "CL3",
-   "id": "n924d32953d3e",
+   "id": "n0a83b41833e5",
    "review": "checked",
    "verdicts": [
     "site-check:replicated"
@@ -42,7 +42,7 @@ window.SITE_DATA = {
   },
   "refused": {
    "code": "CL4",
-   "id": "n9bac7f4543f5",
+   "id": "n51743e62f83c",
    "review": "checked",
    "verdicts": [
     "site-check:replicated"
@@ -57,7 +57,7 @@ window.SITE_DATA = {
   "warnings": 0,
   "notes": 0,
   "investigations": [
-   "inv-fe6b7e71"
+   "inv-032c59f8"
   ],
   "checked": {
    "sentences": 208,
@@ -73,7 +73,7 @@ window.SITE_DATA = {
    "why": "design: the scheduler (scheduler.py) reads the record's derived state and calls no model"
   }
  ],
- "inv": "inv-fe6b7e71",
- "built": "2026-10-27T03:48:02Z",
- "head": "f2b334695aac7d5d013595b5a8a7eb49bec7659153981c3dedfa584aac422e73"
+ "inv": "inv-032c59f8",
+ "built": "2026-10-27T04:11:50Z",
+ "head": "231635d5c62479226c11edaded290aa086abc2f1bafb32a18ff3d50158d66932"
 };

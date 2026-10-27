@@ -169,9 +169,12 @@ def build() -> tuple[Graph, str, dict]:
 
     # ── the reviewer ──
     t2, c2 = run_tests(), collect_tests()
-    check.review(nodes["tests"]["claim"], "replicated" if t2["passed"] == t["passed"] and c2 == total + t["skipped"] else "objection",
+    # the same outcome twice, and every test that ran was collected (a module that skips on import is one skip and no
+    # collected tests, so collected and passed + skipped need not be equal)
+    same = (t2["passed"], t2["failed"], t2["skipped"]) == (t["passed"], t["failed"], t["skipped"]) and c2 >= total
+    check.review(nodes["tests"]["claim"], "replicated" if same else "objection",
                  method="Ran python -m pytest -q again and counted the tests by collection.",
-                 notes=f"Second run: {t2['passed']} passed, {t2['skipped']} skipped; {c2} collected.")
+                 notes=f"Second run: {t2['passed']} passed, {t2['failed']} failed, {t2['skipped']} skipped; {c2} collected.")
     dt = deps_by_toml()
     check.review(nodes["deps"]["claim"], "checked" if dt == deps else "objection",
                  method="Parsed pyproject.toml with tomllib instead of a regex.", notes=f"[project] dependencies has {dt} entries.")
