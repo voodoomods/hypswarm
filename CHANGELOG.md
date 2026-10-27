@@ -1,6 +1,10 @@
 # Changelog
  
-## Unreleased
+## 0.1.0a9 — 2026-10-27: the new-user path works, and a computed answer needs its code
+
+Needs hypgraph 0.7.1, whose optimization, trading and scientific gates settle a computed answer only with the code
+behind it. Found in an evening of real-model runs across all five profiles, scored against their answer keys, and in
+a new user's walk through the README and the CLI.
 
 - **A stage that reads the code doesn't go to the seat that changes it.** The seat a workflow names for its change
   stage (software: the implementer, on `diff_registered`) isn't the fallback for another stage, and those orders
