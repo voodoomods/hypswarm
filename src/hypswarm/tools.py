@@ -127,9 +127,12 @@ def _not_a_question(text: str, existing: list[tuple[str, str]]) -> str:
 
 
 def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
-                 on_write: OnWrite | None = None) -> list[Tool]:
+                 on_write: OnWrite | None = None, runs_code: bool = True) -> list[Tool]:
     """What a worker or reviewer can do to the record while holding an order. ``on_write(kind, payload)`` is told
-    after every accepted ``graph_add`` / ``register_run`` (a host's hook; it never changes the reply)."""
+    after every accepted ``graph_add`` / ``register_run`` (a host's hook; it never changes the reply).
+    ``runs_code=False``: nothing the seat holds executes code, so ``register_run`` refuses code — it can't have run.
+    Through the CLI with only the files toolkit, seats registered code with its "output" 14 times in one run; with no
+    instrument nothing checked it, and code text counts as the code behind a result (studies O1, evening)."""
     me = seat.name
     state = {"returned": False, "reviewed": False}
 
@@ -200,6 +203,10 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         values; answers: the question code it answers; scope: under which conditions it holds; claim_kind: finding
         (default) | exclusion | inconclusive. The result counts toward your order by itself; a claim settles a
         question."""
+        if code.strip() and not runs_code:
+            return ("refused: nothing in this run executes code, so this code wasn't run and isn't evidence. Register "
+                    "only what you read off the files (values, no code), or return the order and say it needs a tool "
+                    "that runs code")
         bare = _timings_without_spread(values or {}) if _MEASURES_TIME.search(code) else []
         if bare and code.strip():
             # the instrument re-runs the code: a re-timed value never lands on the same digits, and every timing

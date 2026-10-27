@@ -75,6 +75,7 @@ def _changers(gates: Sequence[dict[str, Any]]) -> set[str]:
 JUDGE = ("Judge whether the method and the numbers answer the question, and record a verdict: checked when they hold "
          "(put any wording point in your notes); objection only when the answer, a number in the claim or the method "
          "is wrong — an objection sends the whole claim back for rework.")
+READ_ONLY_TOOLS = frozenset({"list_files", "read_file"})   # the files toolkit: reads, executes nothing
 _DECIDE = ("rework", "cancel_work", "add")
 LEAD_DECIDES = ("This is your last turn on this exception: decide now. rework the order with what is missing and, if a "
                 "predicate can't be met as asked, a changed done_when; or cancel_work with the reason. Reading is no "
@@ -116,6 +117,8 @@ class Scheduler:
         self.model_for, self.meter = model_for, meter
         self.data_tools, self.preamble, self.header = list(data_tools), preamble, header
         self.reproducer = reproducer                        # host-supplied: re-executes registered code (no model)
+        # no instrument and only the files toolkit: nothing here executes code, so code a seat registers wasn't run
+        self.runs_code = reproducer is not None or not all(t.name in READ_ONLY_TOOLS for t in self.data_tools)
         self._reproduced: set[str] = set()
         self.world = world                                  # host-supplied: keeps the record in step with the files
         self.on_write = on_write                            # host hook on every accepted write by a seat
@@ -225,7 +228,7 @@ class Scheduler:
             task = asyncio.create_task(run_order(seat, model, self.r, self.inv, order, meter=self.meter,
                                                  data_tools=self.data_tools, preamble=self._preamble(),
                                                  header=self.header, on_write=self.on_write, tel=self.tel,
-                                                 tel_parent=sp))
+                                                 tel_parent=sp, runs_code=self.runs_code))
         self._order_spans[task] = sp
         self.inflight[task] = (seat, order)
         escalated = bool(escalate and seat.escalate_to and seat.escalate_to != seat.model and not seat.external)

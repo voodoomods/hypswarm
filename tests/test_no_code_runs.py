@@ -67,3 +67,45 @@ def test_cli_python_needs_a_folder(tmp_path: Path):
                  encoding="utf-8")
     with pytest.raises(SystemExit, match="give --folder"):
         main(["run", "--task", str(t), "--profile", "optimization", "--model", "m", "--python"])
+
+
+def test_code_nothing_could_run_is_refused():
+    """O1 through the CLI (evening): with only the files toolkit and no instrument, seats registered code and its
+    "output" 14 times; code text counts as the code behind a result, and nothing had run it."""
+    from hypswarm import Seat
+    from hypswarm.budget import Meter
+    from hypswarm.record import LocalRecord
+    from hypswarm.tools import worker_tools
+    r = LocalRecord(None, [Seat("solver", "worker"), Seat("verifier", "reviewer")])
+    inv = r.start("Load the van", "Pick the items worth the most under the weight limit.", [("Q1", "What fits best?")])
+    order = r.issue_work(author="harness", inv=inv, target=r.resolve("Q1", inv), assignee="solver",
+                         objective="Find the highest total value that fits in the van.")["order"]
+
+    def reg(runs_code: bool):
+        return next(t for t in worker_tools(r, Seat("solver", "worker"), inv, order, Meter(Budget(max_calls=10)),
+                                            runs_code=runs_code) if t.name == "register_run")
+    out = reg(False).fn(name="dp", result_summary="Exact DP over capacity: optimum 757.", code="print('objective', 757)",
+                        values={"objective": {"value": 757}})
+    assert out.startswith("refused") and "wasn't run" in out
+    read = reg(False).fn(name="plan", result_summary="Read PLAN.md: the plan lists 11 items.",
+                         values={"n_items_listed": {"value": 11}})
+    assert read.startswith("run ")
+    assert reg(True).fn(name="dp", result_summary="Exact DP over capacity: optimum 656.", code="print('objective', 656)",
+                        values={"objective": {"value": 656}}).startswith("run ")
+
+
+def test_the_scheduler_knows_when_nothing_runs_code(tmp_path: Path):
+    from hypswarm import Seat
+    from hypswarm.budget import Meter
+    from hypswarm.files import file_tools
+    from hypswarm.record import LocalRecord
+    from hypswarm.scheduler import Scheduler
+    seats = [Seat("solver", "worker"), Seat("verifier", "reviewer")]
+    r = LocalRecord(None, seats)
+    inv = r.start("Load the van", "Pick the items worth the most under the weight limit.", [("Q1", "What fits best?")])
+    files = file_tools(r, inv, tmp_path)
+    mk = lambda **kw: Scheduler(r, inv, seats, model_for=lambda s: None, meter=Meter(Budget(max_calls=4)), **kw)  # type: ignore[arg-type]
+    py = python_subprocess(tmp_path)
+    assert not mk(data_tools=files).runs_code
+    assert mk(data_tools=files, reproducer=py).runs_code
+    assert mk(data_tools=[*files, Tool.from_function(py, name="python")]).runs_code

@@ -19,6 +19,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "examples"))
 from _common import scripted  # the examples' stage-walking scripted models
 
 
+def _python(folder: Path) -> list:
+    """The scripted answers register code: a run that registers code needs a tool that runs it (no instrument here)."""
+    from hypswarm.messages import Tool
+    from hypswarm.sandbox import python_subprocess
+    return [Tool.from_function(python_subprocess(folder), name="python")]
+
+
 def _answers_scientific():
     return {"Q1": {"summary": "Counted A's correct items in items.csv.", "values": {"acc_a": {"k": 812, "n": 1000}},
                    "code": "print('acc_a', 812, 'of', 1000)", "claim": "A is right on 812 of 1000 items.",
@@ -34,7 +41,8 @@ def test_stage_orders_walk_a_scientific_question_to_complete(tmp_path):
                 files={"items.csv": b"item,a\n1,1\n"}, profile="scientific")
     seats = [Seat("analyst", "worker", takes=("accuracy", "counts")), Seat("critic", "reviewer"), Seat("lead", "lead")]
     path = tmp_path / "s.hypgraph"
-    res = asyncio.run(run(task, seats, scripted(_answers_scientific()), record=path, budget=Budget(max_calls=40)))
+    res = asyncio.run(run(task, seats, scripted(_answers_scientific()), record=path, budget=Budget(max_calls=40),
+                          data_tools=_python(tmp_path)))
     assert res.stopped == "settled" and res.report_accepted
     issued = _events(res, "stage_order")
     assert issued[0]["stage"] == "conjectured" and issued[0]["seat"] == "analyst"
@@ -59,7 +67,8 @@ def test_frozen_v1_profile_keeps_the_board_path(tmp_path):
                 files={"items.csv": b"item,a\n1,1\n"}, profile="scientific@1")
     seats = [Seat("analyst", "worker"), Seat("critic", "reviewer"), Seat("lead", "lead")]
     path = tmp_path / "v1.hypgraph"
-    res = asyncio.run(run(task, seats, scripted(_answers_scientific()), record=path, budget=Budget(max_calls=40)))
+    res = asyncio.run(run(task, seats, scripted(_answers_scientific()), record=path, budget=Budget(max_calls=40),
+                          data_tools=_python(tmp_path)))
     assert res.stopped == "settled" and not _events(res, "stage_order")
     g = Graph(str(path))
     try:

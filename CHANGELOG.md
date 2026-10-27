@@ -16,6 +16,8 @@
   (`hypswarm.sandbox.python_subprocess`). A scientific, software, trading or optimization run with nothing that
   executes code is told so up front, seats included. Through the CLI with only the files toolkit, an
   optimization run's seats wrote "exact DP over capacity" as prose and a wrong optimum settled.
+  With no instrument and only the files toolkit, `register_run` refuses code: nothing could have run it (the
+  same run registered code and its "output" 14 times).
 
 ## 0.1.0a8 — 2026-10-27: measure questions, and the lead writes the report
 
