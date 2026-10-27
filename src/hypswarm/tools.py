@@ -97,6 +97,31 @@ def implied_uses(record: Record, inv: str, order: str, code: str) -> list[str]:
     return list(dict.fromkeys(out))
 
 
+_CODE = re.compile(r"\b(?:Q|T|CL|RS|RUN|RV|H|X|D)\d+\b")
+
+
+def _words(text: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9]{3,}", text.lower()))
+
+
+def _not_a_question(text: str, existing: list[tuple[str, str]]) -> str:
+    """Why a lead's question isn't one ('' = it is). Leads added orders as questions — "Q2 claim: the analyst's T10
+    must write, on the existing run result RS5 …?" — and copies of open questions, and each owed the whole workflow
+    (studies S2, S3, E6 day 2: every one of the three runs grew a Q4)."""
+    codes = _CODE.findall(text)
+    if codes:
+        return (f"refused: a question asks what the run must find out about the world; this one names record entries "
+                f"({', '.join(dict.fromkeys(codes))}). To send that work to a seat, rework its order (rework) with "
+                "done_when")
+    mine = _words(text)
+    for code, other in existing:
+        theirs = _words(other)
+        if mine and theirs and len(mine & theirs) / len(mine | theirs) >= 0.8:
+            return (f"refused: {code} already asks this. To get it answered, rework the order on {code} (rework) — "
+                    "a second copy owes the whole workflow again")
+    return ""
+
+
 def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                  on_write: OnWrite | None = None) -> list[Tool]:
     """What a worker or reviewer can do to the record while holding an order. ``on_write(kind, payload)`` is told
@@ -290,6 +315,12 @@ def lead_tools(record: Record, seat: Seat, inv: str, meter: Meter, *, report_box
             # whole trading workflow (studies/challenges T1 Q4)
             return ("refused: a question asks what the run must find out, ending with '?'. To send work to a seat, "
                     "rework its order (rework) with done_when; a question owes the whole workflow")
+        if type == "question":
+            why = _not_a_question(str((fields or {}).get("text") or ""),
+                                  [(q.get("code") or "", str((q.get("body") or {}).get("text") or ""))
+                                   for q in (record.get(x["id"]) for x in record.search("", "question", inv, 200))])
+            if why:
+                return why
         try:
             ls = [dict(l, to=record.resolve(str(l["to"]), inv)) if l.get("to") else l for l in (links or [])]
             n = record.create(author=me, type=type, inv=inv, fields=fields, links=ls)

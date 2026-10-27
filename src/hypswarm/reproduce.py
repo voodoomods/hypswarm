@@ -126,7 +126,11 @@ def check_output(values: dict[str, Any], stdout: str) -> dict[str, Any]:
                 ("n" not in v or _matches(float(v["n"]), printed)):          # a count's n must still be the same
             confirmed.append(name)
             within.append(name)
-        elif any(not _matches(w, [x]) for w in want for x in labelled) and labelled:
+        elif labelled and any(_matches(want[0], [x]) for x in labelled):
+            # printed next to its name exactly; a count's denominator just wasn't printed ("n_tutored 80" for
+            # {k: 80, n: 600}) — confirmed, not contradicted (studies S2: three right counts flagged CONTRADICTED)
+            confirmed.append(name)
+        elif labelled:
             contradicted.append(name)
         else:
             unprinted.append(name)
