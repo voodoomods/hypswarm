@@ -1,6 +1,9 @@
 # Changelog
  
-## Unreleased
+## 0.1.0a7 — 2026-10-26: watch a run
+
+Needs hypgraph 0.6.0, whose HypGraph UI streams the telemetry into its Live view and replays a finished run
+(`hypgraph export --telemetry` carries it in a bundle).
 
 - **"Atlas" is now the HypGraph UI** in the examples, their READMEs, the site and the design notes, as in hypgraph
   0.6. The examples point to [hypgraph.com/examples](https://hypgraph.com/examples/), where 01–05 replay live.
