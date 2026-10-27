@@ -50,6 +50,12 @@ _RESULT_GATES = {"result_exists", "tests_pass_current", "tests_pass", "backteste
                  "feasible_bounded", "run_registered"}
 
 
+_DECIDE = ("rework", "cancel_work", "add")
+LEAD_DECIDES = ("This is your last turn on this exception: decide now. rework the order with what is missing and, if a "
+                "predicate can't be met as asked, a changed done_when; or cancel_work with the reason. Reading is no "
+                "longer available.")
+
+
 @dataclass
 class SchedulerResult:
     stopped: str = ""                       # settled | budget | stuck | cancelled
@@ -642,6 +648,11 @@ class Scheduler:
                                                 "the facts you have, your interpretation under them, and the answers. "
                                                 + ("Your last submit was refused: fix exactly what it named. "
                                                    if retried else "") + "Nothing else is available."))
+            elif turn >= turns - 1 and "submit_report" not in by and any(n in by for n in _DECIDE):
+                # an exception ends on a decision: leads read the record (show, two to five a turn) until their turns
+                # ran out, and the order was cancelled as undecided (studies S2, day 2: three of four escalations)
+                offered = [by[n] for n in _DECIDE if n in by]
+                messages.append(Message("user", LEAD_DECIDES))
             try:
                 self.meter.reserve(unit)
             except BudgetExhausted:

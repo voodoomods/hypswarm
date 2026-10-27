@@ -38,3 +38,43 @@ def test_a_copy_of_an_open_question_is_refused():
 
 def test_a_new_question_is_allowed():
     assert _not_a_question("Is the steps_k difference larger in participants over 60?", EXISTING) == ""
+
+
+def test_an_exception_ends_on_the_lead_s_decision():
+    """A lead that would read forever at an exception gets a last turn of decision tools only (studies S2, day 2:
+    three of four escalations were cancelled as undecided after the lead spent its turns on show)."""
+    import asyncio
+
+    from hypswarm import Budget, Seat, Task, run
+    from hypswarm.providers.stub import StubModel, calls_made
+    from hypswarm.scheduler import LEAD_DECIDES
+
+    from .test_alpha import lead_script
+
+    offered: list[list[str]] = []
+
+    def lazy(messages, tools):
+        return None
+
+    def reading_lead(messages, tools):
+        names = sorted(t.name for t in tools)
+        exception = any("EXCEPTION" in m.content for m in messages if m.role == "user")
+        if not exception:
+            return lead_script(messages, tools)
+        offered.append(names)
+        if "cancel_work" in names and "show" not in names:
+            assert any(m.content == LEAD_DECIDES for m in messages if m.role == "user")
+            code = next(m.content for m in messages if m.role == "user" and "EXCEPTION" in m.content).split("order ")[1].split()[0]
+            return ("cancel_work", {"order": code, "why": "the worker can't answer it from the files"})
+        if "cancel_work" in calls_made(messages):
+            return None
+        return ("show", {"node": "Q1"})
+
+    r = asyncio.run(run(Task("Nobody can", "A task nobody can do.", [("Q1", "Unanswerable?")]),
+                        [Seat("analyst", "worker"), Seat("lead", "lead")],
+                        {"worker": StubModel(lazy), "lead": StubModel(reading_lead)}, budget=Budget(max_calls=60)))
+    assert ["add", "cancel_work", "rework"] in offered                     # the last turn: decisions only
+    assert offered.index(["add", "cancel_work", "rework"]) > 0             # reading was allowed before it
+    why = [e.get("why") for e in r.scheduler.events if e["kind"] == "cancelled"]
+    assert "undecided by the lead" not in why                              # the lead decided
+    assert any(o["status"] == "cancelled" for o in r.orders)
