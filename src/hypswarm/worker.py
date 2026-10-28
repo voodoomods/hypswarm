@@ -52,7 +52,10 @@ def _closing(seat: Seat, state: dict[str, Any], turns_left: int) -> bool:
 async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, order: str, *, meter: Meter,
                     data_tools: Sequence[Tool] = (), preamble: str = "", header: str = "",
                     on_write: OnWrite | None = None, tel: Telemetry | None = None, tel_parent: str = "",
-                    runs_code: bool = True) -> WorkerResult:
+                    runs_code: bool = True, turns: int | None = None) -> WorkerResult:
+    """``turns``: model calls this order gets (the scheduler scales it with the gates the order carries); the seat's
+    ``max_turns`` when not given."""
+    turns = turns or seat.max_turns
     tel = tel or NULL
     code = record.get(order)["code"]
     res = WorkerResult(order=order, code=code, seat=seat.name)
@@ -65,14 +68,14 @@ async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, orde
                         + ("\n\n" + preamble if preamble else "")),
                 Message("user", record.order_text(order))]
     closing = False
-    for _turn in range(seat.max_turns):
+    for _turn in range(turns):
         try:
             meter.reserve(code)                     # the claim on the budget is made before the call, not after
         except BudgetExhausted as e:
             res.stopped = f"budget: {e}"
             break
         offered = tools
-        if _closing(seat, state, seat.max_turns - _turn) and "review" in by:
+        if _closing(seat, state, turns - _turn) and "review" in by:
             # A reviewer's order ends on its verdict, not on its turn limit: reviewers re-ran the claim's code turn
             # after turn and the order ran out with no review (studies E6: 1 review in 5 reviewer orders). The last
             # two turns offer only `review` — two, so a refused review gets its retry.

@@ -77,6 +77,12 @@ JUDGE = ("Judge whether the method and the numbers answer the question, and reco
          "is wrong — an objection sends the whole claim back for rework.")
 READ_ONLY_TOOLS = frozenset({"list_files", "read_file"})   # the files toolkit: reads, executes nothing
 MAX_CRASHES = 3      # a seat whose orders end in an error this many times in a row is benched for the run
+# Turns an order gets beyond the seat's max_turns, per gate after the first. Every stage order got the seat's 14
+# turns whatever it carried: of 78 worker orders measured in trading and scientific runs (studies T2, T3, S3), most
+# ended at exactly 14 with "turns", a four- or five-gate order (thesis, preregistered, backtest, claim) was reworked
+# into a fresh context that spent its turns rediscovering what the first attempt wrote (12-26 `show`s), and the
+# question never settled (item 49). A one-gate order — a review, a claim — is unchanged.
+TURNS_PER_GATE = 4
 _DECIDE = ("rework", "cancel_work", "add")
 LEAD_DECIDES = ("This is your last turn on this exception: decide now. rework the order with what is missing and, if a "
                 "predicate can't be met as asked, a changed done_when; or cancel_work with the reason. Reading is no "
@@ -204,6 +210,15 @@ class Scheduler:
             return self.model_for(replace(seat, model=seat.escalate_to))
         return self.model_for(seat)
 
+    def _turns_for(self, seat: Seat, order: str) -> int:
+        """The seat's max_turns, plus TURNS_PER_GATE for every gate the order carries beyond the first, capped by the
+        budget's calls per order."""
+        try:
+            n = len(self.r.check_work(order).get("predicates") or [])
+        except (GraphError, KeyError, TypeError):
+            n = 1
+        return max(1, min(seat.max_turns + TURNS_PER_GATE * max(0, n - 1), self.meter.budget.per_order_calls))
+
     def _dispatch(self, seat: Seat, order: str, escalate: bool = False) -> None:
         # A seat that returns at once at no cost — an agent that crashes (its reservation is released), or any seat
         # once only the report's calls are left — kept a task in flight every round, so the run never reached its
@@ -239,7 +254,8 @@ class Scheduler:
             task = asyncio.create_task(run_order(seat, model, self.r, self.inv, order, meter=self.meter,
                                                  data_tools=self.data_tools, preamble=self._preamble(),
                                                  header=self.header, on_write=self.on_write, tel=self.tel,
-                                                 tel_parent=sp, runs_code=self.runs_code))
+                                                 tel_parent=sp, runs_code=self.runs_code,
+                                                 turns=self._turns_for(seat, order)))
         self._order_spans[task] = sp
         self.inflight[task] = (seat, order)
         escalated = bool(escalate and seat.escalate_to and seat.escalate_to != seat.model and not seat.external)
