@@ -51,6 +51,11 @@ def _matches(value: float, printed: list[float]) -> bool:
     return False
 
 
+def _num(x: object) -> bool:
+    """A registered number: int or float, not a bool, not the text a seat sometimes writes ("40/50")."""
+    return isinstance(x, (int, float)) and not isinstance(x, bool)
+
+
 def _labelled(name: str, stdout: str) -> list[float]:
     """Numbers the output prints next to this value's own name ('n_items: 1352', 'n_items = 1352', 'n_items 1352')."""
     pat = re.compile(re.escape(name) + r"\s*[:=]?\s*(-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)", re.IGNORECASE)
@@ -110,11 +115,11 @@ def check_output(values: dict[str, Any], stdout: str) -> dict[str, Any]:
     for name, v in (values or {}).items():
         want: list[float] = []
         if isinstance(v, dict):
-            if "k" in v and "n" in v:
+            if _num(v.get("k")) and _num(v.get("n")):
                 want = [float(v["k"]), float(v["n"])]
-            elif isinstance(v.get("value"), (int, float)):
+            elif _num(v.get("value")):
                 want = [float(v["value"])]
-        elif isinstance(v, (int, float)):
+        elif _num(v):
             want = [float(v)]
         if not want:
             continue
