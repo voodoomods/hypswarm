@@ -1,5 +1,5 @@
 # Changelog
-
+ 
 ## 0.1.0a10 — 2026-10-28: a label in a count's clothes can't crash a run
 
 Needs hypgraph 0.7.2: the claim checks that accept the honest sentences agents were writing (absolutes over a set
