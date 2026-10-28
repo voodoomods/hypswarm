@@ -6,8 +6,29 @@ has one (a proxy ledger), else from the provider's usage fields priced by a tabl
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from typing import Any
+
+BASE_PER_QUESTION = 20     # a worker order and its review, before any gate
+PER_GATE = 8               # the work and the rework a gate costs, per question
+
+
+def calls_for(questions: Sequence[Sequence[str]], workflow: Any, *, report_calls: int = 8, floor: int = 60) -> int:
+    """A run's call budget from what its questions owe: for each question BASE_PER_QUESTION plus PER_GATE for every
+    gate its workflow asks of it (a measure question skips the workflow's measure_skips), plus the report's calls.
+    Measured 2026-10-27 (studies T2, T3, S3): three full-workflow questions on a flat 160 calls ran out every time,
+    and giving each order more turns only spent the same 160 in fewer pieces — the run budget was the constraint,
+    not the order's turns. No workflow (a frozen @1 profile, no profile): the floor."""
+    stages = [st for st in (getattr(workflow, "stages", None) or ()) if not getattr(st, "optional", False)]
+    if not stages:
+        return floor
+    skipped = sum(1 for st in stages if st.gate in set(getattr(workflow, "measure_skips", ()) or ()))
+    total = report_calls
+    for q in questions:
+        measure = len(q) > 2 and str(q[2]).strip().lower() == "measure"
+        total += BASE_PER_QUESTION + PER_GATE * (len(stages) - (skipped if measure else 0))
+    return max(floor, total)
 
 
 class BudgetExhausted(RuntimeError):

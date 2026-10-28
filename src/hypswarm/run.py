@@ -154,7 +154,12 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
     if not seats:
         raise ValueError("at least one seat")
     t0 = time.time()
-    meter = Meter(budget or Budget(), pricing, external_meter)
+    if budget is None:
+        # the task's questions and their gates say what the run owes (budget.calls_for); a flat default ran out on
+        # three full-workflow questions every time (studies T2, T3, S3)
+        from .budget import calls_for
+        budget = Budget(max_calls=calls_for(task.questions, getattr(sp.record_profile, "workflow", None) if sp else None))
+    meter = Meter(budget, pricing, external_meter)
     rec: Any = record if hasattr(record, "briefing") else LocalRecord(record, seats, spend=spend)
     if resume:
         inv = str(rec.resolve(resume))
