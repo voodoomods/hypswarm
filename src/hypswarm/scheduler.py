@@ -369,7 +369,7 @@ class Scheduler:
                 continue
             root = self.chain.get(o["id"], o["id"])
             seat = next((s for s in self.seats if s.name == o["assignee"]), None)
-            missing = "; ".join(x["why"] or x["p"] for x in chk["predicates"] if not x["met"])
+            missing = "; ".join(x["why"] or x["p"] for x in chk["predicates"] if not x["met"]) + self._on_record(chk)
             if seat and self.reworked.get(root, 0) < self.max_reworks and seat.name not in self.busy:
                 try:
                     rw = self.r.rework(author=HARNESS, order=o["id"], missing=missing[:1000])
@@ -385,6 +385,33 @@ class Scheduler:
                 continue                                    # decide once the seat is free
             else:
                 self._escalate(o, missing)
+
+    def _on_record(self, chk: dict[str, Any], limit: int = 760) -> str:
+        """What the attempt got accepted, inline for the rework: the nodes that met its predicates, with their text
+        and values. A reworked seat re-read these one by one (12-26 `show`s) before it wrote anything — or never
+        wrote (measured 2026-10-27, studies T2, T3, S3)."""
+        seen: list[str] = []
+        out: list[str] = []
+        for pred in chk.get("predicates") or []:
+            if not pred.get("met"):
+                continue
+            for nid in pred.get("evidence") or []:
+                if nid in seen:
+                    continue
+                seen.append(nid)
+                try:
+                    n = self.r.get(nid)
+                except (GraphError, KeyError):
+                    continue
+                b = n.get("body") or {}
+                text = str(b.get("statement") or b.get("aim") or b.get("summary") or b.get("text") or "").strip()
+                vals = b.get("values") if isinstance(b.get("values"), dict) else None
+                piece = f"{n['code']} {n['type']}: {text[:160]}" + (f" values={', '.join(list(vals)[:6])}" if vals else "")
+                out.append(piece)
+        if not out:
+            return ""
+        s = " | ON THE RECORD ALREADY (don't show these again; build on them): " + "; ".join(out)
+        return s[:limit]
 
     def _escalate(self, o: dict[str, Any], missing: str) -> None:
         """The lead judges an order the record couldn't settle; without a lead, it is cancelled with the reason."""

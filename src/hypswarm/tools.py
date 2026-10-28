@@ -128,6 +128,21 @@ def _not_a_question(text: str, existing: list[tuple[str, str]]) -> str:
     return ""
 
 
+# A worker's reads of the record (show, find) per order. Measured on 18 real-model runs (2026-10-27, studies T2,
+# T3, S3): orders that wrote something read a median of 12 times first; the orders that never wrote read 17 (first
+# attempts) and 23 (reworks), up to 41 — and a third of reworks never attempted a write at all. More turns and more
+# calls both failed to move that; the reads are the loop. Past the cap the two tools answer with what to do instead.
+READ_CAP = 10
+READ_CAP_MSG = ("read cap: {n} reads of the record on this order. The order text lists what exists. Write what you "
+                "have — register_run for a computation, graph_add for a hypothesis, experiment or claim — or "
+                "return_work saying what is missing. Reading is no longer available on this order.")
+
+
+def _over_cap(state: dict[str, Any], seat: Seat) -> bool:
+    state["reads"] = state.get("reads", 0) + 1
+    return seat.role == "worker" and state["reads"] > READ_CAP
+
+
 def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                  on_write: OnWrite | None = None, runs_code: bool = True) -> list[Tool]:
     """What a worker or reviewer can do to the record while holding an order. ``on_write(kind, payload)`` is told
@@ -136,7 +151,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
     Through the CLI with only the files toolkit, seats registered code with its "output" 14 times in one run; with no
     instrument nothing checked it, and code text counts as the code behind a result (studies O1, evening)."""
     me = seat.name
-    state = {"returned": False, "reviewed": False}
+    state: dict[str, Any] = {"returned": False, "reviewed": False, "reads": 0}
 
     def _told(kind: str, payload: dict[str, Any]) -> None:
         if on_write:
@@ -273,6 +288,8 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
 
     def show(node: str) -> str:
         """A node's fields, standing and links."""
+        if _over_cap(state, seat):
+            return READ_CAP_MSG.format(n=state["reads"] - 1)
         try:
             n = record.get(record.resolve(node, inv))
         except (GraphError, KeyError) as e:
@@ -283,6 +300,8 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
 
     def find(text: str = "", type: str = "") -> str:
         """Nodes in this investigation matching words and/or a type."""
+        if _over_cap(state, seat):
+            return READ_CAP_MSG.format(n=state["reads"] - 1)
         rows = record.search(text, type, inv, 30)
         return str("\n".join(f"{r['code']} {r['type']} — {r['title'][:100]} — {r['state']['sentence'][:80]}"
                              for r in rows) or "nothing matches")
