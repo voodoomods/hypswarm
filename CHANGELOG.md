@@ -1,5 +1,5 @@
 # Changelog
-  
+   
 ## 0.1.0a9 — 2026-10-27: the new-user path works, and a computed answer needs its code
 
 Needs hypgraph 0.7.1, whose optimization, trading and scientific gates settle a computed answer only with the code
