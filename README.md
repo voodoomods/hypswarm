@@ -260,10 +260,11 @@ scratch. Several make a deliberately wrong first write so the trace shows the re
 
 ## Installing, today
 
-HypSwarm needs HypGraph's coordination layer and its workflows (measure questions), which ship with hypgraph 0.7.1:
+HypSwarm needs HypGraph's coordination layer and its workflows, and the claim checks that accept an honest sentence
+on the first try, which ship with hypgraph 0.7.2:
 
 ```bash
-pip install --pre hypswarm                 # pulls hypgraph>=0.7.1; --pre while it is an alpha
+pip install --pre hypswarm                 # pulls hypgraph>=0.7.2; --pre while it is an alpha
 ```
 
 ## Status

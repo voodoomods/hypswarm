@@ -1,5 +1,20 @@
 # Changelog
-   
+ 
+## 0.1.0a10 — 2026-10-28: a label in a count's clothes can't crash a run
+
+Needs hypgraph 0.7.2: the claim checks that accept the honest sentences agents were writing (absolutes over a set
+the sentence counts, "no difference remains significant after correction", a p-value found by its key's tokens, a key
+beside its value, the instrument's re-executions), `UNCORRECTED_EFFECT` (a nominal effect can't hide its correction
+in the scope), and `VALUE_NOT_A_NUMBER` (a result value's `k` and `n` must be numbers). Measured on one run of each
+of sixteen challenges across the five profiles: refusals per run 6.6 → 4.9, nothing settled wrong.
+
+- **A registered value that isn't a number is skipped, not fatal.** A quant registered
+  `{"k": "40/50", "n": "rank 1 of 20"}` as a result value — a grid setting and its rank in a count's clothes. The
+  instrument's reproduction did `float()` on it and took the run down at its very end, after every order had
+  returned. `reproduce.check_output` now reproduces a `k` / `n` / `value` only when it is a number (int or float,
+  not a bool), and skips the rest as it skips unprinted values. The record side refuses such a value at write
+  (hypgraph 0.7.2, `VALUE_NOT_A_NUMBER`).
+
 ## 0.1.0a9 — 2026-10-27: the new-user path works, and a computed answer needs its code
 
 Needs hypgraph 0.7.1, whose optimization, trading and scientific gates settle a computed answer only with the code
