@@ -35,6 +35,9 @@ class Task:
     success: str = ""
     answer_format: str = ANSWER_FORMAT
     notes: str = ""                               # anything every seat should know (tools, conventions)
+    baseline: bool = False                        # keep the files as they were at the start under _base/, registered
+                                                  # as artifacts of kind "baseline" the watcher never supersedes, so a
+                                                  # question about the original is answered after the files change
     header: str = ""                              # the first line of every seat's system prompt (e.g. a run id, so no
                                                   # two runs share a prompt prefix with a provider's cache — pilot 4)
     profile: str = ""                             # governance profile: scientific | software | trading | knowledge |
@@ -44,6 +47,10 @@ class Task:
         qs = "\n".join(f"- {c}: {t}" + (" (a measurement: no change, hypothesis or backtest is needed)"
                                          if a[:1] == ["measure"] else "") for c, t, *a in self.questions)
         files = ", ".join(sorted(self.files)) or "none"
+        if self.baseline and self.files:
+            files += ("\n(the files as they were at the start are under _base/ — artifacts of kind baseline that never "
+                      "change; a question about the original is answered from them, a question about the current "
+                      "code from the files above)")
         notes = self.notes
         if self.profile:
             from .profiles import get as _profile
@@ -163,6 +170,9 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
     else:
         inv = rec.start(task.title, task.mission, task.questions, success=task.success, files=task.files,
                         reviewers=[s.name for s in seats if s.role == "reviewer"], profile=sp.id if sp else "")
+        if task.baseline and task.files:
+            from .world import seed_baseline
+            seed_baseline(rec, inv, folder, task.files)
     kits = list(toolkits) if toolkits is not None else (list(sp.toolkits) if sp else [])
     if kits:
         from .toolkits import ToolContext, build
