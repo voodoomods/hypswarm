@@ -27,7 +27,7 @@ from __future__ import annotations
 import hashlib
 import re
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -69,7 +69,7 @@ def passage_in(passage: str, text: str) -> bool:
 BASELINE_DIR = "_base"
 
 
-def seed_baseline(record: Record, inv: str, folder: str | Path | None, files: dict[str, bytes]) -> list[str]:
+def seed_baseline(record: Record, inv: str, folder: str | Path | None, files: Mapping[str, bytes]) -> list[str]:
     """Keep the files as they were at the start. Their bytes are written under ``_base/`` in ``folder`` and the
     task's file artifacts (one per content: the record is content-addressed) are marked ``meta.baseline`` with that
     path. The watcher then never supersedes them: when a seat edits a working file, the new bytes become a new
@@ -162,12 +162,12 @@ class World:
                 # artifact, derived from it, the first time they diverge (later edits supersede that one)
                 if any(x["id"] != n["id"] and (x.get("body") or {}).get("path") == path for x in arts):
                     continue
-                fields = {"sha256": new, "path": path, "size": len(data)}
+                nf: dict[str, Any] = {"sha256": new, "path": path, "size": len(data)}
                 for k in ("format", "kind"):
                     if b.get(k):
-                        fields[k] = b[k]
+                        nf[k] = b[k]
                 links = [{"rel": "derived_from", "to": n["id"]}] + [{"rel": "part_of", "to": q} for q in self._part_of(n)]
-                out = self._create(fields, links)
+                out = self._create(nf, links)
                 if out:
                     self.changes.append({"kind": "file", "path": path, "old": n["code"], "new": out["code"]})
                     notes.append(f"{path} changed on disk ({out['code']}, derived from {n['code']}); the original "
