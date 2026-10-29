@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hypswarm"
-version = "0.1.0a10"
+version = "0.1.0a11"
 description = "Many agents, one record: run one agent or a swarm of them — on a research, software, trading, knowledge or optimization task — with a HypGraph record as the only shared state."
 readme = "README.md"
 requires-python = ">=3.11"

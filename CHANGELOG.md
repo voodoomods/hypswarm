@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0a11 — 2026-10-28: the files as they were at the start stay readable
 
 - **`Task(baseline=True)`: the files as they were at the start stay readable.** They are kept under `_base/` and
   registered as artifacts of kind `baseline`, which the watcher never supersedes and the tree head never counts. A
