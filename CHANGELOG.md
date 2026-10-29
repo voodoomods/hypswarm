@@ -1,4 +1,13 @@
 # Changelog
+
+## Unreleased
+
+- **`Task(baseline=True)`: the files as they were at the start stay readable.** They are kept under `_base/` and
+  registered as artifacts of kind `baseline`, which the watcher never supersedes and the tree head never counts. A
+  question about the original ("which tests fail on the original semver.py?") is answered from them after a seat
+  has changed the working files, whose own artifacts the watcher supersedes. Until now the tester's scratch copy of
+  the original was refused as unregistered and the record's original artifact had been superseded, and the question
+  stayed open in every run of the challenge (E1, stuck in 2 of 2 runs after every other fix).
  
 ## 0.1.0a10 — 2026-10-28: a label in a count's clothes can't crash a run
 
