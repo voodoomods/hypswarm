@@ -88,9 +88,8 @@ button.pill { cursor: pointer; } button.pill:hover { filter: brightness(.97); }
 .stage-tabs button { border: 1px solid transparent; background: none; color: var(--ink2); font: 500 13.5px var(--sans); padding: 4px 10px; border-radius: 7px; cursor: pointer; }
 .stage-tabs button:hover { background: var(--sunken); color: var(--ink); }
 .stage-tabs button[aria-pressed="true"] { background: var(--surface); border-color: var(--line2); color: var(--ink); box-shadow: var(--shadow); }
-.stage-app { height: 640px; }
-.stage-app > div { height: 100%; }
-@media (max-width: 900px) { .stage-app { height: 78vh; } }
+/* the embedded app (embed: true) grows to its content, so the page scrolls past it and nothing inside traps the wheel */
+.stage-app > div { height: auto; }
 .stage-foot { padding: 10px 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink2); }
 
 /* ── the two doors ── */

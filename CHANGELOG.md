@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **A refusal is relayed once.** `register_run` with a claim returned "claim refused: claim refused: …" — the
+  record's own prefix repeated — in the seat's reply and in the Live view's event stream. hypswarm.com's
+  embedded Live view passes `embed: true` (hypgraph ≥ 0.7.6), so its feed stays short.
+
 ## 0.1.0a11 — 2026-10-28: the files as they were at the start stay readable
 
 - **`Task(baseline=True)`: the files as they were at the start stay readable.** They are kept under `_base/` and

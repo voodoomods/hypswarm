@@ -249,7 +249,10 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             try:
                 c = record.create(author=me, type="claim", inv=inv, fields=cf, links=cl_links)
             except (GraphError, KeyError) as e:
-                return out + f"\n  claim refused: {e}" + _tail(res, meter)
+                why = str(e)
+                if why.startswith("claim refused:"):      # the record's own prefix; don't say it twice
+                    why = why[len("claim refused:"):].strip()
+                return out + f"\n  claim refused: {why}" + _tail(res, meter)
             out += f" → claim {c['code']} — {c['state']['sentence']}"
             return out + _tail(c, meter)
         return out + _tail(res, meter)
