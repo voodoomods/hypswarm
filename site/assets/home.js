@@ -39,7 +39,7 @@
       if (view) view.destroy();
       current = key;
       const bundle = await (await fetch(src[2])).json();
-      view = HypGraph.mount(app, { source: HypGraph.BundleSource(bundle), theme: theme(), play: EXAMPLES.includes(key),
+      view = HypGraph.mount(app, { source: HypGraph.BundleSource(bundle), theme: theme(), play: EXAMPLES.includes(key), embed: true,
         onTheme: (t) => { root.dataset.theme = t; try { localStorage.setItem('hg-theme', t); } catch { /* private */ } (window.HG ? window.HG.onTheme : []).forEach((f) => f(t)); } });
       await view.ready;
       const v = await HypGraph.verifyBundle(bundle);
