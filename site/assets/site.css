@@ -60,7 +60,7 @@ img, svg { max-width: 100%; }
   border-radius: 9px; cursor: pointer; display: inline-grid; place-items: center; font-size: 15px; margin-left: 6px; }
 .iconbtn:hover { color: var(--ink); background: var(--sunken); }
 @media (max-width: 860px) { .nav nav a.hide-sm { display: none; } }
-@media (max-width: 420px) { .nav nav a { padding: 6px 6px; font-size: 13px; } .brand span { display: none; } }
+@media (max-width: 420px) { .nav nav a { padding: 6px 6px; font-size: 13px; } .brand span { display: none; } .nav .wrap { gap: 10px; } }   /* 18 px gaps put the theme button 1 px past a 320 px phone */
 
 /* ── pills, buttons ── */
 .pill { display: inline-flex; align-items: center; gap: 6px; font: 12px var(--mono); padding: 3px 9px; border-radius: 999px;
@@ -215,6 +215,7 @@ body.apppage { height: 100vh; height: 100dvh; display: flex; flex-direction: col
 .toc { position: sticky; top: 76px; align-self: start; font-size: 14px; }
 .toc a { display: block; color: var(--ink2); text-decoration: none; padding: 4px 0 4px 10px; border-left: 2px solid var(--line); }
 .toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+.prose { overflow-wrap: anywhere; }   /* a long URL would push a 320 px phone sideways */
 .prose h2 { font-size: 24px; letter-spacing: -.02em; margin: 44px 0 10px; scroll-margin-top: 80px; }
 .prose h2:first-child { margin-top: 0; }
 .prose h3 { font-size: 18px; margin: 26px 0 8px; scroll-margin-top: 80px; }
