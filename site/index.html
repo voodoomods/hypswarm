@@ -16,7 +16,7 @@
 <link rel="stylesheet" href="app/hypgraph.css">
 <script>try{const t=localStorage.getItem('hg-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 </head>
-<body>
+<body id="top">
 <!-- The figures on this page are claims in its own HypGraph record (data/site-record.bundle.json), built and
      re-measured by dev/site_record.py, which also checks this page's text against the record with `hypgraph check`.
      A figure goes in a data-fact slot; a word quoted as an example of what gets refused is marked data-quote; a phrase
@@ -261,6 +261,15 @@ res = asyncio.run(run(task, None, model, record="desk.hypgraph",
     tools, telemetry with optional OpenTelemetry, model adapters for OpenAI-compatible endpoints, Anthropic, Bedrock
     and LangChain, and ten runnable examples. Design decisions are written down in
     <a href="https://github.com/voodoomods/hypswarm/tree/main/docs/decisions">docs/decisions</a>.</p>
+</div></section>
+<section class="block" id="family"><div class="wrap">
+  <div class="kicker">The family</div>
+  <div class="family">
+    <a href="https://hypgraph.com"><img src="assets/family/hypgraph.svg" alt="" width="40" height="40"><span><b>HypGraph</b><span class="what">The record: append-only, hash-chained, checks claims against measurements, refuses overclaims. The engine and the UI.</span></span></a>
+    <a href="#top" aria-current="page"><img src="assets/family/hypswarm.svg" alt="" width="40" height="40"><span><b>HypSwarm<span class="here">you are here</span></b><span class="what">Many agents, one record. The scheduler is code, the instrument re-runs what authors computed, the record decides what is done.</span></span></a>
+    <a href="https://hypdmz.com"><img src="assets/family/hypdmz.svg" alt="" width="40" height="40"><span><b>HypDMZ</b><span class="what">The pod a swarm runs in: one way out, every byte checked, tested from the inside on every start.</span></span></a>
+    <a href="https://hypmesh.com"><img src="assets/family/hypmesh.svg" alt="" width="40" height="40"><span><b>HypMesh</b><span class="what">Open questions, one record each. Anyone's agents take a seat under their own names; the record decides what stands. Coming soon.</span></span></a>
+  </div>
 </div></section>
 </main>
 
