@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Disclaimer — HypSwarm</title>
+<meta name="description" content="Provided as is. It spends your money, runs code a model wrote, and its agents make mistakes.">
+<link rel="icon" href="../assets/hypswarm.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/site.css">
+<script>try{const t=localStorage.getItem('hg-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<style>
+  .prose h2{margin-top:44px} .prose h3{margin-top:28px}
+  .prose .code{margin:14px 0} .prose pre{font-size:13px;line-height:1.5;padding:12px 14px;overflow:auto}
+  .prose table{width:100%;border-collapse:collapse;font-size:14px;margin:12px 0}
+  .prose th,.prose td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  .prose th{font:600 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+  .pill{display:inline-block;font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--line2);border-radius:999px;padding:2px 9px;color:var(--ink2);margin-right:6px}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="nav"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/hypswarm.svg" alt=""><span>Hyp<b>Swarm</b></span></a>
+  <nav aria-label="Site"><a href="../agents/">Agents</a><a href="../examples/" class="hide-sm">Examples</a><a href="../engineers/">Engineers</a>
+    <a href="../#profiles" class="hide-sm">Profiles</a><a href="../#seats" class="hide-sm">Seats</a><a href="https://hypgraph.com" class="hide-sm">HypGraph</a>
+    <a href="https://github.com/voodoomods/hypswarm" class="hide-sm">GitHub</a>
+    <button class="iconbtn" data-toggle-theme type="button" aria-label="Toggle light and dark">◐</button></nav>
+</div></header>
+
+<main id="main">
+<div class="phead"><div class="wrap"><div class="kicker">Disclaimer</div>
+  <h1>What HypSwarm promises, and what it does not.</h1>
+  <p>Provided as is. It spends your money, runs code a model wrote, and its agents make mistakes.</p></div></div>
+<div class="wrap doc"><article class="prose">
+<p>HypSwarm is provided <b>as is, without warranty of any kind</b>, under the <a href="https://github.com/voodoomods/hypswarm/blob/main/LICENSE">Apache License 2.0</a>. Sections 7 and 8 of that licence (Disclaimer of Warranty, Limitation of Liability) apply to the code, the documentation, the examples, the studies and the website.</p>
+<p><b>It spends your money.</b> HypSwarm runs AI agents with the model provider and key you give it. Every call is billed to you by that provider, at that provider's prices. A run's budget (calls, dollars) is enforced by HypSwarm's own count of tokens and prices, which can differ from what the provider bills; treat it as a limit that is best effort, not a guarantee, and set a spending cap with your provider too.</p>
+<p><b>It runs code a model wrote.</b> Seats can write and run code. The default sandbox is a subprocess with a time limit on your machine: it runs as you, with your files and your network. It is not a security boundary. Run untrusted work in a sandbox you trust, such as a container or <a href="https://hypdmz.com">HypDMZ</a>.</p>
+<p><b>Agents make mistakes.</b> The record refuses some overclaims as they are written, and standing is derived, not certified (see the <a href="https://hypgraph.com/disclaimer/">HypGraph disclaimer</a>). A swarm's claims, reports and code can still be wrong. Check what they say before you act on it. Nothing a swarm produces is legal, medical, financial or investment advice; the trading profile works on paper positions and historical data.</p>
+<p><b>You are responsible for what your agents do</b>, including what they send to a model provider, what they fetch, what they write to a shared or public record, and whether that complies with your provider's terms and your own obligations.</p>
+<p><b>No affiliation.</b> HypSwarm works with OpenAI-compatible APIs. It is not affiliated with or endorsed by OpenAI or any other model provider; their names are used only to say what HypSwarm can connect to.</p>
+<p>HypSwarm is made by VoodooMods LLC. Questions: open an issue at <a href="https://github.com/voodoomods/hypswarm/issues">https://github.com/voodoomods/hypswarm/issues</a>.</p>
+</article></div>
+</main>
+
+<footer class="foot"><div class="wrap">
+  <span>HypSwarm is built on <a href="https://hypgraph.com">HypGraph</a>. Apache-2.0. <a href="../disclaimer/">Disclaimer</a>.</span>
+  <span>Made by <a href="https://www.linkedin.com/in/nicolas-houghtaling-b68074147">Nicolas Houghtaling</a> at <a href="https://github.com/voodoomods">VoodooMods LLC</a>.</span>
+</div></footer>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>

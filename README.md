@@ -267,6 +267,13 @@ on the first try, which ship with hypgraph 0.7.2:
 pip install --pre hypswarm                 # pulls hypgraph>=0.7.2; --pre while it is an alpha
 ```
 
+## Disclaimer
+
+Provided as is, without warranty. A run bills your model provider for every call, and its budget is best effort,
+not a guarantee. The default sandbox runs model-written code on your machine as you; it is not a security boundary.
+Agents make mistakes, and nothing a swarm produces is advice. The full text:
+[DISCLAIMER.md](https://github.com/voodoomods/hypswarm/blob/main/DISCLAIMER.md).
+
 ## Status
 
 Alpha. Built from the harness the HypGraph harmony study runs agent teams on, and measured there as a

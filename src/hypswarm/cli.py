@@ -85,6 +85,9 @@ def cmd_run(a: argparse.Namespace) -> int:
         return cache[mid]
     pricing = Pricing(*map(float, a.pricing.split(","))) if a.pricing else None
     budget = Budget(max_calls=a.budget_calls, max_usd=a.budget_usd)
+    print("hypswarm: every model call is billed to you by your provider, and the budget is best effort; code the "
+          "seats write runs as you, and the default sandbox is not a security boundary. "
+          "https://hypswarm.com/disclaimer/", file=sys.stderr)
     record: Any = a.record
     if a.record_url:
         from .http_record import HttpRecord
