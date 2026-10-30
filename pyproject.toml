@@ -55,7 +55,7 @@ Record = "https://hypgraph.com"
 hypswarm = "hypswarm.cli:main"
 
 [tool.hatch.build.targets.sdist]
-include = ["src/hypswarm", "tests", "docs", "examples", "README.md", "LICENSE", "NOTICE", "CHANGELOG.md"]
+include = ["src/hypswarm", "tests", "docs", "examples", "README.md", "DISCLAIMER.md", "LICENSE", "NOTICE", "CHANGELOG.md"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/hypswarm"]
