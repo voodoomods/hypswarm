@@ -1,7 +1,23 @@
 # Changelog
 
-## Unreleased
+## 0.1.0a12 — 2026-11-04: gpt-oss runs a swarm on local hardware
 
+Needs hypgraph 0.8.4. Measured on gpt-oss-20b on a local llama.cpp server, example 01's task: on hypgraph 0.8.4, 3 runs
+settled 6 of 6 questions in 3.3-8.9 min, with no failed calls and no wrong answers. On hypgraph 0.7.7, 5 runs settled
+9 of 10.
+
+- **gpt-oss gets its own reasoning back on tool calls.** The harmony format needs it. `OpenAICompatible` dropped
+  `reasoning_content`, and the model then wrote broken channel headers (llama.cpp HTTP 500) or degenerate text; a
+  replay of captured requests failed 7-17 of 24 times under every server and sampling setting, and 0 of 24 with the
+  reasoning sent back. On by default when the model name contains `gpt-oss`; `return_reasoning=` or
+  `--return-reasoning on|off|auto` overrides it.
+- **Code registered after a bare result becomes that result's code.** A seat that registered a number with no code
+  could never put code behind it: the gate wanted a re-runnable result and a new one was refused as a restatement, so
+  it filed copies of its claim until the budget ran out. The run now attaches to the old result, and the instrument
+  re-runs the code against that result's values. A result that already has code is still a restatement.
+- **A copy of an answer is refused.** The record holds a question at "answered" until every answer is checked, so a
+  seat's copy of its own live answer only delays settling. The refusal says to revise the old claim or return the
+  order. A claim with a different figure is allowed.
 - **A refusal is relayed once.** `register_run` with a claim returned "claim refused: claim refused: …" — the
   record's own prefix repeated — in the seat's reply and in the Live view's event stream. hypswarm.com's
   embedded Live view passes `embed: true` (hypgraph ≥ 0.7.6), so its feed stays short.
