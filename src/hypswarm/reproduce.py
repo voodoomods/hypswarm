@@ -242,13 +242,13 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
     reproduced gets a lab result of just those values that supports it — a claim about A's count comes back though B's
     moved; the others stay stale for a worker to redo."""
     res = record.get(result_id)
-    runs = [e["src"] for e in res.get("in", []) if e["rel"] == "produced"]
-    if not runs:
+    runs = [record.get(e["src"]) for e in res.get("in", []) if e["rel"] == "produced"]
+    # a result registered bare can get its code later (tools.register_run): re-run whichever producing run has it
+    coded = [r for r in runs if str(((r.get("body") or {}).get("config") or {}).get("source") or "").strip()]
+    if not coded:
         return None
-    run = record.get(runs[0])
+    run = coded[0]
     source = str(((run.get("body") or {}).get("config") or {}).get("source") or "")
-    if not source.strip():
-        return None
     values = (res.get("body") or {}).get("values") or {}
     try:
         out = reproducer(source)

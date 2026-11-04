@@ -122,6 +122,7 @@ class Scheduler:
         # no instrument and only the files toolkit: nothing here executes code, so code a seat registers wasn't run
         self.runs_code = reproducer is not None or not all(t.name in READ_ONLY_TOOLS for t in self.data_tools)
         self._reproduced: set[str] = set()
+        self._codeless: dict[str, int] = {}                 # result id -> producing runs when it had no code
         self.world = world                                  # host-supplied: keeps the record in step with the files
         self.on_write = on_write                            # host hook on every accepted write by a seat
         self.assemble_report = assemble_report              # no passing report from the lead: write it from the record
@@ -296,16 +297,29 @@ class Scheduler:
         for r in self.r.search("", "result", self.inv, 500):
             if r["id"] in self._reproduced or r.get("by") == INSTRUMENT:
                 continue
+            if r["id"] in self._codeless and self._codeless[r["id"]] == self._producers(r["id"]):
+                continue                                    # still no new run behind it
             self._reproduced.add(r["id"])
             try:
                 out = await reproduce_result(self.r, self.inv, r["id"], self.reproducer)
             except GraphError as e:
                 self._ev("reproduce_failed", result=r.get("code"), why=str(e)[:200])
                 continue
+            if out is None:
+                # no code behind it yet; a seat may register the code later (tools.register_run attaches it)
+                self._reproduced.discard(r["id"])
+                self._codeless[r["id"]] = self._producers(r["id"])
+                continue
             if out:
                 self.res.reproductions += 1
                 self._ev("reproduced", result=r.get("code"), ok=out["ok"], run=out["run"], confirmed=out["confirmed"],
                          unprinted=out["unprinted"], contradicted=out["contradicted"], missing=out["missing"])
+
+    def _producers(self, result_id: str) -> int:
+        try:
+            return sum(1 for e in self.r.get(result_id).get("in", []) if e.get("rel") == "produced")
+        except (GraphError, KeyError):
+            return -1
 
     def _sync_world(self) -> None:
         """The record catches up with the world: changed files, a new head, a page that moved (world.py)."""

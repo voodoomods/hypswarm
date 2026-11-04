@@ -25,12 +25,18 @@ class Message:
     content: str = ""
     tool_calls: tuple[ToolCall, ...] = ()
     tool_call_id: str = ""
+    reasoning: str = ""                    # the model's own reasoning for this turn, when its API returns it
 
-    def to_openai(self) -> dict[str, Any]:
+    def to_openai(self, *, reasoning: bool = False) -> dict[str, Any]:
+        """``reasoning=True`` sends an assistant tool call's reasoning back as ``reasoning_content``: gpt-oss (harmony)
+        must see its reasoning from earlier steps of a tool-calling turn, or it writes broken headers and degenerate
+        text. Only on assistant messages that call tools — a final answer's reasoning is not carried forward."""
         m: dict[str, Any] = {"role": self.role, "content": self.content}
         if self.tool_calls:
             m["tool_calls"] = [{"id": t.id, "type": "function",
                                 "function": {"name": t.name, "arguments": json.dumps(t.args)}} for t in self.tool_calls]
+            if reasoning and self.role == "assistant" and self.reasoning:
+                m["reasoning_content"] = self.reasoning
         if self.role == "tool":
             m["tool_call_id"] = self.tool_call_id
         return m
@@ -44,9 +50,10 @@ class Reply:
     cached_tokens: int = 0
     output_tokens: int = 0
     raw: dict[str, Any] = field(default_factory=dict)
+    reasoning: str = ""
 
     def as_message(self) -> Message:
-        return Message("assistant", self.content, self.tool_calls)
+        return Message("assistant", self.content, self.tool_calls, reasoning=self.reasoning)
 
 
 def _schema(t: Any) -> dict[str, Any]:

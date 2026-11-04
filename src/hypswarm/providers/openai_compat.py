@@ -3,6 +3,12 @@ OpenAI-compatible chat completions over httpx: DeepInfra, OpenAI, NVIDIA NIM, vL
 gateways speak this. No streaming (nothing here needs it, and a stalled stream is the worst failure mode).
 Retries on 429 / 5xx / timeouts with backoff. Headers per call come from ``headers(unit)`` so a host can label
 calls for its own meter (PegasusDMZ's proxy reads X-Pegasus-* headers and strips them).
+
+Reasoning models that return ``reasoning_content`` (or ``reasoning``) keep it on the reply. ``return_reasoning`` sends
+it back on the assistant tool calls of the conversation; ``None`` (default) turns it on for gpt-oss, whose harmony
+format needs it — without it, gpt-oss served by llama.cpp wrote broken headers (HTTP 500 "peg-native format") and
+degenerate text in 5–7 % of swarm calls, and every later turn that quoted the junk failed. Other APIs differ (some
+refuse reasoning sent back), so it stays off unless asked for.
 """
 
 from __future__ import annotations
@@ -25,7 +31,8 @@ class OpenAICompatible:
     def __init__(self, model: str, *, base_url: str = "", api_key: str = "", timeout_s: float = 180.0,
                  max_retries: int = 3, max_tokens: int | None = None, reasoning_effort: str = "",
                  headers: Callable[[str], dict[str, str]] | None = None, client: httpx.AsyncClient | None = None,
-                 extra_body: dict[str, Any] | None = None, on_request: Callable[[dict[str, Any]], None] | None = None):
+                 extra_body: dict[str, Any] | None = None, on_request: Callable[[dict[str, Any]], None] | None = None,
+                 return_reasoning: bool | None = None):
         """``on_request(body)`` sees every request body before it is sent — for capture and replay (a hang or a
         refusal can then be reproduced from exactly what was sent). It must not mutate the body."""
         self.name = model
@@ -38,11 +45,14 @@ class OpenAICompatible:
         self.reasoning_effort = reasoning_effort
         self.headers = headers
         self.extra_body = extra_body or {}
+        self.return_reasoning = ("gpt-oss" in model.lower()) if return_reasoning is None else return_reasoning
         self._client = client or httpx.AsyncClient(timeout=httpx.Timeout(timeout_s, connect=15.0))
 
     async def complete(self, messages: Sequence[Message], tools: Sequence[Tool], *, temperature: float | None = None,
                        unit: str = "") -> Reply:
-        body: dict[str, Any] = {"model": self.name, "messages": [m.to_openai() for m in messages], **self.extra_body}
+        body: dict[str, Any] = {"model": self.name,
+                                "messages": [m.to_openai(reasoning=self.return_reasoning) for m in messages],
+                                **self.extra_body}
         if tools:
             body["tools"] = [t.to_openai() for t in tools]
             body["tool_choice"] = "auto"
@@ -93,6 +103,8 @@ def _parse(data: dict[str, Any]) -> Reply:
     content = msg.get("content")
     if isinstance(content, list):
         content = "".join(p.get("text", "") for p in content if isinstance(p, dict))
+    reasoning = msg.get("reasoning_content") or msg.get("reasoning") or ""
     return Reply(content=str(content or ""), tool_calls=tuple(calls), input_tokens=int(usage.get("prompt_tokens") or 0),
                  cached_tokens=int(details.get("cached_tokens") or 0),
-                 output_tokens=int(usage.get("completion_tokens") or 0), raw=data)
+                 output_tokens=int(usage.get("completion_tokens") or 0), raw=data,
+                 reasoning=reasoning if isinstance(reasoning, str) else "")
