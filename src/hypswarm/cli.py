@@ -81,7 +81,8 @@ def cmd_run(a: argparse.Namespace) -> int:
         if not mid:
             raise SystemExit(f"seat {seat.name}: no model (set model= in seats.toml, --model or HYPSWARM_MODEL)")
         if mid not in cache:
-            cache[mid] = OpenAICompatible(mid, base_url=a.base_url, timeout_s=a.timeout)
+            cache[mid] = OpenAICompatible(mid, base_url=a.base_url, timeout_s=a.timeout,
+                                          return_reasoning={"on": True, "off": False}.get(a.return_reasoning))
         return cache[mid]
     pricing = Pricing(*map(float, a.pricing.split(","))) if a.pricing else None
     budget = Budget(max_calls=a.budget_calls, max_usd=a.budget_usd)
@@ -158,6 +159,9 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--model", default="", help="default model id for seats without one")
     r.add_argument("--base-url", default="", help="OpenAI-compatible endpoint (default OPENAI_BASE_URL)")
     r.add_argument("--timeout", type=float, default=180.0)
+    r.add_argument("--return-reasoning", choices=("auto", "on", "off"), default="auto",
+                   help="send a reasoning model's own reasoning back on its tool calls (auto: on for gpt-oss, "
+                        "which needs it)")
     r.add_argument("--budget-calls", type=int, default=150)
     r.add_argument("--budget-usd", type=float, default=0.0)
     r.add_argument("--pricing", default="", help="input,cached,output $ per million tokens")

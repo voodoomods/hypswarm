@@ -108,6 +108,59 @@ def _words(text: str) -> set[str]:
     return set(re.findall(r"[a-z0-9]{3,}", text.lower()))
 
 
+_FIGURE = re.compile(r"(?<![\w.])-?\d[\d,]*(?:\.\d+)?%?")
+
+
+def _figures(text: str) -> set[float]:
+    """The numbers a sentence states, percentages as fractions (81.4 % and 0.814 are one figure)."""
+    out: set[float] = set()
+    for m in _FIGURE.findall(text):
+        pct = m.endswith("%")
+        try:
+            v = float(m.rstrip("%").replace(",", ""))
+        except ValueError:
+            continue
+        out.add(round(v / 100 if pct else v, 9))
+    return out
+
+
+def _same_answer(record: Record, inv: str, me: str, question: str, statement: str, kind: str = "") -> str:
+    """Why a claim is a copy of the seat's own live answer to the same question ('' = it isn't). The record holds a
+    question at "answered" until every answer to it is checked, so a copy is one more claim to review before it
+    settles: on a 3-slot gpt-oss swarm the analyst filed the same Q1 answer five times and the run's budget ran out
+    with two unchecked copies beside a checked one (BC-250, 2026-11-04). A copy states no figure the earlier claim
+    doesn't (or, with no figures, nearly the same words) and has the same kind."""
+    try:
+        q = record.get(record.resolve(question, inv))
+    except (GraphError, KeyError):
+        return ""
+    nums, words = _figures(statement), _words(statement)
+    for e in q.get("in", []):
+        if e.get("rel") != "answers":
+            continue
+        try:
+            c = record.get(e["src"])
+        except (GraphError, KeyError):
+            continue
+        if c.get("type") != "claim" or c.get("by") != me or not _live(c):
+            continue
+        body = c.get("body") or {}
+        if (body.get("kind") or "finding") != (kind or "finding"):
+            continue
+        other = str(body.get("statement") or "")
+        theirs, their_words = _figures(other), _words(other)
+        if nums:
+            same = nums <= theirs
+        else:
+            same = not theirs and bool(words) and bool(their_words) and \
+                len(words & their_words) / len(words | their_words) >= 0.8
+        if same:
+            return (f"refused: your {c['code']} already answers {q['code']} with this ({c['state']['sentence'][:90]}). "
+                    f"A copy is one more answer to check before {q['code']} settles. If {c['code']} is wrong, revise "
+                    "it; if it is right there is nothing new to file — return your order")
+    return ""
+
+
 def _not_a_question(text: str, existing: list[tuple[str, str]]) -> str:
     """Why a lead's question isn't one ('' = it is). Leads added orders as questions — "Q2 claim: the analyst's T10
     must write, on the existing run result RS5 …?" — and copies of open questions, and each owed the whole workflow
@@ -175,6 +228,13 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             return ("refused: you are a reviewer — record a verdict on the claim you were asked to check (review); if "
                     "the right answer is missing, say so in your review notes and return the order, and a worker "
                     "will be asked to write it")
+        if type == "claim":
+            for l in links or []:
+                if l.get("rel") == "answers" and l.get("to"):
+                    why = _same_answer(record, inv, me, str(l["to"]), str((fields or {}).get("statement") or ""),
+                                       str((fields or {}).get("kind") or ""))
+                    if why:
+                        return why
         try:
             n = record.create(author=me, type=type, inv=inv, fields=fields, links=_links(links))
         except (GraphError, KeyError) as e:
@@ -190,6 +250,28 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         except (GraphError, KeyError) as e:
             return _err(e)
         return f"linked {src} -{rel}-> {dst}"
+
+    def _onto_codeless(e: Exception, run: dict[str, Any]) -> dict[str, Any] | None:
+        """A result refused as a restatement of the seat's own result that has no code behind it: the code-bearing
+        run becomes that result's code (``run -produced-> result``) instead. Without this a seat that first
+        registered a number bare could never put code behind it — the gate asked for a re-runnable result, a new one
+        was refused as a restatement, and the seat filed copies of its claim until the budget ran out (BC-250,
+        2026-11-04). The instrument then re-runs the code against the result's own values, so nothing is credited
+        that a re-run doesn't show. None = not that case; the refusal stands."""
+        probs = [p for p in getattr(e, "problems", None) or [] if p.get("code") == "RESULT_RESTATES"]
+        m = re.search(r"your own (\S+)$", str(probs[0].get("message") or "")) if probs else None
+        if not m:
+            return None
+        try:
+            old = record.get(record.resolve(m.group(1), inv))
+            producers = [record.get(x["src"]) for x in old.get("in", []) if x.get("rel") == "produced"]
+            if any(((p.get("body") or {}).get("config") or {}).get("source") for p in producers):
+                return None                       # it already has code: a real restatement
+            record.link(author=me, src=run["id"], rel="produced", dst=old["id"],
+                        why="the code that computes this result, registered after the result itself")
+            return record.get(old["id"])
+        except (GraphError, KeyError):
+            return None
 
     def register_run(name: str, result_summary: str, values: dict[str, Any] | None = None, outcome: str = "",
                      experiment: str = "", code: str = "", claim: str = "", answers: str = "", scope: str = "",
@@ -216,6 +298,12 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             return (f"refused: {', '.join(bare)} {'is a timing' if len(bare) == 1 else 'are timings'} — a re-run "
                     "never prints the same digits, so the instrument would contradict it. Give each its spread over "
                     "your repeats: {value, unit, spread: [lo, hi]} or rel_tol (a fraction)")
+        if claim.strip() and answers.strip():
+            why = _same_answer(record, inv, me, answers, claim, claim_kind)
+            if why:
+                return why
+        r: dict[str, Any] | None = None
+        attached = False
         try:
             links: list[dict[str, Any]] = [{"rel": "executes", "to": record.resolve(experiment, inv)}] if experiment.strip() else []
             declared = [record.resolve(str(a), inv) for a in (uses or []) if str(a).strip()]
@@ -231,9 +319,16 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             res = record.create(author=me, type="result", inv=inv, fields=rf,
                                 links=[{"rel": "produced", "from": r["id"]}])
         except (GraphError, KeyError) as e:
-            return _err(e)
-        _told("register_run", {"code": code, "values": values or {}, "result": res["code"], "run": r["code"]})
+            got = _onto_codeless(e, r) if r is not None and code.strip() else None
+            if got is None:
+                return _err(e)
+            res, attached = got, True
+        _told("register_run", {"code": code, "values": (res.get("body") or {}).get("values") or values or {},
+                               "result": res["code"], "run": r["code"]})
         out = f"run {r['code']} → result {res['code']}"
+        if attached:
+            out += (f" (your earlier {res['code']} had no code behind it; {r['code']} is now its code, and the "
+                    "instrument re-runs it — claims on it need no copy)")
         if claim.strip():
             cf: dict[str, Any] = {"statement": claim, "scope": scope or result_summary}
             if claim_kind:
