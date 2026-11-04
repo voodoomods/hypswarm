@@ -323,6 +323,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             if got is None:
                 return _err(e)
             res, attached = got, True
+        assert r is not None                              # the except above returns unless the run was created
         _told("register_run", {"code": code, "values": (res.get("body") or {}).get("values") or values or {},
                                "result": res["code"], "run": r["code"]})
         out = f"run {r['code']} → result {res['code']}"

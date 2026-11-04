@@ -117,14 +117,14 @@ def test_code_registered_after_a_bare_result_becomes_its_code():
 
 
 def test_a_real_restatement_is_still_refused():
-    r, inv, t = _setup()
+    _, _, t = _setup()
     assert t["register_run"](name="count", result_summary="Counted A's correct items.", values=VALUES, code=CODE).startswith("run ")
     again = t["register_run"](name="count again", result_summary="Counted A's correct items.", values=VALUES, code=CODE)
     assert again.startswith("refused") and "RESULT_RESTATES" in again
 
 
 def test_a_copy_of_an_answer_is_refused_and_a_different_one_is_not():
-    r, inv, t = _setup()
+    _, _, t = _setup()
     first = t["register_run"](name="count", result_summary="Counted A's correct items in items.csv.", values=VALUES,
                               code=CODE, claim="A is right on 814 of 1000 items.", answers="Q1",
                               scope="The 1000 items in items.csv.")
