@@ -33,7 +33,7 @@ def _tail(n: dict[str, Any], meter: Meter) -> str:
 
 
 def _err(e: Exception) -> str:
-    return f"refused: {e}"
+    return f"refused: {e.args[0] if isinstance(e, KeyError) and e.args else e}"
 
 
 OnWrite = Callable[[str, dict[str, Any]], None]
@@ -199,22 +199,89 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             except Exception as e:  # noqa: BLE001 — a host hook never costs a worker its write
                 log.warning("on_write hook failed on %s: %s", kind, e)
 
-    def _links(links: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    def _named(ref: str) -> str:
+        """The node a seat meant by what it knows it as: a file's path, an experiment's aim, a run's name. The node's
+        id, or "" when that names none, or more than one."""
+        want = ref.strip().casefold()
+        hits = []
+        for type_, field in (("artifact", "path"), ("experiment", "aim"), ("run", "name")):
+            for a in record.search("", type_, inv, 500):
+                n = record.get(a["id"])
+                said = str((n.get("body") or {}).get(field) or "").casefold()
+                if want and _live(n) and want in {said, said.rsplit("/", 1)[-1]}:
+                    hits.append(a["id"])
+        return hits[0] if len(hits) == 1 else ""
+
+    def _node(ref: str) -> str:
+        """``record.resolve``, for what a seat calls a node. A name that fits nothing is refused with the codes that
+        exist, so the next call can use one."""
+        try:
+            return record.resolve(ref, inv)
+        except KeyError:
+            found = _named(ref)
+            if found:
+                return found
+            there = [str(a.get("code")) for t in ("question", "hypothesis", "experiment", "result", "artifact")
+                     for a in record.search("", t, inv, 12) if a.get("code")]
+            raise KeyError(f"no node {ref!r}. Name a node by its code ({', '.join(there[:24]) or 'none yet'})") from None
+
+    def _links(links: list[dict[str, Any]] | None, type_: str = "") -> list[dict[str, Any]]:
         out = []
         for l in links or []:
             d = dict(l)
+            if "dst" in d:                                # hypgraph's own name for it; a link says to / from
+                d.setdefault("to", d.pop("dst"))
+            if type_ == "claim" and d.get("rel") == "uses":
+                d["rel"] = "derived_from"                 # a claim doesn't use what it rests on; it derives from it
             for k in ("to", "from"):
                 if d.get(k):
-                    d[k] = record.resolve(str(d[k]), inv)
+                    d[k] = _node(str(d[k]))
             out.append(d)
         return out
 
+    def _measurable(m: Any) -> bool:
+        """A measurement the record can read: a result of this record and a value of that result."""
+        if not isinstance(m, dict):
+            return False
+        try:
+            res = record.get(record.resolve(str(m.get("result") or ""), inv))
+        except (GraphError, KeyError):
+            return False
+        return res.get("type") == "result" and str(m.get("key")) in ((res.get("body") or {}).get("values") or {})
+
+    def _as_claim(fields: dict[str, Any] | None, links: list[dict[str, Any]] | None
+                  ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """A claim's fields where graph_add takes them. Seats wrote register_run's names here (``claim_kind``,
+        ``answers``) and the number itself as a measurement's result (BC-250, 2026-11-05). The record binds a
+        statement's numbers to results itself and refuses a number it can't, so a measurement it couldn't read adds
+        nothing, and every check still runs on what's left."""
+        f, ln = dict(fields or {}), list(links or [])
+        kind = f.pop("claim_kind", None)
+        if kind and not f.get("kind"):
+            f["kind"] = kind
+        if f.get("kind") == "claim":
+            del f["kind"]
+        asked = f.pop("answers", None)
+        for q in [asked] if isinstance(asked, str) else asked or []:
+            if q and not any(l.get("rel") == "answers" and l.get("to") == q for l in ln):
+                ln.append({"rel": "answers", "to": q})
+        if "measurements" in f:
+            f["measurements"] = [m for m in f["measurements"] or [] if _measurable(m)]
+            if not f["measurements"]:
+                del f["measurements"]
+        return f, ln
+
     def graph_add(type: str, fields: dict[str, Any], links: list[dict[str, Any]] | None = None) -> str:
-        """Add to the record. result {summary, outcome, values: {name: {value, unit} | {k, n}}} · claim
-        {statement, scope, kind, measurements: [{name, result, key, k, n | value}]} · hypothesis {statement,
-        predictions[]} · experiment {aim, protocol, success_criteria}. links: [{"rel": "answers", "to": "Q1"},
-        {"rel": "derived_from", "to": "RS1"}, {"rel": "supports", "to": "H1", "why": …}]. A claim's numbers are
-        bound to your own results when the record can find them; a refused claim says exactly what to fix.
+        """Add to the record. claim {statement, scope, kind} — statement: what was measured, on what, what it came to
+        ("The median latency of the 240 requests in access.log is 31 ms."); scope: the data, method and sample, in a
+        sentence; kind: finding (default) | exclusion | inconclusive. The record binds a claim's numbers to your
+        results, so give it links, not measurements. hypothesis {statement, predictions[]}, links [{"rel": "answers",
+        "to": "Q1"}] · experiment {aim, protocol, success_criteria}, each a full sentence, links [{"rel": "tests",
+        "to": "H1", "data": {"expected": "what it should show if H1 is true"}}]. A claim's links: [{"rel": "answers",
+        "to": "Q1"}, {"rel": "derived_from", "to": "RS1"}, {"rel": "supports", "to": "H1", "why": …}]. Name nodes by
+        the code a reply gave you (Q1, H1, X1, RS1). A number you computed goes through register_run;
+        a result here is one you didn't compute: {summary, outcome, values: {name: {value, unit} | {k, n}}, kind:
+        observed | cited}. The task's files are already in the record. A refused claim says exactly what to fix.
         A reviewer writes reviews, not claims: a claim by the only reviewer could never be reviewed."""
         if type == "artifact" and (fields or {}).get("kind") == "diff":
             arts = [record.get(a["id"]) for a in record.search("", "artifact", inv, 500)]
@@ -225,54 +292,65 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                 return (f"refused: the record watches the working tree — {heads[-1].get('code', 'its head')} is the "
                         "current head, and an edit to the files registers the next one. Edit the files; don't "
                         "register a diff")
+        if type == "artifact" and not (fields or {}).get("sha256"):
+            # no bytes to register: the seat wants the file it read, and the harness registered the task's files
+            have = _named(str((fields or {}).get("path") or (fields or {}).get("name") or ""))
+            if have:
+                return f"{record.get(have)['code']} is that file, already in the record: use that code"
         if seat.role == "reviewer" and type == "claim":
             return ("refused: you are a reviewer — record a verdict on the claim you were asked to check (review); if "
                     "the right answer is missing, say so in your review notes and return the order, and a worker "
                     "will be asked to write it")
         if type == "claim":
-            for l in links or []:
+            fields, links = _as_claim(fields, links)
+            for l in links:
                 if l.get("rel") == "answers" and l.get("to"):
                     why = _same_answer(record, inv, me, str(l["to"]), str((fields or {}).get("statement") or ""),
                                        str((fields or {}).get("kind") or ""))
                     if why:
                         return why
         try:
-            n = record.create(author=me, type=type, inv=inv, fields=fields, links=_links(links))
+            n = record.create(author=me, type=type, inv=inv, fields=fields, links=_links(links, type))
         except (GraphError, KeyError) as e:
             return _err(e)
         _told("graph_add", {"type": type, "fields": fields, "code": n["code"], "id": n["id"]})
         return f"added {n['code']} — {n['state']['sentence']}" + _tail(n, meter)
 
-    def graph_link(src: str, rel: str, dst: str, why: str = "") -> str:
+    def graph_link(src: str, rel: str, dst: str, why: str = "", expected: str = "") -> str:
         """Link two nodes you can see: part_of (an artifact or source → a question), uses (a run → an artifact),
-        supports / challenges (why required), supersedes (a newer diff or instance → the old one)."""
+        supports / challenges (why required), supersedes (a newer diff or instance → the old one), tests (an
+        experiment → a hypothesis; expected required: what it should show if the hypothesis is true)."""
         try:
-            record.link(author=me, src=record.resolve(src, inv), rel=rel, dst=record.resolve(dst, inv), why=why)
+            data = {"expected": expected} if expected.strip() else None
+            record.link(author=me, src=_node(src), rel=rel, dst=_node(dst), why=why, data=data)
         except (GraphError, KeyError) as e:
             return _err(e)
         return f"linked {src} -{rel}-> {dst}"
 
-    def _onto_codeless(e: Exception, run: dict[str, Any]) -> dict[str, Any] | None:
-        """A result refused as a restatement of the seat's own result that has no code behind it: the code-bearing
-        run becomes that result's code (``run -produced-> result``) instead. Without this a seat that first
-        registered a number bare could never put code behind it — the gate asked for a re-runnable result, a new one
-        was refused as a restatement, and the seat filed copies of its claim until the budget ran out (BC-250,
-        2026-11-04). The instrument then re-runs the code against the result's own values, so nothing is credited
-        that a re-run doesn't show. None = not that case; the refusal stands."""
+    def _restated(e: Exception) -> dict[str, Any] | None:
+        """The seat's own result a RESULT_RESTATES refusal names (None = some other refusal)."""
         probs = [p for p in getattr(e, "problems", None) or [] if p.get("code") == "RESULT_RESTATES"]
         m = re.search(r"your own (\S+)$", str(probs[0].get("message") or "")) if probs else None
-        if not m:
-            return None
         try:
-            old = record.get(record.resolve(m.group(1), inv))
-            producers = [record.get(x["src"]) for x in old.get("in", []) if x.get("rel") == "produced"]
-            if any(((p.get("body") or {}).get("config") or {}).get("source") for p in producers):
-                return None                       # it already has code: a real restatement
-            record.link(author=me, src=run["id"], rel="produced", dst=old["id"],
-                        why="the code that computes this result, registered after the result itself")
-            return record.get(old["id"])
+            return record.get(record.resolve(m.group(1), inv)) if m else None
         except (GraphError, KeyError):
             return None
+
+    def _onto_codeless(old: dict[str, Any], run: dict[str, Any]) -> bool:
+        """The code-bearing run becomes the code of the seat's own bare result (``run -produced-> result``). Without
+        this a seat that first registered a number bare could never put code behind it — the gate asked for a
+        re-runnable result, a new one was refused as a restatement, and the seat filed copies of its claim until the
+        budget ran out (BC-250, 2026-11-04). The instrument then re-runs the code against the result's own values, so
+        nothing is credited that a re-run doesn't show. False = it already has code: a real restatement."""
+        producers = [record.get(x["src"]) for x in old.get("in", []) if x.get("rel") == "produced"]
+        if any(((p.get("body") or {}).get("config") or {}).get("source") for p in producers):
+            return False
+        try:
+            record.link(author=me, src=run["id"], rel="produced", dst=old["id"],
+                        why="the code that computes this result, registered after the result itself")
+        except (GraphError, KeyError):
+            return False
+        return True
 
     def register_run(name: str, result_summary: str, values: dict[str, Any] | None = None, outcome: str = "",
                      experiment: str = "", code: str = "", claim: str = "", answers: str = "", scope: str = "",
@@ -282,12 +360,13 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         or rel_tol (a fraction), and the instrument confirms a re-run inside it; code: the
         exact code you ran — the instrument re-executes it and checks that the output shows every value you register,
         so PRINT each registered value with its name (print("n_items", n_items)). experiment: the experiment it
-        executes, if any. uses: artifact codes the run read — the diff it tested, the instance it solved, the data
-        file (a workflow reads 'tests on the current head' and freshness off these). claim (optional): the sentence
-        this result lets you assert — written in the same call, derived from the result, its numbers bound to these
-        values; answers: the question code it answers; scope: under which conditions it holds; claim_kind: finding
-        (default) | exclusion | inconclusive. The result counts toward your order by itself; a claim settles a
-        question."""
+        executes, if any. uses: what the run read, by code or file path — the diff it tested, the instance it solved,
+        the data file (a workflow reads 'tests on the current head' and freshness off these). claim (optional): the
+        whole sentence this result lets you assert, not a label — written in the same call, derived from the result,
+        its numbers bound to these values; if only the claim is refused, call again with it corrected and it goes on
+        the same result. answers: the question code it answers; scope: under which conditions it holds, in a
+        sentence; claim_kind: finding (default) | exclusion | inconclusive. The result counts toward your order by
+        itself; a claim settles a question."""
         if code.strip() and not runs_code:
             return ("refused: nothing in this run executes code, so this code wasn't run and isn't evidence. Register "
                     "only what you read off the files (values, no code), or return the order and say it needs a tool "
@@ -304,10 +383,18 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             if why:
                 return why
         r: dict[str, Any] | None = None
-        attached = False
+        attached = again = False
+        skipped: list[str] = []
+        declared: list[str] = []
+        for a in uses or []:
+            if str(a).strip():
+                # what a run read is provenance: a name the record doesn't hold costs it that line, not the run
+                try:
+                    declared.append(_node(str(a)))
+                except (GraphError, KeyError):
+                    skipped.append(str(a))
         try:
-            links: list[dict[str, Any]] = [{"rel": "executes", "to": record.resolve(experiment, inv)}] if experiment.strip() else []
-            declared = [record.resolve(str(a), inv) for a in (uses or []) if str(a).strip()]
+            links: list[dict[str, Any]] = [{"rel": "executes", "to": _node(experiment)}] if experiment.strip() else []
             links += [{"rel": "uses", "to": a, "data": {"role": "data"}}
                       for a in dict.fromkeys(declared + implied_uses(record, inv, order, code))]
             rfields: dict[str, Any] = {"kind": "agent", "name": name[:300], "state": "succeeded", "note": code[:1500]}
@@ -320,10 +407,14 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             res = record.create(author=me, type="result", inv=inv, fields=rf,
                                 links=[{"rel": "produced", "from": r["id"]}])
         except (GraphError, KeyError) as e:
-            got = _onto_codeless(e, r) if r is not None and code.strip() else None
-            if got is None:
+            old = _restated(e) if r is not None else None
+            if old is None or r is None:
                 return _err(e)
-            res, attached = got, True
+            attached = bool(code.strip()) and _onto_codeless(old, r)
+            again = not attached and bool(claim.strip())
+            if not attached and not again:
+                return _err(e)
+            res = record.get(old["id"])
         assert r is not None                              # the except above returns unless the run was created
         _told("register_run", {"code": code, "values": (res.get("body") or {}).get("values") or values or {},
                                "result": res["code"], "run": r["code"]})
@@ -331,6 +422,10 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         if attached:
             out += (f" (your earlier {res['code']} had no code behind it; {r['code']} is now its code, and the "
                     "instrument re-runs it — claims on it need no copy)")
+        if again:                                         # the call came back after a refused claim
+            out += f" (these are the numbers of your {res['code']}, so the claim goes on it)"
+        if skipped:
+            out += f" (not in the record, left out of uses: {', '.join(skipped)})"
         if claim.strip():
             cf: dict[str, Any] = {"statement": claim, "scope": scope or result_summary}
             if claim_kind:
@@ -340,7 +435,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                                                "why": "the result this claim's numbers come from"}]
             if answers.strip():
                 try:
-                    cl_links.append({"rel": "answers", "to": record.resolve(answers, inv)})
+                    cl_links.append({"rel": "answers", "to": _node(answers)})
                 except (GraphError, KeyError) as e:
                     return out + f"\n  claim not written: {e}" + _tail(res, meter)
             try:
@@ -349,6 +444,8 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                 why = str(e)
                 if why.startswith("claim refused:"):      # the record's own prefix; don't say it twice
                     why = why[len("claim refused:"):].strip()
+                if not re.search(r"\s", claim.strip()):
+                    why = f"claim is the sentence itself, not a label ({claim.strip()[:20]!r}). {why}"
                 return out + f"\n  claim refused: {why}" + _tail(res, meter)
             out += f" → claim {c['code']} — {c['state']['sentence']}"
             return out + _tail(c, meter)
