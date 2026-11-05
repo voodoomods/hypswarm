@@ -1,6 +1,7 @@
 """What the box's third sweep showed (BC-250, 2026-11-05): a test run has to bring its own count, a sampled number isn't
 a contradiction, and a file another file withdraws can't be cited."""
 import asyncio
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -37,8 +38,12 @@ def _record(tmp_path: Path, code: bytes = FIXED, profile: str = "software@2"):
 
 
 def _python(work: Path):
+    # no bytecode: BROKEN and FIXED are the same size, and a swap within a second reads as unchanged to the .pyc check,
+    # so a re-run could score the old code (one CI job in six, 2026-11-05)
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+
     def run(code: str) -> str:
-        p = subprocess.run([sys.executable, "-c", code], cwd=work, capture_output=True, text=True, check=False)
+        p = subprocess.run([sys.executable, "-c", code], cwd=work, capture_output=True, text=True, check=False, env=env)
         return p.stdout + ("\n[stderr]\n" + p.stderr if p.stderr.strip() else "")
     return run
 
