@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **An assembled report answers with the claim's sentence, not its bound values.** With no format named, the fallback
+  report gave whatever a claim bound, so "What is A's accuracy?" could come back as `{"n_items": 1000}`: a claim's
+  bound values are what it rests on, not its answer. A question that names a format is answered as before. Replayed on
+  205 stored records on hypgraph 0.8.4: no assembled report lost, and 53 that the record's check refused (values no
+  claim states), so no report at all, now pass.
+
 ## 0.1.0a13 — 2026-11-05: a report can't call a checked answer unanswered
 
 - **A report can't say null over a checked claim.** null means no claim answers the question, but a lead that found
