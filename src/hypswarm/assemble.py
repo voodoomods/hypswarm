@@ -12,7 +12,11 @@ is derived from: one whose key (the result's own field) is the field, then one w
 whole segment of ("cost" in "min_cost") when all such candidates agree. A field asked as true / false takes only a
 boolean — or a 0 / 1 whose result key is that field: a gap of 0 that an author labelled "optimal" is not an answer of
 "optimal: false". A field the claim doesn't bind is left out, never guessed; a question with no current claim is
-answered null. The text must pass the record's check like any report, or it isn't used.
+answered null, and one whose claim binds nothing the question asks for is answered with the claim's own sentence. The
+text must pass the record's check like any report, or it isn't used.
+
+``null_over_a_checked_claim`` is the same reading applied to the lead's own report: null says no claim answers the
+question, so an answers block can't say it of a question a checked claim answers.
 """
 
 from __future__ import annotations
@@ -25,6 +29,18 @@ from .record import Record
 
 _FIELD = re.compile(r'"([A-Za-z_][A-Za-z0-9_]*)"\s*:\s*([^,}]*)')
 _BOOL = re.compile(r"\btrue\b|\bfalse\b|<bool", re.IGNORECASE)
+
+
+def answers_block(report: str) -> dict[str, Any] | None:
+    """The last ```answers block in a report, parsed; None when there is none or it isn't a JSON object."""
+    m = re.findall(r"```answers\s*(\{.*?\})\s*```", report, re.DOTALL)
+    if not m:
+        return None
+    try:
+        d = json.loads(m[-1])
+    except json.JSONDecodeError:
+        return None
+    return d if isinstance(d, dict) else None
 
 
 def asked_fields(question_text: str) -> list[tuple[str, str]]:
@@ -128,11 +144,34 @@ def assemble_answers(record: Record, inv: str) -> tuple[dict[str, Any], list[str
                 missing.append(f)
         if not fields:                               # no format named: the claim's own measurements
             got = {key or name: v for key, name, v in measured if key or name}
-        answers[code] = got or None
+        answers[code] = got or str((claim.get("body") or {}).get("statement") or "") or None
         status = "checked" if claim in checked else "unchecked"
         notes.append(f"{code}: from {claim['code']} ({status})" + (f"; not bound by it: {', '.join(missing)}"
                                                                   if missing else ""))
     return answers, notes
+
+
+def null_over_a_checked_claim(record: Record, inv: str, report: str) -> list[str]:
+    """One line per question the report's answers block leaves null or out while a checked, current claim answers it.
+    gpt-oss wrote "not significant (null)" and then `"Q2": null` in 4 of 13 runs of one task (BC-250, 2026-11-04): the
+    block read as "no answer" beside a checked claim that gave one. A report with no answers block isn't judged here."""
+    block = answers_block(report)
+    if block is None:
+        return []
+    out = []
+    for row in record.question_board(inv):
+        code = str(row["code"])
+        if block.get(code) is not None:
+            continue
+        for c in row.get("answers") or []:
+            node = record.get(record.resolve(str(c), inv))
+            state = node.get("state") or {}
+            if _current(state) and (state.get("review") or {}).get("state") == "checked":
+                statement = str((node.get("body") or {}).get("statement") or "")[:120]
+                out.append(f"{code} is null in the answers block, but {node['code']} is checked and answers it "
+                           f"({statement})")
+                break
+    return out
 
 
 def assembled_report(record: Record, inv: str) -> str:

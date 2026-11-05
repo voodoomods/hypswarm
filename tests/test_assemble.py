@@ -5,9 +5,11 @@ false field only from a boolean, skips stale claims, and is used only when the t
 import asyncio
 
 from hypswarm import Budget, Seat, run
-from hypswarm.assemble import asked_fields, assemble_answers, assembled_report
+from hypswarm.assemble import asked_fields, assemble_answers, assembled_report, null_over_a_checked_claim
+from hypswarm.budget import Meter
 from hypswarm.providers.stub import StubModel, calls_made, tool_outputs
 from hypswarm.record import LocalRecord
+from hypswarm.tools import lead_tools
 
 from .test_alpha import SEATS, TASK, make_models
 
@@ -170,3 +172,56 @@ def test_a_lead_that_stops_without_a_call_is_asked_to_submit():
     log = [x for x in res.scheduler.lead_log if x["unit"] == "report"]
     assert res.report_source == "lead", res.scheduler.events
     assert [x["tools"] for x in log] == [["report_facts"], [], ["submit_report"]]
+
+
+# ── null beside a checked claim ──────────────────────────────────────────────
+# gpt-oss wrote "not significant (null)", then `"Q1": null`: the answers block said unanswered beside a checked claim.
+
+NEGATIVE = "A is not significantly better than B."
+
+
+def _report(block: str) -> str:
+    return f"The record's claims answer this.\n\n```answers\n{block}\n```\n"
+
+
+def _submit(r, inv, text):
+    box: dict = {}
+    tools = lead_tools(r, Seat("lead", "lead"), inv, Meter(Budget(max_calls=10)), report_box=box, roster=[])
+    return next(t for t in tools if t.name == "submit_report").fn(text=text), box
+
+
+def test_a_report_cant_say_null_over_a_checked_claim():
+    r, inv = _record()
+    q = _question(r, inv, "Q1", "Is A significantly better than B?")
+    _, c = _solve(r, inv, q, {"p": 0.08}, NEGATIVE)
+    out, box = _submit(r, inv, _report('{"Q1": null}'))
+    assert out.startswith("report refused") and "Q1 is null" in out and r.get(c)["code"] in out and NEGATIVE in out
+    assert "text" not in box and box["refusals"] == 1
+    out, _ = _submit(r, inv, _report('{}'))                 # left out says the same as null
+    assert out.startswith("report refused")
+    out, box = _submit(r, inv, _report('{"Q1": false}'))
+    assert out == "report accepted" and box["text"]
+
+
+def test_null_stands_where_nothing_checked_answers():
+    r, inv = _record()
+    q = _question(r, inv, "Q1", "Is A significantly better than B?")
+    _question(r, inv, "Q2", "Does the gap hold on new items?")
+    _solve(r, inv, q, {"p": 0.08}, NEGATIVE, check=False)
+    assert null_over_a_checked_claim(r, inv, _report('{"Q1": null, "Q2": null}')) == []
+
+
+def test_a_report_with_no_answers_block_isnt_judged():
+    r, inv = _record()
+    q = _question(r, inv, "Q1", "Is A significantly better than B?")
+    _solve(r, inv, q, {"p": 0.08}, NEGATIVE)
+    assert null_over_a_checked_claim(r, inv, "Prose only, in the task's own format.") == []
+    assert null_over_a_checked_claim(r, inv, "```answers\nnot json\n```") == []
+
+
+def test_an_assembled_answer_gives_the_claims_sentence_when_it_binds_nothing_asked():
+    r, inv = _record()
+    q = _question(r, inv, "Q1", "Is A significantly better than B?")
+    _solve(r, inv, q, {}, NEGATIVE)
+    answers, _ = assemble_answers(r, inv)
+    assert answers == {"Q1": NEGATIVE}
