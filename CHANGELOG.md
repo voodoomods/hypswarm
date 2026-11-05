@@ -23,6 +23,9 @@ Found running the harder challenges on gpt-oss-20b on a local BC-250.
   can't read, takes a scope from the linked result, and defaults a hypothesis to the order's question; `register_run`
   finds the order's open experiment, leaves out a `uses` the record doesn't hold, and moves a retry onto the seat's own
   result. A run named as `supports` means its result. Every check still runs on what's passed on.
+- **A report needs its answers block.** gpt-oss put Python in `submit_report`'s text, and 4 of 17 runs ended on a
+  "report" that was a code snippet: with no claim in it, the checks had nothing to refuse. When the task asks for an
+  answers block, a report without one is refused, and the harness assembles one if the lead can't.
 - **Refusals say how to fix them.** `submit_report` gives each finding's message, and `show` says a file isn't a node.
 - **The software note matches the tools.** Under watch the record registers the diff, and the note no longer asks for
   one the tool refuses.

@@ -879,8 +879,8 @@ class Scheduler:
         # cancel) belong to exceptions — a lead that spent its report turns adding questions nobody will work left
         # the run without a report (F7-907, pilot 4).
         tools = [t for t in lead_tools(self.r, self.lead, self.inv, self.meter, report_box=box, roster=self.roster,
-                                       order_author=HARNESS) if t.name in ("briefing", "report_facts", "submit_report",
-                                                                             "show")]
+                                       order_author=HARNESS, needs_answers="```answers" in self.preamble)
+                 if t.name in ("briefing", "report_facts", "submit_report", "show")]
         kind = self._report_kind()
         user = (f"Write the final report{' — the ' + kind if kind else ''}. Call report_facts and start from it; "
                 "write your interpretation under the facts; end with the answers in the format the task asks for. "

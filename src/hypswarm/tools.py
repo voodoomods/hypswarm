@@ -14,7 +14,7 @@ from typing import Any
 
 from hypgraph import GraphError
 
-from .assemble import null_over_a_checked_claim
+from .assemble import answers_block, null_over_a_checked_claim
 from .budget import Meter
 from .messages import Tool
 from .record import Record
@@ -590,10 +590,11 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
 
 
 def lead_tools(record: Record, seat: Seat, inv: str, meter: Meter, *, report_box: dict[str, Any],
-               roster: list[dict[str, str]], order_author: str = "") -> list[Tool]:
+               roster: list[dict[str, str]], order_author: str = "", needs_answers: bool = False) -> list[Tool]:
     """What the lead can do at an exception and for the report: plan, re-plan, judge; never the workers' work.
     ``order_author``: the author that issued the orders (the scheduler), so the lead's rework and cancel act on
-    them — only an order's author may withdraw it."""
+    them — only an order's author may withdraw it. ``needs_answers``: the task asks for an answers block, so a report
+    without one is refused."""
     me = seat.name
     oa = order_author or me
     seq = {"n": 0}
@@ -660,6 +661,14 @@ def lead_tools(record: Record, seat: Seat, inv: str, meter: Meter, *, report_box
             return "report refused: " + "; ".join(f"line {f['line']} {f['code']}: {f['excerpt'][:100]} → "
                                                   f"{str(f.get('message') or '')[:200]}"
                                                   for f in errs[:6]) + " — fix these and submit again"
+        if needs_answers and answers_block(text) is None:
+            # gpt-oss put Python in submit_report's text: 4 of 17 runs ended on a "report" that was a code snippet,
+            # accepted because the checks found no claim in it to refuse (BC-250, 2026-11-05)
+            report_box["refusals"] = int(report_box.get("refusals", 0)) + 1
+            report_box.setdefault("refused", []).append(["no answers block"])
+            return ("report refused: it has no ```answers block. A report is prose for a reader: the facts from "
+                    "report_facts, your interpretation under them, then the block of JSON the task asks for. Code "
+                    "isn't a report")
         nulls = null_over_a_checked_claim(record, inv, text)
         if nulls:
             report_box["refusals"] = int(report_box.get("refusals", 0)) + 1

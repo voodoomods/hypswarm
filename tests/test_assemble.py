@@ -225,3 +225,20 @@ def test_an_assembled_answer_gives_the_claims_sentence_when_it_binds_nothing_ask
     _solve(r, inv, q, {}, NEGATIVE)
     answers, _ = assemble_answers(r, inv)
     assert answers == {"Q1": NEGATIVE}
+
+
+def test_code_is_not_a_report_when_the_task_asks_for_answers():
+    r, inv = _record()
+    box: dict = {}
+    tools = lead_tools(r, Seat("lead", "lead"), inv, Meter(Budget(max_calls=10)), report_box=box, roster=[],
+                       needs_answers=True)
+    submit = next(t for t in tools if t.name == "submit_report").fn
+    out = submit(text="import pandas as pd\nimport numpy as np\n")
+    assert out.startswith("report refused") and "answers" in out and "text" not in box and box["refusals"] == 1
+    assert submit(text="## Interpretation\n\nDone.\n\n```answers\n{\"Q1\": \"yes\"}\n```") == "report accepted"
+
+
+def test_a_task_that_asks_for_no_block_isnt_held_to_one():
+    r, inv = _record()
+    out, box = _submit(r, inv, "## Interpretation\n\nDone.")
+    assert out == "report accepted" and box["text"]
