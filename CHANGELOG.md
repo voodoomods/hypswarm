@@ -29,6 +29,14 @@ Found running the harder challenges on gpt-oss-20b on a local BC-250.
 - **Knowledge seats check a source's standing.** A run settled a retracted census figure: nobody opened the archive's
   list of retractions, and a review objecting to "no source found" sent the researcher to the withdrawn survey. The
   note now says a retraction outranks the source it names and a primary source outranks a later summary.
+- **A test run brings its own count.** `register_run` takes `tests_passed` {k, n} and the outcome from the test runner's
+  summary, and a claim that rules on all of a run is bound to that count. "All tests pass" had nothing behind it and was
+  refused about 12 times in 3 runs while the question stayed open. On 3 of 6 the record now refuses it as false.
+- **A sampled number isn't a contradiction.** When a re-run prints a different number next to a value's name, the
+  instrument runs the code twice more. If the runs differ among themselves and the author's value is near them, the
+  value is reported as varying instead of contradicted, and a review is told that a different draw is no objection.
+- **A withdrawn file can't be cited.** `graph_add` refuses a source whose file another file in the folder withdraws,
+  and names the line. The note about retractions alone didn't get RETRACTIONS.md opened.
 - **The original stays runnable.** A run measured "the original" on the code it had just fixed, got 0 repeats where the
   truth is about 98 in 1,000, and a reviewer passed it. `Task.baseline` now defaults to on for a software run with a
   folder, and `register_run` refuses code that runs a kept file for a question about the original instead of its copy

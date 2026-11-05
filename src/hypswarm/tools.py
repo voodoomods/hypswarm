@@ -6,6 +6,7 @@ where the work happens, so no agent needs a tool call to learn where it stands.
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import re
@@ -18,8 +19,9 @@ from .assemble import answers_block, null_over_a_checked_claim
 from .budget import Meter
 from .messages import Tool
 from .record import Record
+from .reproduce import TESTS_KEY, runner_summary
 from .seats import Seat
-from .world import BASELINE_DIR
+from .world import BASELINE_DIR, withdrawn_by
 
 log = logging.getLogger("hypswarm.tools")
 
@@ -46,6 +48,9 @@ def _live(n: dict[str, Any]) -> bool:
 
 
 _ORIGINAL = re.compile(r"\b(?:original|unfixed|unpatched)\b", re.IGNORECASE)
+_RUNS_TESTS = re.compile(r"\b(?:pytest|py\.test|unittest)\b")
+_IN_BASE = re.compile(r"""(?:cwd\s*=\s*['"]_base|\bcd\s+_base|chdir\(\s*['"]_base)""")
+_RULES_ON_ALL = re.compile(r"\b(?:all|every|each|none|no|zero|never|always|any)\b", re.IGNORECASE)
 _TIME_UNIT = re.compile(r"^(?:s|secs?|seconds?|ms|msecs?|milliseconds?|us|µs|μs|microseconds?|ns|nanoseconds?)$",
                         re.IGNORECASE)
 # The code measures time: only then is a value in seconds a timing. A duration that is the data (parse_duration("2.6s")
@@ -188,10 +193,45 @@ def _not_a_question(text: str, existing: list[tuple[str, str]]) -> str:
 NOT_A_NODE = ". show reads the record's entries by code (Q1, CL2, RS3, T4), not files; only a worker's tools read files"
 
 
+def _count_of_tests(run_code: Any, code: str, values: dict[str, Any] | None) -> dict[str, int] | None:
+    """{k, n} for a registered test run, by the test runner's own summary, or None. Seats registered "All 6 tests
+    passed" with no values, so "all tests pass" had no count behind it, and 12 such claims were refused in 3 runs of E1
+    while its second question stayed open (BC-250, 2026-11-05). Only ``run_code`` says: a seat's number isn't needed."""
+    if not run_code or not _RUNS_TESTS.search(code) or TESTS_KEY in (values or {}):
+        return None
+    try:
+        out = run_code(code)
+    except Exception:  # noqa: BLE001 — the instrument re-runs it and reports the failure
+        return None
+    if inspect.isawaitable(out):
+        out.close() if inspect.iscoroutine(out) else None
+        return None
+    ran = runner_summary(str(out))
+    return {"k": ran["passed"], "n": ran["passed"] + ran["failed"]} if ran else None
+
+
+def _on_its_count(record: Record, fields: dict[str, Any], result: str) -> dict[str, Any]:
+    """A claim that rules on all of a test run, bound to the run's count, and saying it: "all" over the tests a run ran
+    is that count, not a rate past them, and the record only takes it so when the sentence states n. From there the
+    record checks it: "all tests pass" on 2 of 3 is refused as false."""
+    statement = str(fields.get("statement") or "")
+    v = ((record.get(result).get("body") or {}).get("values") or {}).get(TESTS_KEY)
+    if fields.get("measurements") or not isinstance(v, dict) or not _RULES_ON_ALL.search(statement):
+        return fields
+    k, n = v.get("k"), v.get("n")
+    # named in both forms: the record asks that a count's name meets the sentence, and "pass" and "passed" don't stem alike
+    said = statement if k not in (0, n) or re.search(rf"\b{n}\b", statement) else f"{statement.rstrip('. ')} ({k} of {n} tests)."
+    return {**fields, "statement": said,
+            "measurements": [{"name": "tests pass, tests passed", "result": result, "key": TESTS_KEY, "k": k, "n": n}]}
+
+
 def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
-                 on_write: OnWrite | None = None, runs_code: bool = True) -> list[Tool]:
+                 on_write: OnWrite | None = None, runs_code: bool = True, run_code: Any = None,
+                 folder: Any = None) -> list[Tool]:
     """What a worker or reviewer can do to the record while holding an order. ``on_write(kind, payload)`` is told
     after every accepted ``graph_add`` / ``register_run`` (a host's hook; it never changes the reply).
+    ``run_code``: the host's ``(code) -> output``, for the count of a registered test run. ``folder``: the working
+    folder, where a cited file's withdrawal may be written down.
     ``runs_code=False``: nothing the seat holds executes code, so ``register_run`` refuses code — it can't have run.
     Through the CLI with only the files toolkit, seats registered code with its "output" 14 times in one run; with no
     instrument nothing checked it, and code text counts as the code behind a result (studies O1, evening)."""
@@ -213,11 +253,18 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         except (GraphError, KeyError):
             return ""
 
+    def record_type(name: str) -> str:
+        try:
+            return str(record.get(_node(name)).get("type") or "")
+        except (GraphError, KeyError):
+            return ""
+
     def _not_the_original(code: str, answers: str) -> str:
         """The refusal for a run on the current files that answers a question about the original. A file a fix changes
         gives a different count, or a re-run contradicts the first one, so it has to run the copy under _base/. Only
         when the code names a kept file: a question can say "original" about something else."""
-        if not code.strip() or BASELINE_DIR in code:
+        running = bool(_RUNS_TESTS.search(code))
+        if not code.strip() or (BASELINE_DIR in code and not running) or _IN_BASE.search(code):
             return ""
         try:
             q = record.get(_node(answers)) if answers.strip() else record.get(_question() or inv)
@@ -229,7 +276,10 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             body = record.get(a["id"]).get("body") or {}
             base = str((body.get("meta") or {}).get("baseline") or "")
             stem = str(body.get("path") or "").rsplit("/", 1)[-1].rsplit(".", 1)[0]
-            if base and stem and re.search(rf"\b{re.escape(stem)}\b", code):
+            # a test runner in a subprocess never sees sys.path: E1 "ran the original" with sys.path.insert and then
+            # pytest test_semver.py, which is the current file. There the file itself has to be the kept one
+            named = rf"(?<!{BASELINE_DIR}/)\b{re.escape(stem)}\b" if running else rf"\b{re.escape(stem)}\b"
+            if base and stem and re.search(named, code):
                 return (f"refused: {q.get('code')} asks about the original, and this code runs the current "
                         f"{body.get('path')}, which a fix changes. The original is {base}: put it first on the path "
                         "(sys.path.insert(0, '_base')) or name the file (pytest _base/test_x.py), then register that")
@@ -381,8 +431,16 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             return ("refused: you are a reviewer — record a verdict on the claim you were asked to check (review); if "
                     "the right answer is missing, say so in your review notes and return the order, and a worker "
                     "will be asked to write it")
+        if type == "source":
+            where = withdrawn_by(folder, str(fields.get("url") or ""))
+            if where:
+                return (f"refused: {where} A withdrawn source is not evidence, so it can't be cited for an answer. "
+                        "Use what that line points to; if it points nowhere, say no source answers")
         if type == "claim":
             fields, links = _as_claim(fields, links)
+            for l in links:
+                if l.get("rel") in ("derived_from", "supports") and record_type(str(l.get("to") or "")) == "result":
+                    fields = _on_its_count(record, fields, _node(str(l["to"])))
             for l in links:
                 if l.get("rel") == "answers" and l.get("to"):
                     why = _same_answer(record, inv, me, str(l["to"]), str((fields or {}).get("statement") or ""),
@@ -470,6 +528,11 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             # claim can't be reviewed, so it held its question open to the end of the run (BC-250, 2026-11-05)
             no_claim = " (a reviewer's claim couldn't be reviewed, so none was written: give your verdict with review)"
             claim = ""
+        count = _count_of_tests(run_code, code, values)
+        if count:
+            # the count decides the outcome too: a run with no outcome read as positive, and tests_pass reads that
+            values = {**{k: v for k, v in (values or {}).items() if k != "stdout"}, TESTS_KEY: count}
+            outcome = "positive" if count["k"] and count["k"] == count["n"] else "negative"
         bare = _timings_without_spread(values or {}) if _MEASURES_TIME.search(code) else []
         if bare and code.strip():
             # the instrument re-runs the code: a re-timed value never lands on the same digits, and every timing
@@ -543,7 +606,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                     f"graph_link({r['code']}, 'executes', <its X code>))")
         out += no_claim
         if claim.strip():
-            cf: dict[str, Any] = {"statement": claim, "scope": scope or result_summary}
+            cf: dict[str, Any] = _on_its_count(record, {"statement": claim, "scope": scope or result_summary}, res["id"])
             if claim_kind:
                 cf["kind"] = claim_kind
             cl_links: list[dict[str, Any]] = [{"rel": "derived_from", "to": res["id"]},

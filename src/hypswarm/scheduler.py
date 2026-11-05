@@ -77,7 +77,8 @@ def _changers(gates: Sequence[dict[str, Any]]) -> set[str]:
 RERUN = ("what the instrument's re-run confirmed. A confirmed value is one the code really printed, no more: the re-run "
          "doesn't show the code computes the right thing. So read how each number was computed, and work out any p-value or "
          "test statistic a second way yourself. Otherwise recompute only a value the re-run CONTRADICTED; a value merely not "
-         "printed is not evidence against")
+         "printed is not evidence against. A value the instrument says varies from run to run is one draw: your own "
+         "run will differ, and that is no objection unless it falls well outside that range")
 JUDGE = ("Judge whether the method and the numbers answer the question, and record a verdict: checked when they hold "
          "(put any wording point in your notes); objection only when the answer, a number in the claim or the method "
          "is wrong — an objection sends the whole claim back for rework. A claim must itself state the answer: 'it "
@@ -122,8 +123,9 @@ class Scheduler:
                  on_return: Callable[[Scheduler, int], None] | None = None, external_poll_s: float = 1.0,
                  external_timeout_s: float | None = None, header: str = "", reproducer: Reproducer | None = None,
                  world: World | None = None, on_write: OnWrite | None = None, assemble_report: bool = True,
-                 tel: Telemetry | None = None, tel_parent: str = ""):
+                 tel: Telemetry | None = None, tel_parent: str = "", folder: Any = None):
         self.r, self.inv, self.seats = record, inv, list(seats)
+        self.folder = folder                                # the working folder, for what the worker tools read there
         self.model_for, self.meter = model_for, meter
         self.data_tools, self.preamble, self.header = list(data_tools), preamble, header
         self.reproducer = reproducer                        # host-supplied: re-executes registered code (no model)
@@ -250,7 +252,8 @@ class Scheduler:
             task = asyncio.create_task(run_order(seat, model, self.r, self.inv, order, meter=self.meter,
                                                  data_tools=self.data_tools, preamble=self._preamble(),
                                                  header=self.header, on_write=self.on_write, tel=self.tel,
-                                                 tel_parent=sp, runs_code=self.runs_code))
+                                                 tel_parent=sp, runs_code=self.runs_code, run_code=self.reproducer,
+                                                 folder=self.folder))
         self._order_spans[task] = sp
         self.inflight[task] = (seat, order)
         escalated = bool(escalate and seat.escalate_to and seat.escalate_to != seat.model and not seat.external)

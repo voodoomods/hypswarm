@@ -69,6 +69,32 @@ def passage_in(passage: str, text: str) -> bool:
 BASELINE_DIR = "_base"
 
 
+_WITHDRAWN = re.compile(r"\b(?:retract(?:ed|ion)|withdrawn|erratum|corrigendum)\b", re.IGNORECASE)
+
+
+def withdrawn_by(folder: str | Path | None, url: str) -> str:
+    """Where a file in ``folder`` is withdrawn: "other/file: the line", or ''. The line has to name the source by every
+    word of its file name, so a source called ``paper.md`` is never caught. The note telling seats a retraction outranks
+    what it names changed nothing: in 15 runs of the Ashby archive RETRACTIONS.md was opened once, by a reviewer, and
+    2 of 3 settled the withdrawn figure anyway (BC-250, 2026-11-05, K1)."""
+    if not folder or not str(url).strip():
+        return ""
+    root = Path(folder)
+    name = str(url).strip().removeprefix("file:").lstrip("/")
+    words = [w for w in re.split(r"[^a-z0-9]+", Path(name).stem.lower()) if len(w) >= 3]
+    if len(words) < 2 or not (root / name).is_file():
+        return ""
+    for p in sorted(x for x in root.rglob("*") if x.is_file())[:500]:
+        rel = p.relative_to(root).as_posix()
+        if rel == name or rel.startswith(BASELINE_DIR + "/") or p.stat().st_size > 1_000_000:
+            continue
+        for line in p.read_text(encoding="utf-8", errors="ignore").splitlines():
+            low = line.lower()
+            if _WITHDRAWN.search(line) and all(w in low for w in words):
+                return f"{rel}: {line.strip()[:300]}"
+    return ""
+
+
 def seed_baseline(record: Record, inv: str, folder: str | Path | None, files: Mapping[str, bytes]) -> list[str]:
     """Keep the files as they were at the start. Their bytes are written under ``_base/`` in ``folder`` and the
     task's file artifacts (one per content: the record is content-addressed) are marked ``meta.baseline`` with that

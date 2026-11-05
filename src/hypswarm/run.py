@@ -213,7 +213,8 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
     sched = Scheduler(rec, inv, seats, model_for, meter, data_tools=data_tools, preamble=preamble,
                       on_return=on_return, lease_minutes=lease_minutes, external_poll_s=external_poll_s,
                       external_timeout_s=external_timeout_s, header=task.header, reproducer=reproducer,
-                      world=world, on_write=on_write, assemble_report=assemble_report, tel=tel, tel_parent=run_span)
+                      world=world, on_write=on_write, assemble_report=assemble_report, tel=tel, tel_parent=run_span,
+                      folder=folder)
     for s in seats:
         if s.external:
             log.info("external seat %s: %s", s.name, s.mcp_hint(str(rec.path)))
