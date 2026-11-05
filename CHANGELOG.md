@@ -54,6 +54,11 @@ Found running the harder challenges on gpt-oss-20b on a local BC-250.
 - **Refusals say how to fix them.** `submit_report` gives each finding's message, and `show` says a file isn't a node.
 - **The software note matches the tools.** Under watch the record registers the diff, and the note no longer asks for
   one the tool refuses.
+- **An assembled report answers with the claim's sentence, not its bound values.** With no format named, the fallback
+  report gave whatever a claim bound, so "What is A's accuracy?" could come back as `{"n_items": 1000}`: a claim's
+  bound values are what it rests on, not its answer. A question that names a format is answered as before. Replayed on
+  205 stored records on hypgraph 0.8.4: no assembled report lost, and 53 that the record's check refused (values no
+  claim states), so no report at all, now pass.
 
 ## 0.1.0a13 — 2026-11-05: a report can't call a checked answer unanswered
 

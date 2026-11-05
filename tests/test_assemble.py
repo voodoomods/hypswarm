@@ -103,7 +103,8 @@ def test_the_harness_assembles_the_report_when_the_lead_s_never_passes():
     res = asyncio.run(run(TASK, SEATS, models, record=None, budget=Budget(max_calls=60)))
     assert res.stopped == "settled" and not res.report_accepted and res.report_source == "assembled"
     assert any(e["kind"] == "report_assembled" for e in res.scheduler.events)
-    assert res.answers() == {"Q1": {"acc_a": 812}, "Q2": {"a": 812, "b": 800}}
+    assert res.answers() == {"Q1": "A is right on 812 of 1000 items.",
+                             "Q2": "A is not significantly more accurate than B (812 of 1000 vs 800 of 1000)."}
     models = make_models()
     models["lead"] = StubModel(_refused_lead, "refused-lead")
     off = asyncio.run(run(TASK, SEATS, models, record=None, budget=Budget(max_calls=60), assemble_report=False))
@@ -242,3 +243,11 @@ def test_a_task_that_asks_for_no_block_isnt_held_to_one():
     r, inv = _record()
     out, box = _submit(r, inv, "## Interpretation\n\nDone.")
     assert out == "report accepted" and box["text"]
+
+
+def test_a_question_with_no_format_is_answered_with_the_claims_sentence_not_its_bound_values():
+    r, inv = _record()
+    q = _question(r, inv, "Q1", "What is A's accuracy?")
+    stated = "A is right on 814 of 1000 items."
+    _solve(r, inv, q, {"n_items": 1000, "accuracy": {"k": 814, "n": 1000}}, stated)
+    assert assemble_answers(r, inv)[0] == {"Q1": stated}

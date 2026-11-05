@@ -12,8 +12,9 @@ is derived from: one whose key (the result's own field) is the field, then one w
 whole segment of ("cost" in "min_cost") when all such candidates agree. A field asked as true / false takes only a
 boolean — or a 0 / 1 whose result key is that field: a gap of 0 that an author labelled "optimal" is not an answer of
 "optimal: false". A field the claim doesn't bind is left out, never guessed; a question with no current claim is
-answered null, and one whose claim binds nothing the question asks for is answered with the claim's own sentence. The
-text must pass the record's check like any report, or it isn't used.
+answered null, and one that names no format, or whose claim binds nothing it asks for, is answered with the claim's own
+sentence: a claim's bound values are what it rests on, not its answer ("What is A's accuracy?" came back as
+`{"n_items": 1000}`). The text must pass the record's check like any report, or it isn't used.
 
 ``null_over_a_checked_claim`` is the same reading applied to the lead's own report: null says no claim answers the
 question, so an answers block can't say it of a question a checked claim answers.
@@ -142,8 +143,6 @@ def assemble_answers(record: Record, inv: str) -> tuple[dict[str, Any], list[str
                 got[f] = v
             else:
                 missing.append(f)
-        if not fields:                               # no format named: the claim's own measurements
-            got = {key or name: v for key, name, v in measured if key or name}
         answers[code] = got or str((claim.get("body") or {}).get("statement") or "") or None
         status = "checked" if claim in checked else "unchecked"
         notes.append(f"{code}: from {claim['code']} ({status})" + (f"; not bound by it: {', '.join(missing)}"
