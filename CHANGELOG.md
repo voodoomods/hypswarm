@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0a13 — 2026-11-05: a report can't call a checked answer unanswered
 
 - **A report can't say null over a checked claim.** null means no claim answers the question, but a lead that found
   a null effect wrote `"Q2": null`, so the answers block read as unanswered beside a checked claim that said "not
