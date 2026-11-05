@@ -29,6 +29,10 @@ Found running the harder challenges on gpt-oss-20b on a local BC-250.
 - **Knowledge seats check a source's standing.** A run settled a retracted census figure: nobody opened the archive's
   list of retractions, and a review objecting to "no source found" sent the researcher to the withdrawn survey. The
   note now says a retraction outranks the source it names and a primary source outranks a later summary.
+- **The original stays runnable.** A run measured "the original" on the code it had just fixed, got 0 repeats where the
+  truth is about 98 in 1,000, and a reviewer passed it. `Task.baseline` now defaults to on for a software run with a
+  folder, and `register_run` refuses code that runs a kept file for a question about the original instead of its copy
+  under `_base/`. A bare `pytest` no longer stops on both copies of a test file.
 - **Refusals say how to fix them.** `submit_report` gives each finding's message, and `show` says a file isn't a node.
 - **The software note matches the tools.** Under watch the record registers the diff, and the note no longer asks for
   one the tool refuses.

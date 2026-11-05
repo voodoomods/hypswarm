@@ -82,6 +82,13 @@ def seed_baseline(record: Record, inv: str, folder: str | Path | None, files: Ma
             p.parent.mkdir(parents=True, exist_ok=True)
             if not p.exists():
                 p.write_bytes(data)
+    if folder and files:
+        # a bare pytest found both copies of each test file and stopped on "import file mismatch"; this keeps the
+        # originals out of it, and pytest _base/test_x.py still runs one (a task's own conftest.py is left alone)
+        keep = Path(folder) / BASELINE_DIR / "conftest.py"
+        if not keep.exists():
+            keep.write_text('collect_ignore_glob = ["*"]\n', encoding="utf-8")
+    for name, data in files.items():
         sha = hashlib.sha256(data).hexdigest()
         mine = [a for a in record.search("", "artifact", inv, 500)
                 if str(record.get(a["id"])["body"].get("sha256") or "").lower() == sha]

@@ -63,3 +63,90 @@ def test_the_original_stays_live_and_readable_after_a_seat_edits_the_file(tmp_pa
     arts = _artifacts(rec, inv)
     assert (arts["A1"].get("state") or {}).get("lifecycle", "active") == "active"
     assert (arts[new[0]["code"]].get("state") or {}).get("lifecycle") == "superseded"
+
+
+def _register(rec, inv):
+    from hypswarm.budget import Budget, Meter
+    from hypswarm.tools import worker_tools
+    order = rec.issue_work(author="harness", inv=inv, target=rec.resolve("Q1", inv), assignee="tester",
+                           objective="Find which tests fail.")["order"]
+    return {t.name: t.fn for t in worker_tools(rec, Seat("tester", "worker"), inv, order,
+                                               Meter(Budget(max_calls=50)))}["register_run"]
+
+
+def test_a_run_for_the_original_has_to_run_the_original(tmp_path):
+    work, task, rec, inv = _run(tmp_path)
+    seed_baseline(rec, inv, work, task.files)
+    reg = _register(rec, inv)
+    current = "import semver\nprint('failed', 3)"
+    out = reg(name="r", result_summary="Three tests failed on the file.", values={"failed": 3}, code=current, answers="Q1")
+    assert out.startswith("refused: Q1 asks about the original") and "_base/semver.py" in out
+    # the order's own question counts when the seat names none
+    assert reg(name="r", result_summary="Three tests failed on the file.", values={"failed": 3}, code=current).startswith("refused: Q1")
+    kept = "import sys\nsys.path.insert(0, '_base')\nimport semver\nprint('failed', 3)"
+    assert not reg(name="r", result_summary="Three tests failed on the file.", values={"failed": 3}, code=kept, answers="Q1").startswith("refused")
+
+
+def test_a_question_about_the_current_code_runs_the_current_code(tmp_path):
+    work, task, rec, inv = _run(tmp_path)
+    seed_baseline(rec, inv, work, task.files)
+    out = _register(rec, inv)(name="r", result_summary="Three tests passed on the file.", values={"passed": 3},
+                              code="import semver\nprint('passed', 3)", answers="Q2")
+    assert not out.startswith("refused")
+
+
+def test_original_in_a_question_about_something_else_refuses_nothing(tmp_path):
+    work, task, rec, inv = _run(tmp_path)
+    seed_baseline(rec, inv, work, task.files)
+    out = _register(rec, inv)(name="r", result_summary="A count of three in the file.", values={"n": 3}, code="print('n', 3)", answers="Q1")
+    assert not out.startswith("refused")
+
+
+def test_no_kept_files_no_refusal(tmp_path):
+    _work, _task, rec, inv = _run(tmp_path)
+    out = _register(rec, inv)(name="r", result_summary="Three tests failed on the file.", values={"failed": 3},
+                              code="import semver\nprint('failed', 3)", answers="Q1")
+    assert not out.startswith("refused")
+
+
+def test_a_bare_pytest_finds_one_copy_of_each_test(tmp_path):
+    import subprocess
+    import sys
+    _, _, rec, inv = _run(tmp_path)
+    w = tmp_path / "w"
+    w.mkdir()
+    (w / "test_one.py").write_text("def test_one():\n    assert True\n", encoding="utf-8")
+    seed_baseline(rec, inv, w, {"test_one.py": b"def test_one():\n    assert False\n"})
+
+    def pytest(*args):
+        return subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *args], cwd=w,
+                              capture_output=True, text=True, check=False).stdout
+    assert "1 passed" in pytest()
+    assert "1 failed" in pytest("_base/test_one.py")
+
+
+def _software_run(tmp_path, folder, **kw):
+    import asyncio
+
+    from hypswarm import Budget, run
+    from hypswarm.providers.stub import StubModel
+    task = Task(title="semver", mission="Fix the failing tests in the folder.", profile="software", files={"semver.py": CODE},
+                questions=[("Q1", "Which tests fail on the original semver.py?", "measure")], **kw)
+    seats = [Seat("lead", "lead"), Seat("tester", "worker"), Seat("reviewer", "reviewer")]
+    asyncio.run(run(task, seats, StubModel(lambda m, t: None), budget=Budget(max_calls=1), folder=folder, record=str(tmp_path / "r.hypgraph")))
+
+
+def test_a_software_run_in_a_folder_keeps_the_original_unasked(tmp_path):
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "semver.py").write_bytes(CODE)
+    _software_run(tmp_path, str(work))
+    assert (work / "_base" / "semver.py").read_bytes() == CODE
+
+
+def test_a_task_can_say_no(tmp_path):
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "semver.py").write_bytes(CODE)
+    _software_run(tmp_path, str(work), baseline=False)
+    assert not (work / "_base").exists()

@@ -19,6 +19,7 @@ from .budget import Meter
 from .messages import Tool
 from .record import Record
 from .seats import Seat
+from .world import BASELINE_DIR
 
 log = logging.getLogger("hypswarm.tools")
 
@@ -44,6 +45,7 @@ def _live(n: dict[str, Any]) -> bool:
     return (st.get("lifecycle") or "active") == "active" and not st.get("fallen")
 
 
+_ORIGINAL = re.compile(r"\b(?:original|unfixed|unpatched)\b", re.IGNORECASE)
 _TIME_UNIT = re.compile(r"^(?:s|secs?|seconds?|ms|msecs?|milliseconds?|us|µs|μs|microseconds?|ns|nanoseconds?)$",
                         re.IGNORECASE)
 # The code measures time: only then is a value in seconds a timing. A duration that is the data (parse_duration("2.6s")
@@ -210,6 +212,28 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             return target if target and record.get(target)["type"] == "question" else ""
         except (GraphError, KeyError):
             return ""
+
+    def _not_the_original(code: str, answers: str) -> str:
+        """The refusal for a run on the current files that answers a question about the original. A file a fix changes
+        gives a different count, or a re-run contradicts the first one, so it has to run the copy under _base/. Only
+        when the code names a kept file: a question can say "original" about something else."""
+        if not code.strip() or BASELINE_DIR in code:
+            return ""
+        try:
+            q = record.get(_node(answers)) if answers.strip() else record.get(_question() or inv)
+        except (GraphError, KeyError):
+            return ""
+        if q.get("type") != "question" or not _ORIGINAL.search(str((q.get("body") or {}).get("text") or "")):
+            return ""
+        for a in record.search("", "artifact", inv, 500):
+            body = record.get(a["id"]).get("body") or {}
+            base = str((body.get("meta") or {}).get("baseline") or "")
+            stem = str(body.get("path") or "").rsplit("/", 1)[-1].rsplit(".", 1)[0]
+            if base and stem and re.search(rf"\b{re.escape(stem)}\b", code):
+                return (f"refused: {q.get('code')} asks about the original, and this code runs the current "
+                        f"{body.get('path')}, which a fix changes. The original is {base}: put it first on the path "
+                        "(sys.path.insert(0, '_base')) or name the file (pytest _base/test_x.py), then register that")
+        return ""
 
     def _open_experiment() -> str:
         """The experiment a run under this order executes when the seat didn't name it: the one it wrote on the
@@ -437,6 +461,9 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             return ("refused: nothing in this run executes code, so this code wasn't run and isn't evidence. Register "
                     "only what you read off the files (values, no code), or return the order and say it needs a tool "
                     "that runs code")
+        wrong_copy = _not_the_original(code, answers)
+        if wrong_copy:
+            return wrong_copy
         no_claim = ""
         if seat.role == "reviewer" and claim.strip():
             # graph_add refuses this too; here the run and result are still evidence for the review. A reviewer's

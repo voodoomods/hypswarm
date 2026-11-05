@@ -6,7 +6,7 @@ import hashlib
 import logging
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -36,9 +36,10 @@ class Task:
     success: str = ""
     answer_format: str = ANSWER_FORMAT
     notes: str = ""                               # anything every seat should know (tools, conventions)
-    baseline: bool = False                        # keep the files as they were at the start under _base/, registered
+    baseline: bool | None = None                  # keep the files as they were at the start under _base/, registered
                                                   # as artifacts of kind "baseline" the watcher never supersedes, so a
-                                                  # question about the original is answered after the files change
+                                                  # question about the original is answered after the files change.
+                                                  # None: yes when the run works in a watched tree (software)
     header: str = ""                              # the first line of every seat's system prompt (e.g. a run id, so no
                                                   # two runs share a prompt prefix with a provider's cache — pilot 4)
     profile: str = ""                             # governance profile: scientific | software | trading | knowledge |
@@ -51,7 +52,9 @@ class Task:
         if self.baseline and self.files:
             files += ("\n(the files as they were at the start are under _base/ — artifacts of kind baseline that never "
                       "change; a question about the original is answered from them, a question about the current "
-                      "code from the files above)")
+                      "code from the files above. To run the original, put it first on the path "
+                      "(sys.path.insert(0, '_base')) or name the file (pytest _base/test_x.py). A review of such a "
+                      "claim does the same: the current files say nothing about the original)")
         notes = self.notes
         if self.profile:
             from .profiles import get as _profile
@@ -147,6 +150,11 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
     if task.profile:
         from .profiles import get as _profile
         sp = _profile(task.profile)
+    if task.baseline is None and folder and watch is not False and sp and "diff" in getattr(
+            getattr(sp.record_profile, "workflow", None), "artifacts", {}):
+        # a fix changes the files a question about the original needs: without _base/ E3 measured "the original" on
+        # the fixed code, got 0 repeats where the truth is about 98 in 1,000, and settled it (BC-250, 2026-11-05)
+        task = replace(task, baseline=True)
     if seats is None:
         if not sp:
             raise ValueError("seats=None needs a task profile to take the roster from")
