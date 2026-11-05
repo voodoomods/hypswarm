@@ -164,3 +164,8 @@ def test_a_run_named_as_support_means_its_result():
                                       {"rel": "answers", "to": "Q1"}])
     assert "refused" not in claim
     assert any(n["type"] == "claim" for n in r.search("", "claim", inv, 5))
+
+
+def test_a_withdrawn_source_is_not_evidence():
+    note = _NOTES["knowledge@2"]
+    assert "retraction" in note and "withdrawn source is not evidence" in note

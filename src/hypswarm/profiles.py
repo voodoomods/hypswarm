@@ -76,9 +76,11 @@ _NOTES = {
                  "kind=position with size, stop, review_date and paper=true — or kind=no_position when the thesis is "
                  "declined. Never a live order.",
     "knowledge@2": "A source carries citation, url|doi, the passage that says it, retrieved (the date you read it) and "
-                   "kind (primary/secondary/tertiary); link it part_of the question. The claim cites it. If no source "
-                   "answers, register the search as a run with a result (pages read, mentions found) and a claim "
-                   "kind=inconclusive derived from it.",
+                   "kind (primary/secondary/tertiary); link it part_of the question. The claim cites it. Before you rely "
+                   "on a source, writing or reviewing, list what else is there: a retraction, correction or erratum "
+                   "outranks the source it names, and a withdrawn source is not evidence; a primary source outranks a "
+                   "later summary of it. If no source answers, register the search as a run with a result (pages "
+                   "read, mentions found) and a claim kind=inconclusive derived from it.",
     "optimization@2": "Register the instance as an artifact {sha256, path, kind: 'instance'} part_of the question, state the "
                       "model as a hypothesis, the solve configuration as an experiment, then register_run with "
                       "uses=[the instance] and values {objective, feasible, bound|gap} (or feasible=false). A verifier "
