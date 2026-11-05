@@ -182,6 +182,10 @@ def _not_a_question(text: str, existing: list[tuple[str, str]]) -> str:
     return ""
 
 
+# 14 of the 47 refused calls in six runs, and the lead's most repeated one: show on a file name (BC-250, 2026-11-05)
+NOT_A_NODE = ". show reads the record's entries by code (Q1, CL2, RS3, T4), not files; only a worker's tools read files"
+
+
 def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                  on_write: OnWrite | None = None, runs_code: bool = True) -> list[Tool]:
     """What a worker or reviewer can do to the record while holding an order. ``on_write(kind, payload)`` is told
@@ -254,6 +258,12 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                      for a in record.search("", t, inv, 12) if a.get("code")]
             raise KeyError(f"no node {ref!r}. Name a node by its code ({', '.join(there[:24]) or 'none yet'})") from None
 
+    def _result_of(nid: str) -> str:
+        """What a seat means by "this run supports the claim": the run's own result, when it has exactly one."""
+        n = record.get(nid)
+        made = [e["dst"] for e in n.get("out", []) if e.get("rel") == "produced"]
+        return made[0] if n.get("type") == "run" and len(made) == 1 else nid
+
     def _links(links: list[dict[str, Any]] | None, type_: str = "") -> list[dict[str, Any]]:
         out = []
         for l in links or []:
@@ -265,6 +275,8 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             for k in ("to", "from"):
                 if d.get(k):
                     d[k] = _node(str(d[k]))
+            if d.get("rel") == "supports" and d.get("from"):
+                d["from"] = _result_of(d["from"])
             out.append(d)
         return out
 
@@ -550,7 +562,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         try:
             n = record.get(record.resolve(node, inv))
         except (GraphError, KeyError) as e:
-            return _err(e)
+            return _err(e) + NOT_A_NODE
         return json.dumps({"code": n["code"], "type": n["type"], "standing": n["state"]["sentence"], "body": n["body"],
                            "links": [f"{e['rel']} {record.get(e['dst'])['code']}" for e in n["out"]]},
                           default=str)[:6000]
@@ -663,7 +675,7 @@ def lead_tools(record: Record, seat: Seat, inv: str, meter: Meter, *, report_box
         try:
             n = record.get(record.resolve(node, inv))
         except (GraphError, KeyError) as e:
-            return _err(e)
+            return _err(e) + NOT_A_NODE
         return json.dumps({"code": n["code"], "type": n["type"], "standing": n["state"]["sentence"], "body": n["body"]},
                           default=str)[:6000]
 

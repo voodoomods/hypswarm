@@ -80,7 +80,9 @@ RERUN = ("what the instrument's re-run confirmed. A confirmed value is one the c
          "printed is not evidence against")
 JUDGE = ("Judge whether the method and the numbers answer the question, and record a verdict: checked when they hold "
          "(put any wording point in your notes); objection only when the answer, a number in the claim or the method "
-         "is wrong — an objection sends the whole claim back for rework.")
+         "is wrong — an objection sends the whole claim back for rework. A claim must itself state the answer: 'it "
+         "opened on a date', a variable's name where its value belongs, or 'evidence of the implementation' answers "
+         "nothing, so object.")
 READ_ONLY_TOOLS = frozenset({"list_files", "read_file"})   # the files toolkit: reads, executes nothing
 MAX_CRASHES = 3      # a seat whose orders end in an error this many times in a row is benched for the run
 _DECIDE = ("rework", "cancel_work", "add")

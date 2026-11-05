@@ -26,6 +26,7 @@ from typing import Any
 from hypswarm import Budget, Pricing, RunResult, toolkits
 from hypswarm.messages import Tool
 from hypswarm.providers.stub import StubModel, calls_made, tool_outputs
+from hypswarm.sandbox import as_python
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")     # the record writes arrows; Windows consoles are cp1252
@@ -86,7 +87,7 @@ def python_sandbox(folder: Path, seconds: int = 60) -> Any:
         """Run python 3 in your working folder (the data files are there); print what you need. Write scratch
         files (copies, patches, notes) under tempfile.gettempdir(), not the working folder."""
         try:
-            p = subprocess.run([sys.executable, "-E", "-s", "-c", code], check=False, cwd=folder, capture_output=True, text=True,
+            p = subprocess.run([sys.executable, "-E", "-s", "-c", as_python(code)], check=False, cwd=folder, capture_output=True, text=True,
                                timeout=seconds, env=env)
         except subprocess.TimeoutExpired:
             return f"error: no output within {seconds} s"

@@ -65,9 +65,11 @@ _NOTES = {
                     "with its numbers bound answers the question; a reviewer checks it. Your order names the gates; "
                     "write them in order. An honest 'can't be answered' is a claim kind=inconclusive derived from what "
                     "you did find.",
-    "software@2": "Register the change first: graph_add artifact {sha256, path, kind: 'diff', meta: {base_sha, head_sha, "
-                  "files}} part_of the requirement. register_run with the exact test command as code and uses=[the diff]; "
-                  "the instrument re-runs it on that head — tests on a superseded head don't count. Then the claim.",
+    "software@2": "With a working folder the record watches it: edit the files and the change registers itself as the "
+                  "current head; never graph_add a diff. Without one, register it: graph_add artifact {sha256, path, "
+                  "kind: 'diff', meta: {base_sha, head_sha, files}} part_of the requirement. Then register_run with the "
+                  "exact test command as code, after your last edit: the instrument re-runs it on that head and reads "
+                  "the runner's summary, and tests on a superseded head don't count. Then the claim.",
     "trading@2": "Thesis first (a hypothesis answering the question), then the backtest preregistered as an experiment "
                  "(windows, costs, configurations to try; data.expected) BEFORE register_run. The result carries oos_*, "
                  "fees/slippage and trials (configurations tried). After the risk review, a decision based_on the claim: "

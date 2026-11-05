@@ -51,6 +51,33 @@ def _matches(value: float, printed: list[float]) -> bool:
     return False
 
 
+_PASSED = re.compile(r"\b(\d+) passed\b")
+_FAILED = re.compile(r"\b(\d+) (?:failed|errors?)\b")
+_RAN = re.compile(r"^Ran (\d+) tests? in .*$", re.MULTILINE)
+_UNITTEST_BAD = re.compile(r"^FAILED \((?:failures|errors)=(\d+)", re.MULTILINE)
+_OF = re.compile(r"\b(\d+) of (\d+) (?:tests? )?pass(?:ed)?\b")
+
+
+def runner_summary(stdout: str) -> dict[str, int] | None:
+    """Passed and failed from a test runner's own last line (pytest, unittest, or "4 of 4 passed"), or None. A test
+    run needs no value of its author's for the instrument to judge it: a seat that registered "All 6 tests passed"
+    with no values got "0 of 0 confirmed", inconclusive, however often it re-ran (BC-250, 2026-11-05, E1 and E5)."""
+    out = stdout.partition("\n[stderr]\n")[0]
+    of = _OF.findall(out)
+    if of:
+        k, n = int(of[-1][0]), int(of[-1][1])
+        return {"passed": k, "failed": n - k}
+    passed, failed = _PASSED.findall(out), _FAILED.findall(out)
+    if passed or failed:
+        return {"passed": int(passed[-1]) if passed else 0, "failed": int(failed[-1]) if failed else 0}
+    ran = _RAN.findall(out)
+    if ran:
+        bad = _UNITTEST_BAD.findall(out)
+        n, f = int(ran[-1]), int(bad[-1]) if bad else 0
+        return {"passed": n - f, "failed": f}
+    return None
+
+
 def _num(x: object) -> bool:
     """A registered number: int or float, not a bool, not the text a seat sometimes writes ("40/50")."""
     return isinstance(x, (int, float)) and not isinstance(x, bool)
@@ -275,6 +302,10 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
                         "its spread ([lo, hi]) or rel_tol"))
     if err:
         parts.append(f"the code failed: {err}")
+    # no value to confirm, but the run printed its test runner's summary: that is what the instrument saw
+    tests = runner_summary(stdout) if not err and not chk["confirmed"] and not chk["contradicted"] else None
+    if tests:
+        parts = [f"{tests['passed']} passed, {tests['failed']} failed, by the test runner's own summary"]
     verdict = "; ".join(parts)
     state = "succeeded" if not err else "failed"
     # the instrument's run uses what the author's run used (the diff, the instance, the data file): a workflow reads
@@ -294,13 +325,15 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
     author_outcome = str((res.get("body") or {}).get("outcome") or "")
     if chk["contradicted"] or err:
         outcome = "negative"
+    elif tests:
+        outcome = "positive" if tests["passed"] and not tests["failed"] else "negative"
     elif not chk["confirmed"]:
         outcome = "inconclusive"
     else:
         outcome = "negative" if author_outcome == "negative" else "positive"
     lab_res = record.create(author=INSTRUMENT, type="result", inv=inv, fields={
         "summary": f"Re-executed {run['code']}'s code: {verdict}.", "kind": "computed", "outcome": outcome,
-        "values": {k: v for k, v in values.items() if k in chk["confirmed"]}},
+        "values": dict(tests) if tests else {k: v for k, v in values.items() if k in chk["confirmed"]}},
         links=[{"rel": "produced", "from": lab["id"]}])
     supported: list[str] = []
     every = bool(chk["confirmed"]) and not chk["contradicted"] and not chk["unprinted"] and not err
@@ -332,4 +365,5 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
             "supported": supported}
 
 
-__all__ = ["Reproducer", "check_output", "claim_rests_on", "claims_to_support", "live_version", "reproduce_result"]
+__all__ = ["Reproducer", "check_output", "claim_rests_on", "claims_to_support", "live_version", "reproduce_result",
+           "runner_summary"]
