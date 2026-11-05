@@ -27,6 +27,10 @@ from ..messages import Message, Reply, Tool, ToolCall
 RETRY_STATUS = {408, 409, 429, 500, 502, 503, 504}
 
 
+LOADING_WAIT_S = 900.0
+LOADING_POLL_S = 10.0
+
+
 class OpenAICompatible:
     def __init__(self, model: str, *, base_url: str = "", api_key: str = "", timeout_s: float = 180.0,
                  max_retries: int = 3, max_tokens: int | None = None, reasoning_effort: str = "",
@@ -70,7 +74,7 @@ class OpenAICompatible:
         last: Exception | None = None
         for attempt in range(self.max_retries + 1):
             try:
-                r = await self._client.post(f"{self.base_url}/chat/completions", json=body, headers=hdr)
+                r = await self._post(body, hdr)
                 if r.status_code in RETRY_STATUS:
                     raise httpx.HTTPStatusError(f"{r.status_code}: {r.text[:200]}", request=r.request, response=r)
                 r.raise_for_status()
@@ -82,6 +86,18 @@ class OpenAICompatible:
                 if attempt < self.max_retries:
                     await asyncio.sleep(min(30.0, (2 ** attempt) + random.random()))
         raise RuntimeError(f"{self.name}: gave up after {self.max_retries + 1} attempts: {last}")
+
+    async def _post(self, body: dict[str, Any], hdr: dict[str, str]) -> httpx.Response:
+        """One request, waiting out a server that is still loading its model. llama-server answers 503 "Loading model"
+        for the minutes a restart takes, and the retries were spent in seconds: one crash ended the run it hit and the
+        next 7 before they made a call (BC-250, 2026-11-05)."""
+        waited = 0.0
+        while True:
+            r = await self._client.post(f"{self.base_url}/chat/completions", json=body, headers=hdr)
+            if r.status_code != 503 or "loading model" not in r.text.lower() or waited >= LOADING_WAIT_S:
+                return r
+            await asyncio.sleep(LOADING_POLL_S)
+            waited += LOADING_POLL_S
 
     async def aclose(self) -> None:
         await self._client.aclose()

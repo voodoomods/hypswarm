@@ -83,14 +83,19 @@ def implied_uses(record: Record, inv: str, order: str, code: str) -> list[str]:
     """The artifacts a registered run used, as far as the record can tell without the author saying so: every live
     file artifact whose path the code names, and — under a workflow — the live diff or instance that is part of the
     order's question (the tests you ran while holding the order ran on the current head). Freshness then works
-    without the model remembering to declare ``uses``."""
+    without the model remembering to declare ``uses``. A run on the kept originals (_base/) used those and not the
+    head: filed under the head, every fix made its results stale, and E1 spent 3 orders of its budget re-establishing
+    what the original does, which no fix can change (BC-250, 2026-11-05)."""
     out: list[str] = []
+    kept = BASELINE_DIR in code
     if code.strip():
         for a in record.search("", "artifact", inv, 500):
             n = record.get(a["id"])
             b = n.get("body") or {}
             path = str(b.get("path") or "")
             if not path or path == "." or "://" in path or b.get("kind") == "excerpt" or not _live(n):
+                continue
+            if kept and not (b.get("meta") or {}).get("baseline"):
                 continue
             names = {path, path.rsplit("/", 1)[-1]}
             if any(re.search(r"(?<![\w.-])" + re.escape(x) + r"(?![\w.-])", code) for x in names):
@@ -102,7 +107,8 @@ def implied_uses(record: Record, inv: str, order: str, code: str) -> list[str]:
                 if e.get("rel") != "part_of":
                     continue
                 n = record.get(e["src"])
-                if n["type"] == "artifact" and (n.get("body") or {}).get("kind") in ("diff", "instance") and _live(n):
+                if n["type"] == "artifact" and (n.get("body") or {}).get("kind") in ("diff", "instance") and _live(n) \
+                        and not kept:
                     out.append(n["id"])
     except (GraphError, KeyError):
         pass
@@ -253,11 +259,20 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         except (GraphError, KeyError):
             return ""
 
-    def record_type(name: str) -> str:
-        try:
-            return str(record.get(_node(name)).get("type") or "")
-        except (GraphError, KeyError):
-            return ""
+    def _results_with_a_count(links: list[dict[str, Any]]) -> list[str]:
+        """Results a claim may lean on for a test count: the ones it links, then this seat's own, newest first. E1's
+        tester ran the tests, wrote "all tests pass", and gave no link, so the count sat one node away."""
+        linked: list[str] = []
+        for l in links:
+            try:
+                if l.get("rel") in ("derived_from", "supports") and record.get(_node(str(l.get("to") or "")))["type"] == "result":
+                    linked.append(_node(str(l["to"])))
+            except (GraphError, KeyError):
+                continue
+        mine = [r["id"] for r in record.search("", "result", inv, 500)
+                if record.get(r["id"]).get("by") == me and _live(record.get(r["id"]))
+                and TESTS_KEY in ((record.get(r["id"]).get("body") or {}).get("values") or {})]
+        return linked + mine[::-1]
 
     def _not_the_original(code: str, answers: str) -> str:
         """The refusal for a run on the current files that answers a question about the original. A file a fix changes
@@ -376,6 +391,8 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             f["kind"] = kind
         if f.get("kind") == "claim":
             del f["kind"]
+        for stray in ("values", "value", "outcome", "summary"):      # a result's: three refusals in one E1 run
+            f.pop(stray, None)
         asked = f.pop("answers", None)
         for q in [asked] if isinstance(asked, str) else asked or []:
             if q and not any(l.get("rel") == "answers" and l.get("to") == q for l in ln):
@@ -438,9 +455,8 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                         "Use what that line points to; if it points nowhere, say no source answers")
         if type == "claim":
             fields, links = _as_claim(fields, links)
-            for l in links:
-                if l.get("rel") in ("derived_from", "supports") and record_type(str(l.get("to") or "")) == "result":
-                    fields = _on_its_count(record, fields, _node(str(l["to"])))
+            for rid in _results_with_a_count(links):
+                fields = _on_its_count(record, fields, rid)
             for l in links:
                 if l.get("rel") == "answers" and l.get("to"):
                     why = _same_answer(record, inv, me, str(l["to"]), str((fields or {}).get("statement") or ""),

@@ -9,7 +9,7 @@ from hypswarm import Seat, Task
 from hypswarm.budget import Budget, Meter
 from hypswarm.record import LocalRecord
 from hypswarm.reproduce import TESTS_KEY, check_output, reproduce_result
-from hypswarm.tools import worker_tools
+from hypswarm.tools import implied_uses, worker_tools
 from hypswarm.world import seed_baseline, withdrawn_by
 
 BROKEN = b"def add(a, b):\n    return a - b\n"
@@ -197,3 +197,45 @@ def test_a_withdrawn_source_cant_be_added(tmp_path):
     assert out.startswith("refused: archive/RETRACTIONS.md: ") and "withdrawn source is not evidence" in out
     assert add("source", {**fields, "citation": "1891 census", "passage": "St Anne,575", "kind": "primary",
                           "url": "file:archive/census-1891.csv"}).startswith("added ")
+
+
+def test_a_run_on_the_kept_files_doesnt_use_the_head(tmp_path):
+    work, rec, inv = _record(tmp_path)
+    seed_baseline(rec, inv, work, {"calc.py": BROKEN, "test_calc.py": TEST})
+    order = rec.issue_work(author="harness", inv=inv, target=rec.resolve("Q1", inv), assignee="tester",
+                           objective="Run the tests.")["order"]
+    rec.create(author="harness", type="artifact", inv=inv, links=[{"rel": "part_of", "to": rec.resolve("Q1", inv)}],
+               fields={"sha256": "a" * 64, "path": ".", "format": "tree", "kind": "diff",
+                       "meta": {"base_sha": "task", "head_sha": "b" * 12, "files": ["calc.py"]}})
+    kept = [rec.get(a)["body"] for a in implied_uses(rec, inv, order, "pytest _base/test_calc.py")]
+    assert [b["path"] for b in kept] == ["test_calc.py"] and kept[0]["meta"]["baseline"]
+    head = [rec.get(a)["body"].get("kind") for a in implied_uses(rec, inv, order, "pytest test_calc.py")]
+    assert "diff" in head
+
+
+def test_a_claim_takes_a_results_field_without_a_refusal(tmp_path):
+    work, rec, inv = _record(tmp_path)
+    tools = _tools(rec, inv, run_code=_python(work))
+    tools["register_run"](name="tests", result_summary="pytest on the changed calc.py", code=RUN_TESTS)
+    out = tools["graph_add"]("claim", {"statement": "All tests in test_calc.py pass on the changed calc.py.",
+                                       "scope": "pytest on the changed calc.py", "values": {"n": 3}, "outcome": "positive"},
+                             [{"rel": "answers", "to": "Q2"}])
+    assert out.startswith("added CL1"), out
+
+
+def test_a_loading_server_is_waited_for(monkeypatch):
+    import httpx
+
+    from hypswarm.providers import openai_compat as oc
+    monkeypatch.setattr(oc, "LOADING_POLL_S", 0.0)
+    answers = [httpx.Response(503, text='{"error":{"message":"Loading model"}}')] * 8 + [
+        httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": "ok"}}]})]
+
+    class Client:
+        async def post(self, *a, **k):
+            r = answers.pop(0)
+            r.request = httpx.Request("POST", "http://x")
+            return r
+
+    model = oc.OpenAICompatible("m", base_url="http://x", api_key="k", client=Client(), max_retries=1)
+    assert asyncio.run(model.complete([], [])).content == "ok" and not answers

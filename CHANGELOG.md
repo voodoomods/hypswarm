@@ -32,6 +32,8 @@ Found running the harder challenges on gpt-oss-20b on a local BC-250.
 - **A test run brings its own count.** `register_run` takes `tests_passed` {k, n} and the outcome from the test runner's
   summary, and a claim that rules on all of a run is bound to that count. "All tests pass" had nothing behind it and was
   refused about 12 times in 3 runs while the question stayed open. On 3 of 6 the record now refuses it as false.
+- **A run on the kept files doesn't rest on the head.** A fix no longer makes results about the original stale.
+- **A server still loading its model is waited for**, up to 15 minutes, instead of ending the run.
 - **A sampled number isn't a contradiction.** When a re-run prints a different number next to a value's name, the
   instrument runs the code twice more. If the runs differ among themselves and the author's value is near them, the
   value is reported as varying instead of contradicted, and a review is told that a different draw is no objection.

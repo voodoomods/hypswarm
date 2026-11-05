@@ -79,8 +79,9 @@ _NOTES = {
                    "kind (primary/secondary/tertiary); link it part_of the question. The claim cites it. Before you rely "
                    "on a source, writing or reviewing, list what else is there: a retraction, correction or erratum "
                    "outranks the source it names, and a withdrawn source is not evidence; a primary source outranks a "
-                   "later summary of it. If no source answers, register the search as a run with a result (pages "
-                   "read, mentions found) and a claim kind=inconclusive derived from it.",
+                   "later summary of it. A table of parts answers a question about the whole: add it up with python, "
+                   "register_run the sum with its code, and cite the table. If no source answers, register the search "
+                   "as a run with a result (pages read, mentions found) and a claim kind=inconclusive derived from it.",
     "optimization@2": "Register the instance as an artifact {sha256, path, kind: 'instance'} part_of the question, state the "
                       "model as a hypothesis, the solve configuration as an experiment, then register_run with "
                       "uses=[the instance] and values {objective, feasible, bound|gap} (or feasible=false). A verifier "
