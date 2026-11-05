@@ -401,6 +401,8 @@ class Scheduler:
             seat = next((s for s in self.seats if s.name == o["assignee"]), None)
             missing = "; ".join(x["why"] or x["p"] for x in chk["predicates"] if not x["met"])
             if seat and self.reworked.get(root, 0) < self.max_reworks and seat.name not in self.busy:
+                if any(x["p"] == "claim_made" and not x["met"] for x in chk["predicates"]):
+                    missing += self._already_measured(o["assignee"], root)
                 try:
                     rw = self.r.rework(author=HARNESS, order=o["id"], missing=missing[:1000])
                 except GraphError as e:
@@ -415,6 +417,25 @@ class Scheduler:
                 continue                                    # decide once the seat is free
             else:
                 self._escalate(o, missing)
+
+    def _already_measured(self, seat: str, root: str) -> str:
+        """What this chain of orders already measured, for a rework that only lacks the claim. The order lists a result
+        by title, without its numbers, and turns ran out recomputing it: a repeat is refused, 38 times in 24 runs, and
+        69 of 271 orders ended on their turn limit (BC-250, 2026-11-05)."""
+        since = str(self.r.get(root)["at"])
+        have: list[str] = []
+        for row in self.r.search("", "result", self.inv, 500):
+            n = self.r.get(row["id"])
+            values = (n.get("body") or {}).get("values") or {}
+            if n.get("by") != seat or str(n.get("at")) < since or not values:
+                continue
+            said = ", ".join(f"{k}={v.get('value', v) if isinstance(v, dict) else v}" for k, v in list(values.items())[:4])
+            have.append(f"{n['code']} ({said[:120]})")
+        if not have:
+            return ""
+        last = have[-1].split(" ", 1)[0]
+        return (f". This work already measured {'; '.join(have[-3:])}: don't compute it again, a repeat is refused. Write "
+                f'the claim now, with links [{{"rel": "supports", "from": "{last}", "why": "…"}}]')
 
     def _escalate(self, o: dict[str, Any], missing: str) -> None:
         """The lead judges an order the record couldn't settle; without a lead, it is cancelled with the reason."""

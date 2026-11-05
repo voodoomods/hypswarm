@@ -262,17 +262,55 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
     def _results_with_a_count(links: list[dict[str, Any]]) -> list[str]:
         """Results a claim may lean on for a test count: the ones it links, then this seat's own, newest first. E1's
         tester ran the tests, wrote "all tests pass", and gave no link, so the count sat one node away."""
-        linked: list[str] = []
-        for l in links:
-            try:
-                if l.get("rel") in ("derived_from", "supports") and record.get(_node(str(l.get("to") or "")))["type"] == "result":
-                    linked.append(_node(str(l["to"])))
-            except (GraphError, KeyError):
-                continue
         mine = [r["id"] for r in record.search("", "result", inv, 500)
                 if record.get(r["id"]).get("by") == me and _live(record.get(r["id"]))
                 and TESTS_KEY in ((record.get(r["id"]).get("body") or {}).get("values") or {})]
-        return linked + mine[::-1]
+        return _linked_results(links) + mine[::-1]
+
+    def _linked_results(links: list[dict[str, Any]]) -> list[str]:
+        out: list[str] = []
+        for l in links:
+            try:
+                ref = str(l.get("to") or l.get("from") or "")
+                if l.get("rel") in ("derived_from", "supports") and record.get(_node(ref))["type"] == "result":
+                    out.append(_node(ref))
+            except (GraphError, KeyError):
+                continue
+        return out
+
+    def _rests_on_the_head(links: list[dict[str, Any]]) -> str:
+        """The refusal for a claim about the original whose linked result ran on the current files. register_run only
+        sees the question it's told about: E1's tester ran the tests under Q2's order and then answered Q1 with them,
+        "all 6 pass on the original", where 3 fail (BC-250, 2026-11-05)."""
+        asked = next((str(l.get("to") or "") for l in links if l.get("rel") == "answers"), "")
+        if not asked:
+            return ""
+        for rid in _linked_results(links):
+            res = record.get(rid)
+            for e in res["in"]:
+                if e["rel"] == "produced":
+                    source = str(((record.get(e["src"]).get("body") or {}).get("config") or {}).get("source") or "")
+                    said = _not_the_original(source, asked)
+                    if said:
+                        return said.replace("refused: ", f"refused: {res['code']} came from the current files. ", 1)
+        return ""
+
+    def _draws(target: str) -> str:
+        """What the instrument found to vary in the work a claim or result rests on: "name: lo to hi", or ''."""
+        n = record.get(target)
+        results = [target] if n["type"] == "result" else [
+            e["src"] for e in n["in"] if e["rel"] == "supports"] + [
+            e["dst"] for e in n["out"] if e["rel"] == "derived_from"]
+        out: list[str] = []
+        for rid in results:
+            for e in record.get(rid)["in"]:
+                if e["rel"] != "produced":
+                    continue
+                for x in record.get(e["src"])["in"]:
+                    if x["rel"] == "replicates":
+                        config = (record.get(x["src"]).get("body") or {}).get("config") or {}
+                        out += [f"{k}: {lo:g} to {hi:g}" for k, (lo, hi) in (config.get("sampled") or {}).items()]
+        return "; ".join(dict.fromkeys(out))
 
     def _not_the_original(code: str, answers: str) -> str:
         """The refusal for a run on the current files that answers a question about the original. A file a fix changes
@@ -295,9 +333,10 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             # pytest test_semver.py, which is the current file. There the file itself has to be the kept one
             named = rf"(?<!{BASELINE_DIR}/)\b{re.escape(stem)}\b" if running else rf"\b{re.escape(stem)}\b"
             if base and stem and re.search(named, code):
+                how = (f"name that file: python -m pytest -q {base}" if running else
+                       f"put it first on the path: sys.path.insert(0, '{BASELINE_DIR}')")
                 return (f"refused: {q.get('code')} asks about the original, and this code runs the current "
-                        f"{body.get('path')}, which a fix changes. The original is {base}: put it first on the path "
-                        "(sys.path.insert(0, '_base')) or name the file (pytest _base/test_x.py), then register that")
+                        f"{body.get('path')}, which a fix changes. The original is {base}: {how}, then register that")
         return ""
 
     def _open_experiment() -> str:
@@ -426,6 +465,8 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         observed | cited}. The task's files are already in the record. A refused claim says exactly what to fix.
         A reviewer writes reviews, not claims: a claim by the only reviewer could never be reviewed."""
         fields = dict(fields or {})
+        if type == "diff":                                # 14 refused calls in 24 runs, for the name of a type
+            type, fields = "artifact", {**fields, "kind": "diff"}
         if isinstance(fields.get("links"), list):         # the seat wrote them inside fields
             links = list(links or []) + fields.pop("links")
         if type in ("claim", "hypothesis", "experiment", "result"):
@@ -449,12 +490,20 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                     "the right answer is missing, say so in your review notes and return the order, and a worker "
                     "will be asked to write it")
         if type == "source":
-            where = withdrawn_by(folder, str(fields.get("url") or ""))
-            if where:
-                return (f"refused: {where} A withdrawn source is not evidence, so it can't be cited for an answer. "
-                        "Use what that line points to; if it points nowhere, say no source answers")
+            either = fields.pop("url|doi", None)          # the record's help writes it so, and seats copy it: 17 refusals
+            if either and not fields.get("url") and not fields.get("doi"):
+                fields["doi" if str(either).startswith("10.") else "url"] = either
+            # the name can be in any of these: K1's 4,028 came in with the file under doi, past a check on url
+            for said in (fields.get("url"), fields.get("doi"), fields.get("citation")):
+                where = withdrawn_by(folder, str(said or ""))
+                if where:
+                    return (f"refused: {where} A withdrawn source is not evidence, so it can't be cited for an answer. "
+                            "Use what that line points to; if it points nowhere, say no source answers")
         if type == "claim":
             fields, links = _as_claim(fields, links)
+            wrong = _rests_on_the_head(links)
+            if wrong:
+                return wrong
             for rid in _results_with_a_count(links):
                 fields = _on_its_count(record, fields, rid)
             for l in links:
@@ -646,6 +695,8 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             return out + _tail(c, meter)
         return out + _tail(res, meter)
 
+    told_of_draws: set[str] = set()
+
     def review(node: str, verdict: str, method: str, notes: str) -> str:
         """Review a claim or result: checked | pass | fail | objection | resolved | inconclusive | comment. method:
         how you checked, in a full sentence; notes: what you found. Never your own author's work."""
@@ -656,8 +707,17 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             method, notes = (method[:cut] + " … (continued in notes)",
                              f"Method, continued: {method[cut:].strip()}\n\n{notes}"[:4000])
         try:
-            out = record.review(author=me, target=record.resolve(node, inv), verdict=verdict.strip().lower(),
-                                method=method, notes=notes)
+            target = record.resolve(node, inv)
+            if verdict.strip().lower() in ("objection", "fail") and target not in told_of_draws:
+                # E3: 81 of 1,000 objected to because a reviewer's own run gave 106, on code that gives about 98 ± 9
+                spread = _draws(target)
+                if spread:
+                    told_of_draws.add(target)
+                    return (f"not recorded yet: the instrument re-ran this and it varies from run to run ({spread}), so "
+                            "a different number from your own run is another draw, not an error. If that is your only "
+                            "objection, review it checked and put the spread in your notes. If something else is wrong, "
+                            "send the objection again and say what.")
+            out = record.review(author=me, target=target, verdict=verdict.strip().lower(), method=method, notes=notes)
         except (GraphError, KeyError) as e:
             return _err(e)
         state["reviewed"] = True

@@ -4,11 +4,13 @@ import asyncio
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from hypswarm import Seat, Task
 from hypswarm.budget import Budget, Meter
 from hypswarm.record import LocalRecord
 from hypswarm.reproduce import TESTS_KEY, check_output, reproduce_result
+from hypswarm.scheduler import Scheduler
 from hypswarm.tools import implied_uses, worker_tools
 from hypswarm.world import seed_baseline, withdrawn_by
 
@@ -239,3 +241,104 @@ def test_a_loading_server_is_waited_for(monkeypatch):
 
     model = oc.OpenAICompatible("m", base_url="http://x", api_key="k", client=Client(), max_retries=1)
     assert asyncio.run(model.complete([], [])).content == "ok" and not answers
+
+
+def _survey(work):
+    (work / "survey-2019-report.md").write_text("| 1891 | 4,028 |\n", encoding="utf-8")
+    (work / "RETRACTIONS.md").write_text("The survey 2019 report is retracted.\n", encoding="utf-8")
+
+
+def test_a_withdrawn_source_is_found_under_doi_and_citation(tmp_path):
+    work, rec, inv = _record(tmp_path)
+    _survey(work)
+    add = _tools(rec, inv, folder=work)["graph_add"]
+    for field, value in (("doi", "file:survey-2019-report.md"), ("citation", "survey-2019-report.md"),
+                         ("url|doi", "file:survey-2019-report.md")):
+        body = {"citation": "A population survey of the town, 2019", "passage": "| 1891 | 4,028 |", "kind": "secondary", field: value}
+        assert "RETRACTIONS.md" in add("source", body, [{"rel": "part_of", "to": "Q1"}]), field
+
+
+def test_a_source_can_be_named_url_or_doi_in_one_field(tmp_path):
+    work, rec, inv = _record(tmp_path)
+    add = _tools(rec, inv, folder=work)["graph_add"]
+    out = add("source", {"citation": "A paper on the same question", "passage": "It says so.", "kind": "primary", "url|doi": "10.1000/xyz"},
+              [{"rel": "part_of", "to": "Q1"}])
+    assert out.startswith("added"), out
+    assert rec.get(rec.resolve("S1", inv))["body"]["doi"] == "10.1000/xyz"
+
+
+def test_a_diff_is_read_as_an_artifact(tmp_path):
+    work, rec, inv = _record(tmp_path)
+    assert "unknown type" not in _tools(rec, inv, run_code=_python(work))["graph_add"]("diff", {"path": "."})
+
+
+def test_a_claim_about_the_original_cant_rest_on_the_current_files(tmp_path):
+    work, rec, inv = _record(tmp_path)
+    seed_baseline(rec, inv, work, {"calc.py": BROKEN, "test_calc.py": TEST})
+    tools = _tools(rec, inv, run_code=_python(work))
+    tools["register_run"](name="tests", result_summary="pytest on the changed calc.py", code=RUN_TESTS, answers="Q2")
+    out = tools["graph_add"]("claim", {"statement": "The tests on the original calc.py pass.", "scope": "pytest on calc.py"},
+                             [{"rel": "answers", "to": "Q1"}, {"rel": "derived_from", "to": "RS1"}])
+    assert out.startswith("refused: RS1 came from the current files") and "_base/test_calc.py" in out, out
+
+
+def test_the_refusal_names_the_kept_test_file(tmp_path):
+    work, rec, inv = _record(tmp_path)
+    seed_baseline(rec, inv, work, {"calc.py": BROKEN, "test_calc.py": TEST})
+    out = _tools(rec, inv, question="Q1", run_code=_python(work))["register_run"](
+        name="tests", result_summary="pytest on the original calc.py", code=RUN_TESTS, answers="Q1")
+    assert "python -m pytest -q _base/test_calc.py" in out, out
+
+
+def _claim_on_a_draw(work, rec, inv):
+    code = "print('hits:', 100)"
+    reg = _tools(rec, inv, run_code=_python(work))["register_run"]
+    out = reg(name="draw", result_summary="Hits in one draw of the sampler.", values={"hits": {"value": 100, "unit": "count"}},
+              code=code, answers="Q2", claim="One draw of the sampler gave 100 hits.")
+    assert "→ claim CL1" in out, out
+    res = rec.get(rec.resolve("RS1", inv))
+    run = next(e["src"] for e in res["in"] if e["rel"] == "produced")
+    rec.create(author="instrument", type="run", inv=inv, fields={
+        "kind": "lab", "name": "re-execution", "state": "succeeded", "note": "re-ran it",
+        "config": {"reproduces": run, "sampled": {"hits": [96, 112]}}}, links=[{"rel": "replicates", "to": run, "data": {"differs": "same_code"}}])
+
+
+def _review_tool(rec, inv, node):
+    order = rec.issue_work(author="harness", inv=inv, target=rec.resolve(node, inv), assignee="reviewer",
+                           objective=f"Check {node}.")["order"]
+    return {t.name: t.fn for t in worker_tools(rec, Seat("reviewer", "reviewer"), inv, order,
+                                               Meter(Budget(max_calls=50)))}["review"]
+
+
+def test_a_different_draw_is_not_an_objection_the_first_time(tmp_path):
+    work, rec, inv = _record(tmp_path)
+    _claim_on_a_draw(work, rec, inv)
+    review = _review_tool(rec, inv, "CL1")
+    first = review("CL1", "objection", "I ran the sampler once myself.", "I got 106, not 100.")
+    assert first.startswith("not recorded yet") and "hits: 96 to 112" in first, first
+    assert not [e for e in rec.get(rec.resolve("CL1", inv))["in"] if e["rel"] == "reviews"]
+    second = review("CL1", "objection", "I ran the sampler once myself.", "It also counts the wrong thing.")
+    assert not second.startswith("not recorded"), second
+
+
+def test_a_steady_claim_can_be_objected_to_at_once(tmp_path):
+    work, rec, inv = _record(tmp_path)
+    tools = _tools(rec, inv, run_code=_python(work))
+    tools["register_run"](name="tests", result_summary="pytest on the changed calc.py", code=RUN_TESTS, answers="Q2",
+                          claim="All tests in test_calc.py pass on the changed calc.py.")
+    review = _review_tool(rec, inv, "CL1")
+    assert not review("CL1", "objection", "I read the claim against its run.", "It is wrong.").startswith("not recorded")
+
+
+def test_a_rework_names_what_this_work_already_measured(tmp_path):
+    work, rec, inv = _record(tmp_path)
+    order = rec.issue_work(author="harness", inv=inv, target=rec.resolve("Q2", inv), assignee="tester",
+                           objective="Run the tests.")["order"]
+    tools = {t.name: t.fn for t in worker_tools(rec, Seat("tester", "worker"), inv, order, Meter(Budget(max_calls=50)),
+                                                run_code=_python(work))}
+    tools["register_run"](name="hits", result_summary="Hits counted over the whole file.",
+                          values={"hits": {"value": 77, "unit": "count"}}, code="print('hits:', 77)")
+    host = SimpleNamespace(r=rec, inv=inv)
+    said = Scheduler._already_measured(host, "tester", order)
+    assert "RS1 (hits=77)" in said and "don't compute it again" in said and '"from": "RS1"' in said, said
+    assert Scheduler._already_measured(host, "reviewer", order) == ""

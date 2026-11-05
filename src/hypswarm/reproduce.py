@@ -370,7 +370,8 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
         "kind": "lab", "name": f"re-execution of {run['code']}", "state": state,
         "note": f"re-ran {run['code']}'s registered code: {verdict}"[:2000],
         "config": {"reproduces": run["id"], "stdout_tail": stdout[-1500:], "confirmed": chk["confirmed"],
-                   "unprinted": chk["unprinted"], "contradicted": chk["contradicted"]}},
+                   "unprinted": chk["unprinted"], "contradicted": chk["contradicted"],
+                   **({"sampled": {k: list(v) for k, v in sampled.items()}} if sampled else {})}},
         links=links)
     # the instrument confirms numbers; what they mean is the author's result's outcome. A confirmed "4 of 5 tests
     # pass" is a confirmed failure, so a negative result re-run stays negative — `tests_pass` reads the outcome.

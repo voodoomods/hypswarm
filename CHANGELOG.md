@@ -32,6 +32,14 @@ Found running the harder challenges on gpt-oss-20b on a local BC-250.
 - **A test run brings its own count.** `register_run` takes `tests_passed` {k, n} and the outcome from the test runner's
   summary, and a claim that rules on all of a run is bound to that count. "All tests pass" had nothing behind it and was
   refused about 12 times in 3 runs while the question stayed open. On 3 of 6 the record now refuses it as false.
+- **A withdrawn source is found wherever it's named.** The check read only `url`; a source naming its file under `doi` or
+  `citation` got past it.
+- **A claim about the original can't rest on a run of the current files.**
+- **A rework says what it already has.** A rework that only lacks the claim now names the numbers already measured and
+  asks for the claim, instead of the seat recomputing them until its turns run out.
+- **A different draw isn't an objection.** A reviewer objecting to a number the instrument found varies from run to run
+  is told so once; a second objection goes through.
+- **Fewer refused calls:** `url|doi` is read as a url or doi, and `graph_add(type="diff")` as an artifact.
 - **A run on the kept files doesn't rest on the head.** A fix no longer makes results about the original stale.
 - **A server still loading its model is waited for**, up to 15 minutes, instead of ending the run.
 - **A sampled number isn't a contradiction.** When a re-run prints a different number next to a value's name, the

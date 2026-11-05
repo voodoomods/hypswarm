@@ -69,13 +69,16 @@ _NOTES = {
                   "current head; never graph_add a diff. Without one, register it: graph_add artifact {sha256, path, "
                   "kind: 'diff', meta: {base_sha, head_sha, files}} part_of the requirement. Then register_run with the "
                   "exact test command as code, after your last edit: the instrument re-runs it on that head and reads "
-                  "the runner's summary, and tests on a superseded head don't count. Then the claim.",
+                  "the runner's summary, and tests on a superseded head don't count. Then the claim. Asked what causes "
+                  "a failure, say what fails and what the code does, side by side: 'test_x fails on the original; "
+                  "compare() compares the parts as strings.' 'because', 'due to' and 'causes' are refused without an "
+                  "experiment that intervened, and rewording them spends your turns.",
     "trading@2": "Thesis first (a hypothesis answering the question), then the backtest preregistered as an experiment "
                  "(windows, costs, configurations to try; data.expected) BEFORE register_run. The result carries oos_*, "
                  "fees/slippage and trials (configurations tried). After the risk review, a decision based_on the claim: "
                  "kind=position with size, stop, review_date and paper=true — or kind=no_position when the thesis is "
                  "declined. Never a live order.",
-    "knowledge@2": "A source carries citation, url|doi, the passage that says it, retrieved (the date you read it) and "
+    "knowledge@2": "A source carries citation, a url or doi, the passage that says it, retrieved (the date you read it) and "
                    "kind (primary/secondary/tertiary); link it part_of the question. The claim cites it. Before you rely "
                    "on a source, writing or reviewing, list what else is there: a retraction, correction or erratum "
                    "outranks the source it names, and a withdrawn source is not evidence; a primary source outranks a "
