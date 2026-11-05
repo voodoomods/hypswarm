@@ -130,3 +130,11 @@ def test_a_measured_value_with_its_spread_is_confirmed_within_it():
     count = {"repeats": {"k": 97, "n": 1000, "spread": [70, 130]}}
     assert check_output(count, "repeats 104 of 1000\n")["within"] == ["repeats"]
     assert check_output(count, "repeats 104 of 999\n")["contradicted"] == ["repeats"]     # a different n isn't the count
+
+
+def test_a_confirmed_value_is_not_called_proof_of_the_method() -> None:
+    """A re-run shows the code printed that value, not that the code is right: a hand-rolled exact test printed p=0.018
+    (true 0.08), the re-run confirmed it, and the reviewer checked a wrong answer on that basis."""
+    from hypswarm.scheduler import RERUN
+    assert "no more" in RERUN and "p-value or test statistic a second way" in RERUN
+    assert "CONTRADICTED" in RERUN and "merely not printed" in RERUN

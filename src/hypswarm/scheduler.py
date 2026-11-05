@@ -72,6 +72,12 @@ def _changers(gates: Sequence[dict[str, Any]]) -> set[str]:
 # What a review judges. "Judge the method and the wording" drew objections to right answers over wording — the
 # numbers reproduced, the conclusion stood, and the claim was reworked anyway (studies S3, T2, evening): a full
 # rework for a point a note carries. A wrong number anywhere in the claim is still an objection (studies E4).
+# fewer-r4 settled a wrong answer: a hand-rolled exact test printed p=0.018 (true 0.08), the re-run confirmed the printed
+# value, and the reviewer took that for proof. A re-run shows the code reproduces, never that it computes the right thing.
+RERUN = ("what the instrument's re-run confirmed. A confirmed value is one the code really printed, no more: the re-run "
+         "doesn't show the code computes the right thing. So read how each number was computed, and work out any p-value or "
+         "test statistic a second way yourself. Otherwise recompute only a value the re-run CONTRADICTED; a value merely not "
+         "printed is not evidence against")
 JUDGE = ("Judge whether the method and the numbers answer the question, and record a verdict: checked when they hold "
          "(put any wording point in your notes); objection only when the answer, a number in the claim or the method "
          "is wrong — an objection sends the whole claim back for rework.")
@@ -601,8 +607,7 @@ class Scheduler:
         what = "claim" if first["gate"] == "reviewed" else "result"
         objective = (f"{q['code']} is at stage '{first['stage']}' ({q['index']}/{q['of']}) of the {q['profile']} "
                      f"workflow. Review {code}, the {what} that answers it: the order lists it, its values and "
-                     "what it rests on" + (", and what the instrument's re-run confirmed — recompute only a value it "
-                     "CONTRADICTED; a value merely not printed is not evidence against" if self.reproducer else "")
+                     "what it rests on" + (", and " + RERUN if self.reproducer else "")
                      + ". " + JUDGE
                      + self._beside(q["question"], code))
         if seat and self._issue(seat, target, objective, [{"p": first["gate"]}]):
@@ -646,9 +651,7 @@ class Scheduler:
                     continue
                 seat = self._pick(pool, q["text"], "claim")
                 objective = (f"Review {code}, which answers {q['code']}. The order lists the claim, its "
-                             "measurements and the results it rests on" + (", and what the instrument's re-run of the "
-                             "author's code confirmed — recompute only a value it CONTRADICTED; a value merely not "
-                             "printed is not evidence against" if self.reproducer else "") +
+                             "measurements and the results it rests on" + (", and " + RERUN if self.reproducer else "") +
                              ". " + JUDGE
                              + self._beside(q["id"], code))
                 if seat and self._issue(seat, claim, objective, [{"p": "reviewed"}]):
