@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+Found running the harder challenges on gpt-oss-20b on a local BC-250.
+
+- **Test runs reach the instrument.** The software prompt asks for the exact test command, and seats gave it:
+  `python -m pytest test_x.py` ran as Python source, a SyntaxError on every re-run. A test run registered with no values
+  got "0 of 0 confirmed", inconclusive. Neither ever met `tests_pass_current`, so both code-fix challenges settled
+  nothing. A one-line python or pytest command now runs as that command, in the tool and on the re-run, and the
+  instrument reads the runner's own summary when it has no value to confirm. Failing tests are negative, and "0 passed"
+  is not a pass.
+- **A worker's last three turns only write.** Orders ran out of turns 60 times in 16 runs, 826 of about 1,900 calls,
+  usually on a refused write and sometimes having written nothing. The last three turns offer `register_run`,
+  `graph_add`, `graph_link` and `return_work`, and say why.
+- **A settled question stops looping.** A question the board calls settled ends the run's work on it, and a stage that
+  can't move after one repair order is marked stalled instead of repeating.
+- **A review reads how the numbers were computed.** A re-run shows the code printed a value, not that it computes the
+  right thing: a hand-rolled exact test printed p=0.018 (true 0.08), the instrument confirmed it, and a wrong answer
+  settled. The review order now says so and asks for any p-value to be worked out a second way.
+- **A review objects to a claim that doesn't state its answer**, such as "it opened on a date".
+- **Tools take the calls seats meant.** `graph_add` accepts `register_run`'s field names and drops measurements it
+  can't read, takes a scope from the linked result, and defaults a hypothesis to the order's question; `register_run`
+  finds the order's open experiment, leaves out a `uses` the record doesn't hold, and moves a retry onto the seat's own
+  result. A run named as `supports` means its result. Every check still runs on what's passed on.
+- **Refusals say how to fix them.** `submit_report` gives each finding's message, and `show` says a file isn't a node.
+- **The software note matches the tools.** Under watch the record registers the diff, and the note no longer asks for
+  one the tool refuses.
+
 ## 0.1.0a13 — 2026-11-05: a report can't call a checked answer unanswered
 
 - **A report can't say null over a checked claim.** null means no claim answers the question, but a lead that found
