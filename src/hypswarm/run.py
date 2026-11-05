@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import time
 from collections.abc import Callable, Mapping, Sequence
@@ -11,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .assemble import answers_block
 from .budget import Budget, Meter, Pricing
 from .messages import Tool
 from .providers.base import ChatModel
@@ -21,7 +21,8 @@ from .seats import Seat
 log = logging.getLogger("hypswarm")
 
 ANSWER_FORMAT = ("End the report with a fenced block that starts with ```answers and holds one JSON object: each "
-                 "question code → the answer (null if unanswered).")
+                 "question code → the answer. null means no claim answers the question; a negative answer is false "
+                 "or \"no\", never null.")
 
 
 @dataclass(frozen=True)
@@ -77,15 +78,7 @@ class RunResult:
     telemetry: str = ""                     # the telemetry sidecar written, if any
 
     def answers(self) -> dict[str, Any] | None:
-        import re
-        m = re.findall(r"```answers\s*(\{.*?\})\s*```", self.report, re.DOTALL)
-        if not m:
-            return None
-        try:
-            d = json.loads(m[-1])
-        except json.JSONDecodeError:
-            return None
-        return d if isinstance(d, dict) else None
+        return answers_block(self.report)
 
 
 ModelSpec = ChatModel | Mapping[str, ChatModel] | Callable[[Seat], ChatModel]

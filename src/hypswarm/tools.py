@@ -14,6 +14,7 @@ from typing import Any
 
 from hypgraph import GraphError
 
+from .assemble import null_over_a_checked_claim
 from .budget import Meter
 from .messages import Tool
 from .record import Record
@@ -472,6 +473,13 @@ def lead_tools(record: Record, seat: Seat, inv: str, meter: Meter, *, report_box
             report_box.setdefault("refused", []).append([f"{f['code']}: {f['excerpt'][:100]}" for f in errs[:6]])
             return "report refused: " + "; ".join(f"line {f['line']} {f['code']}: {f['excerpt'][:100]}"
                                                   for f in errs[:6]) + " — fix these and submit again"
+        nulls = null_over_a_checked_claim(record, inv, text)
+        if nulls:
+            report_box["refusals"] = int(report_box.get("refusals", 0)) + 1
+            report_box.setdefault("refused", []).append(nulls[:6])
+            return ("report refused: " + "; ".join(nulls[:6]) + " — null means no claim answers the question. Write "
+                    'the answer the claim gives (false or "no" for a negative, its words if it found nothing) and '
+                    "submit again")
         report_box["text"] = text
         return "report accepted"
 

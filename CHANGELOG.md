@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **A report can't say null over a checked claim.** null means no claim answers the question, but a lead that found
+  a null effect wrote `"Q2": null`, so the answers block read as unanswered beside a checked claim that said "not
+  significant" (4 of 13 gpt-oss runs of one task). `submit_report` now refuses an answers block that leaves null, or
+  leaves out, a question with a checked, current claim, and `ANSWER_FORMAT` says a negative answer is false or "no".
+  The refusal also applies where a claim's finding is that nothing was found: write that finding, not null.
+- **An assembled report gives the claim's own sentence** when a current claim binds nothing the question asks for. It
+  used to answer null there too.
 ## 0.1.0a12 — 2026-11-04: gpt-oss runs a swarm on local hardware
 
 Needs hypgraph 0.8.4. Measured on gpt-oss-20b on a local llama.cpp server, example 01's task: on hypgraph 0.8.4, 3 runs
