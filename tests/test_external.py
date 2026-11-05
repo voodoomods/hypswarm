@@ -4,11 +4,20 @@ import asyncio
 import json
 
 import pytest
+from hypgraph import Graph
 
 from hypswarm import Budget, Seat, Task, run
 from hypswarm.providers.stub import StubModel
 
 from .test_alpha import TASK, lead_script, reviewer_script
+
+
+def _held(db) -> str:
+    g = Graph(str(db))
+    inv = g.investigations()[0]
+    inv = inv["id"] if isinstance(inv, dict) else inv
+    orders = [(o["code"], o["target"], o["status"], o["assignee"], o["returned_note"]) for o in g.orders(inv)]
+    return f"orders: {orders}\nboard: {[(q['code'], q['status']) for q in g.question_board(inv)]}"
 
 
 def test_an_external_seat_works_orders_over_mcp(tmp_path):
@@ -38,9 +47,14 @@ def test_an_external_seat_works_orders_over_mcp(tmp_path):
                 q = next(l for l in mine.splitlines() if l.startswith("TARGET")).split()[1]
                 vals = ({"acc_a": {"k": 812, "n": 1000}, "seed": {"value": 7}} if q == "Q1" else
                         {"a": {"k": 812, "n": 1000}, "b": {"k": 800, "n": 1000}, "seed": {"value": 11}})
-                reg = text(await c.call_tool("register_run", {"name": f"count for {q}", "command": "python count.py",
-                                                              "result_summary": f"Counted the items for {q}.",
-                                                              "result_values": vals}))
+                try:
+                    reg = text(await c.call_tool("register_run", {"name": f"count for {q}", "command": "python count.py",
+                                                                  "result_summary": f"Counted the items for {q}.",
+                                                                  "result_values": vals}))
+                except fastmcp.exceptions.ToolError as e:
+                    # An Ubuntu job now and then is handed a second order on Q1 (2026-11-05, on main too), never seen on
+                    # Windows, even at 10 copies at once. Say what the record held, so the next one names the cause.
+                    pytest.fail(f"{e}\n{_held(db)}")
                 assert "Result RS" in reg and "your work orders" in reg.lower()
                 stmt = ("A is right on 812 of 1000 items." if q == "Q1" else
                         "A is not significantly more accurate than B (812 of 1000 vs 800 of 1000).")
