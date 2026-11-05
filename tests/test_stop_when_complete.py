@@ -1,6 +1,7 @@
 """A run ends when the record says the investigation is complete. In studies T2 the trading desk declined once, the
 record's completion criteria were all met, and the scheduler still spent the rest of the budget reworking Q3's own
 `positioned` gate (which wanted a decision based on Q3's claim, written after the desk had decided)."""
+from hypswarm import Seat
 from hypswarm.scheduler import Scheduler
 
 
@@ -56,7 +57,7 @@ def test_a_settled_question_gets_one_order_to_repair_its_gates_then_no_more():
     s = _sched(StalledRecord())
     s._after_settled, events, issued = {}, [], []
     s.workers = []
-    s._pick_for_stage = lambda *a, **k: "analyst"
+    s._pick_for_stage = lambda *a, **k: Seat("analyst", "worker")
     s._issue = lambda seat, target, objective, gates: issued.append(target) or True
     s._ev = lambda kind, **kw: events.append(kind)
     gate = {"gate": "preregistered", "met": False, "optional": False, "stage": "preregistered", "who": "worker",
