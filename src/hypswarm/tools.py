@@ -199,6 +199,35 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             except Exception as e:  # noqa: BLE001 — a host hook never costs a worker its write
                 log.warning("on_write hook failed on %s: %s", kind, e)
 
+    def _question() -> str:
+        """The question this order works on, "" when it works on something else."""
+        try:
+            target = next((e["dst"] for e in record.get(order).get("out", []) if e.get("rel") == "works_on"), "")
+            return target if target and record.get(target)["type"] == "question" else ""
+        except (GraphError, KeyError):
+            return ""
+
+    def _open_experiment() -> str:
+        """The experiment a run under this order executes when the seat didn't name it: the one it wrote on the
+        order's question that no run has executed. "" unless there is exactly one. A run registered with no experiment
+        left the question at "no run executes Q2", and the next order filed another hypothesis, experiment and claim
+        (BC-250, 2026-11-05)."""
+        q = _question()
+        if not q:
+            return ""
+        on_q = [e["src"] for e in record.get(q).get("in", []) if e.get("rel") in ("answers", "part_of", "motivated_by")]
+        found = []
+        for nid in on_q:
+            n = record.get(nid)
+            found += [nid] if n["type"] == "experiment" else \
+                [e["src"] for e in n.get("in", []) if e.get("rel") == "tests"] if n["type"] == "hypothesis" else []
+        fresh = []
+        for x in dict.fromkeys(found):
+            n = record.get(x)
+            if n.get("by") == me and _live(n) and not any(e.get("rel") == "executes" for e in n.get("in", [])):
+                fresh.append(x)
+        return fresh[0] if len(fresh) == 1 else ""
+
     def _named(ref: str) -> str:
         """The node a seat meant by what it knows it as: a file's path, an experiment's aim, a run's name. The node's
         id, or "" when that names none, or more than one."""
@@ -269,6 +298,16 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             f["measurements"] = [m for m in f["measurements"] or [] if _measurable(m)]
             if not f["measurements"]:
                 del f["measurements"]
+        if len(str(f.get("scope") or "").strip()) < 10:   # as register_run does: the result says what it was run on
+            for l in ln:
+                try:
+                    res = record.get(_node(str(l.get("to") or "")))
+                except (GraphError, KeyError):
+                    continue
+                said = str((res.get("body") or {}).get("summary") or "")
+                if l.get("rel") in ("derived_from", "uses") and res.get("type") == "result" and said:
+                    f["scope"] = said
+                    break
         return f, ln
 
     def graph_add(type: str, fields: dict[str, Any], links: list[dict[str, Any]] | None = None) -> str:
@@ -283,6 +322,11 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         a result here is one you didn't compute: {summary, outcome, values: {name: {value, unit} | {k, n}}, kind:
         observed | cited}. The task's files are already in the record. A refused claim says exactly what to fix.
         A reviewer writes reviews, not claims: a claim by the only reviewer could never be reviewed."""
+        fields = dict(fields or {})
+        if isinstance(fields.get("links"), list):         # the seat wrote them inside fields
+            links = list(links or []) + fields.pop("links")
+        if type in ("claim", "hypothesis", "experiment", "result"):
+            fields.pop("name", None)                      # none of these has one; a code names them
         if type == "artifact" and (fields or {}).get("kind") == "diff":
             arts = [record.get(a["id"]) for a in record.search("", "artifact", inv, 500)]
             heads = [a for a in arts if (a.get("body") or {}).get("format") == "tree" and _live(a)]
@@ -309,12 +353,22 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                                        str((fields or {}).get("kind") or ""))
                     if why:
                         return why
+        q = _question()
+        off = ""
         try:
+            if type == "hypothesis" and q and not any(l.get("rel") == "answers" for l in links or []):
+                links = [*(links or []), {"rel": "answers", "to": q}]   # what the order asks about, unless it says
+            if type == "experiment" and q:
+                for l in links or []:
+                    h = record.get(_node(str(l.get("to") or ""))) if l.get("rel") == "tests" else None
+                    if h and not any(e.get("rel") == "answers" and e.get("dst") == q for e in h.get("out", [])):
+                        off = (f" (note: {h['code']} doesn't answer {record.get(q)['code']}, your order's question, so "
+                               "this experiment doesn't count for it)")
             n = record.create(author=me, type=type, inv=inv, fields=fields, links=_links(links, type))
         except (GraphError, KeyError) as e:
             return _err(e)
         _told("graph_add", {"type": type, "fields": fields, "code": n["code"], "id": n["id"]})
-        return f"added {n['code']} — {n['state']['sentence']}" + _tail(n, meter)
+        return f"added {n['code']} — {n['state']['sentence']}{off}" + _tail(n, meter)
 
     def graph_link(src: str, rel: str, dst: str, why: str = "", expected: str = "") -> str:
         """Link two nodes you can see: part_of (an artifact or source → a question), uses (a run → an artifact),
@@ -371,6 +425,12 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             return ("refused: nothing in this run executes code, so this code wasn't run and isn't evidence. Register "
                     "only what you read off the files (values, no code), or return the order and say it needs a tool "
                     "that runs code")
+        no_claim = ""
+        if seat.role == "reviewer" and claim.strip():
+            # graph_add refuses this too; here the run and result are still evidence for the review. A reviewer's
+            # claim can't be reviewed, so it held its question open to the end of the run (BC-250, 2026-11-05)
+            no_claim = " (a reviewer's claim couldn't be reviewed, so none was written: give your verdict with review)"
+            claim = ""
         bare = _timings_without_spread(values or {}) if _MEASURES_TIME.search(code) else []
         if bare and code.strip():
             # the instrument re-runs the code: a re-timed value never lands on the same digits, and every timing
@@ -390,11 +450,24 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             if str(a).strip():
                 # what a run read is provenance: a name the record doesn't hold costs it that line, not the run
                 try:
-                    declared.append(_node(str(a)))
+                    nid = _node(str(a))
+                    if record.get(nid)["type"] != "artifact":
+                        raise KeyError(a)
+                    declared.append(nid)
                 except (GraphError, KeyError):
                     skipped.append(str(a))
+        executes = ""
+        if experiment.strip():
+            try:
+                nid = _node(experiment)
+                executes = nid if record.get(nid)["type"] == "experiment" else ""
+            except (GraphError, KeyError):
+                pass
+        if not executes and seat.role != "reviewer":
+            executes = _open_experiment()
+        unnamed = experiment if experiment.strip() and not executes else ""
         try:
-            links: list[dict[str, Any]] = [{"rel": "executes", "to": _node(experiment)}] if experiment.strip() else []
+            links: list[dict[str, Any]] = [{"rel": "executes", "to": executes}] if executes else []
             links += [{"rel": "uses", "to": a, "data": {"role": "data"}}
                       for a in dict.fromkeys(declared + implied_uses(record, inv, order, code))]
             rfields: dict[str, Any] = {"kind": "agent", "name": name[:300], "state": "succeeded", "note": code[:1500]}
@@ -426,6 +499,10 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             out += f" (these are the numbers of your {res['code']}, so the claim goes on it)"
         if skipped:
             out += f" (not in the record, left out of uses: {', '.join(skipped)})"
+        if unnamed:
+            out += (f" (no experiment {unnamed!r} in the record, so this run executes none; if it should, "
+                    f"graph_link({r['code']}, 'executes', <its X code>))")
+        out += no_claim
         if claim.strip():
             cf: dict[str, Any] = {"statement": claim, "scope": scope or result_summary}
             if claim_kind:
@@ -452,8 +529,8 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         return out + _tail(res, meter)
 
     def review(node: str, verdict: str, method: str, notes: str) -> str:
-        """Review a claim or result: checked | pass | fail | objection | resolved | inconclusive | comment. Say how
-        you checked and what you found. Never your own author's work."""
+        """Review a claim or result: checked | pass | fail | objection | resolved | inconclusive | comment. method:
+        how you checked, in a full sentence; notes: what you found. Never your own author's work."""
         if len(method) > _METHOD_MAX:
             # a thorough method over the record's limit lost the whole review (studies E3): the rest goes in notes
             cut = method.rfind(" ", 0, _METHOD_MAX - 40)
@@ -568,7 +645,8 @@ def lead_tools(record: Record, seat: Seat, inv: str, meter: Meter, *, report_box
         if errs:
             report_box["refusals"] = int(report_box.get("refusals", 0)) + 1
             report_box.setdefault("refused", []).append([f"{f['code']}: {f['excerpt'][:100]}" for f in errs[:6]])
-            return "report refused: " + "; ".join(f"line {f['line']} {f['code']}: {f['excerpt'][:100]}"
+            return "report refused: " + "; ".join(f"line {f['line']} {f['code']}: {f['excerpt'][:100]} → "
+                                                  f"{str(f.get('message') or '')[:200]}"
                                                   for f in errs[:6]) + " — fix these and submit again"
         nulls = null_over_a_checked_claim(record, inv, text)
         if nulls:

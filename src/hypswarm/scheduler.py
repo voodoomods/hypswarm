@@ -123,6 +123,8 @@ class Scheduler:
         self.runs_code = reproducer is not None or not all(t.name in READ_ONLY_TOOLS for t in self.data_tools)
         self._reproduced: set[str] = set()
         self._codeless: dict[str, int] = {}                 # result id -> producing runs when it had no code
+        self._after_settled: dict[tuple[str, str], int] = {}  # (question, stage) -> orders issued once it had settled
+        self._stalled: set[str] = set()                     # settled questions whose workflow gates won't be met
         self.world = world                                  # host-supplied: keeps the record in step with the files
         self.on_write = on_write                            # host hook on every accepted write by a seat
         self.assemble_report = assemble_report              # no passing report from the lead: write it from the record
@@ -370,6 +372,9 @@ class Scheduler:
             self._ev("settled", order=d["order"], decision=d["decision"])
         rows = self._stage_rows()
         complete_qs = {q["question"] for q in rows if q["complete"]} if rows else set()
+        if rows:
+            # every live answer is checked: a rework can only ask for one more of them, which the copy check refuses
+            complete_qs |= {b["id"] for b in self.r.question_board(self.inv) if b["status"] == "settled"}
         for o in self.r.orders(self.inv, status="returned"):
             chk = self.r.check_work(o["id"])
             if chk["all_met"]:
@@ -439,7 +444,9 @@ class Scheduler:
 
     def _assign_from_stages(self, rows: list[dict[str, Any]]) -> None:
         busy_targets = {o["target_id"] for o in self.r.orders(self.inv) if o["status"] in ("open", "overdue", "returned")}
-        answered = {b["id"]: b for b in self.r.question_board(self.inv) if b["status"] == "answered"}
+        board = self.r.question_board(self.inv)
+        answered = {b["id"]: b for b in board if b["status"] == "answered"}
+        settled = {b["id"] for b in board if b["status"] == "settled"}
         for q in rows:
             if q["complete"]:
                 continue
@@ -474,6 +481,15 @@ class Scheduler:
                 if gt["gate"] in _REVIEW_GATES:
                     break
                 run.append(gt)
+            key = (q["question"], first["stage"])
+            if q["question"] in settled and self._after_settled.get(key, 0) >= 1:
+                # its answers are all checked and an earlier gate (a hypothesis, an experiment's link) still isn't met:
+                # one order to repair the link, then stop. Each further order filed another hypothesis, experiment and
+                # copy of the answer until the budget ran out (BC-250, 2026-11-05)
+                if q["question"] not in self._stalled:
+                    self._stalled.add(q["question"])
+                    self._ev("stage_stalled", question=q["code"], stage=first["stage"], why=first["why"][:200])
+                continue
             changes = any(gt["gate"] in _CHANGE_GATES for gt in run)
             seat = self._pick_for_stage(self.workers, first["who"], text, avoid=None if changes else _changers(gates))
             objective = (f"{q['code']} is at stage '{first['stage']}' ({q['index']}/{q['of']}) of the {q['profile']} "
@@ -483,6 +499,8 @@ class Scheduler:
                 self._ev("stage_order", question=q["code"], stage=first["stage"], gates=[gt["gate"] for gt in run],
                          seat=seat.name)
                 busy_targets.add(q["question"])
+                if q["question"] in settled:
+                    self._after_settled[key] = self._after_settled.get(key, 0) + 1
 
     def _issue_review_stage(self, q: dict[str, Any], gates: list[dict[str, Any]], i: int, text: str,
                             busy_targets: set[str]) -> None:
@@ -657,7 +675,7 @@ class Scheduler:
     def _done(self) -> str:
         rows = self._stage_rows()
         if rows is not None:                                # the workflow's word on done, question by question
-            if all(q["complete"] for q in rows) and not self.inflight:
+            if all(q["complete"] or q["question"] in self._stalled for q in rows) and not self.inflight:
                 return "settled"
             if not self.inflight and self._record_complete():
                 # The profile's completion criteria are its definition of done: a trading desk that declined once

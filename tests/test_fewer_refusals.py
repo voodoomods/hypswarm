@@ -142,9 +142,11 @@ def test_an_experiment_is_found_by_its_aim_and_an_invented_name_gets_the_codes()
                             experiment=aim)
     assert out.startswith("run "), out
     assert any(e["rel"] == "executes" and e["dst"] == r.resolve("X1", inv) for e in r.get(r.resolve("RUN1", inv))["out"])
-    bad = t["register_run"](name="count", result_summary="Counted again.", values={"z": {"value": 2.5}}, code=CODE,
-                            experiment="exp_made_up")
-    assert bad.startswith("refused: no node 'exp_made_up'") and "Q1" in bad and '"' not in bad[:12], bad
+    other = t["register_run"](name="count", result_summary="Counted again.", values={"z": {"value": 2.5}},
+                              code="print('z', 2.5)", experiment="exp_made_up")
+    assert other.startswith("run ") and "no experiment 'exp_made_up'" in other, other
+    bad = t["graph_link"]("exp_made_up", "tests", "Q1")
+    assert bad.startswith("refused: no node 'exp_made_up'") and "Q1" in bad, bad
 
 
 def test_a_file_already_in_the_record_needs_no_registering_and_new_bytes_still_register():
@@ -202,3 +204,94 @@ def test_graph_link_can_say_what_a_test_expects():
 def test_the_tools_description_doesnt_carry_a_task_s_answer():
     _, _, t = _setup()
     assert "0.814" not in (t["graph_add"].__doc__ or "")
+
+
+def _hypothesis(t, *links) -> str:
+    return t["graph_add"]("hypothesis", {"statement": "Model A is right on most of the items in the file.",
+                                         "predictions": ["More than half of the rows have A correct."]}, list(links))
+
+
+def _experiment(t, h="H1") -> str:
+    return t["graph_add"]("experiment", {"aim": "Count how many items model A gets right in the file.",
+                                         "protocol": "Read the file and count the correct rows of A.",
+                                         "success_criteria": "A count of correct rows out of all rows is printed."},
+                          [{"rel": "tests", "to": h, "data": {"expected": "More than half of the rows."}}])
+
+
+def test_a_hypothesis_answers_the_orders_question_unless_it_says_otherwise():
+    r, inv, t = _setup()
+    assert _hypothesis(t).startswith("added H1")
+    q = r.resolve("Q1", inv)
+    assert any(e["rel"] == "answers" and e["dst"] == q for e in r.get(r.resolve("H1", inv))["out"])
+
+
+def test_a_run_executes_the_seats_one_open_experiment():
+    r, inv, t = _setup()
+    _hypothesis(t)
+    assert _experiment(t).startswith("added X1")
+    out = t["register_run"](name="count", result_summary="Counted A's correct items.", values=VALUES, code=CODE)
+    assert out.startswith("run "), out
+    assert any(e["rel"] == "executes" and e["dst"] == r.resolve("X1", inv) for e in r.get(r.resolve("RUN1", inv))["out"])
+    again = t["register_run"](name="other", result_summary="Measured something else.", values={"z": {"value": 2.5}},
+                              code="print('z', 2.5)")
+    assert again.startswith("run ")
+    assert not any(e["rel"] == "executes" for e in r.get(r.resolve("RUN2", inv))["out"])  # X1 has its run
+
+
+def test_two_open_experiments_are_not_guessed_between():
+    r, inv, t = _setup()
+    _hypothesis(t)
+    _experiment(t)
+    t["graph_add"]("experiment", {"aim": "Count how many items model B gets right in the file.",
+                                  "protocol": "Read the file and count the correct rows of B.",
+                                  "success_criteria": "A count of correct rows out of all rows is printed."},
+                   [{"rel": "tests", "to": "H1", "data": {"expected": "Fewer than half of the rows."}}])
+    t["register_run"](name="count", result_summary="Counted A's correct items.", values=VALUES, code=CODE)
+    assert not any(e["rel"] == "executes" for e in r.get(r.resolve("RUN1", inv))["out"])
+
+
+def test_an_experiment_on_another_questions_hypothesis_says_so():
+    r, inv, t = _setup()
+    q2 = r.create(author="harness", type="question", inv=inv, fields={"text": "Is A better than B on these items?"})
+    r.create(author="analyst", type="hypothesis", inv=inv, fields={
+        "statement": "Model A beats model B on these items.", "predictions": ["A has the higher accuracy."]},
+        links=[{"rel": "answers", "to": q2["id"]}])
+    out = _experiment(t)
+    assert out.startswith("added X1") and "doesn't count for it" in out, out
+
+
+def test_a_uses_of_something_not_a_file_is_left_out():
+    _, _, t = _setup()
+    _result(t)
+    out = t["register_run"](name="other", result_summary="Measured something else.", values={"z": {"value": 2.5}},
+                            code="print('z', 2.5)", uses=["RS1"])
+    assert out.startswith("run ") and "left out of uses: RS1" in out, out
+
+
+def test_a_reviewers_claim_isnt_written_and_its_run_is():
+    seats = [Seat("analyst", "worker"), Seat("critic", "reviewer")]
+    r = LocalRecord(None, seats)
+    inv = r.start("Does A beat B", "Score A and B on the same items.", [("Q1", "What is A's accuracy?")])
+    order = r.issue_work(author="harness", inv=inv, target=r.resolve("Q1", inv), assignee="critic",
+                         objective="Check A's accuracy.")["order"]
+    t = {x.name: x.fn for x in worker_tools(r, seats[1], inv, order, Meter(Budget(max_calls=40)))}
+    out = t["register_run"](name="recount", result_summary="Recounted A's correct items.", values=VALUES, code=CODE,
+                            claim=SENTENCE, answers="Q1", scope=SCOPE)
+    assert out.startswith("run ") and "RS1" in out and "reviewer's claim" in out, out
+    assert not r.search("", "claim", inv, 10)
+
+
+def test_fields_in_the_wrong_place_and_a_missing_scope_from_the_result():
+    r, inv, t = _setup()
+    _result(t)
+    assert _hypothesis_with_links_in_fields(t).startswith("added H1")
+    out = t["graph_add"]("claim", {"statement": SENTENCE, "name": "CL-a", "scope": "all"},
+                         [{"rel": "derived_from", "to": "RS1"}])
+    assert out.startswith("added CL1"), out
+    assert _claim(r, inv)["body"]["scope"] == "Counted A's correct items."
+
+
+def _hypothesis_with_links_in_fields(t) -> str:
+    return t["graph_add"]("hypothesis", {"statement": "Model A is right on most of the items in the file.",
+                                         "predictions": ["More than half of the rows have A correct."],
+                                         "links": [{"rel": "answers", "to": "Q1"}]})
