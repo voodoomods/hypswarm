@@ -21,7 +21,7 @@ from .messages import Tool
 from .record import Record
 from .reproduce import TESTS_KEY, printed_by, runner_summary
 from .seats import Seat
-from .world import BASELINE_DIR, withdrawn_by
+from .world import BASELINE_DIR, about_the_original, withdrawn_by
 
 log = logging.getLogger("hypswarm.tools")
 
@@ -47,7 +47,6 @@ def _live(n: dict[str, Any]) -> bool:
     return (st.get("lifecycle") or "active") == "active" and not st.get("fallen")
 
 
-_ORIGINAL = re.compile(r"\b(?:original|unfixed|unpatched)\b", re.IGNORECASE)
 _RUNS_TESTS = re.compile(r"\b(?:pytest|py\.test|unittest)\b")
 _IN_BASE = re.compile(r"""(?:cwd\s*=\s*['"]_base|\bcd\s+_base|chdir\(\s*['"]_base)""")
 _RULES_ON_ALL = re.compile(r"\b(?:all|every|each|none|no|zero|never|always|any)\b", re.IGNORECASE)
@@ -85,7 +84,8 @@ def implied_uses(record: Record, inv: str, order: str, code: str) -> list[str]:
     order's question (the tests you ran while holding the order ran on the current head). Freshness then works
     without the model remembering to declare ``uses``. A run on the kept originals (_base/) used those and not the
     head: filed under the head, every fix made its results stale, and E1 spent 3 orders of its budget re-establishing
-    what the original does, which no fix can change (BC-250, 2026-11-05)."""
+    what the original does, which no fix can change (BC-250, 2026-11-05). Such a run says ``import raffle`` as often as
+    it says raffle.py, and a run that names no file goes stale on any later edit, so there the module name counts."""
     out: list[str] = []
     kept = BASELINE_DIR in code
     if code.strip():
@@ -98,7 +98,8 @@ def implied_uses(record: Record, inv: str, order: str, code: str) -> list[str]:
             if kept and not (b.get("meta") or {}).get("baseline"):
                 continue
             names = {path, path.rsplit("/", 1)[-1]}
-            if any(re.search(r"(?<![\w.-])" + re.escape(x) + r"(?![\w.-])", code) for x in names):
+            module = kept and re.search(r"\b" + re.escape(path.rsplit("/", 1)[-1].rsplit(".", 1)[0]) + r"\b", code)
+            if module or any(re.search(r"(?<![\w.-])" + re.escape(x) + r"(?![\w.-])", code) for x in names):
                 out.append(a["id"])
     try:
         target = next((e["dst"] for e in record.get(order).get("out", []) if e.get("rel") == "works_on"), "")
@@ -323,7 +324,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             q = record.get(_node(answers)) if answers.strip() else record.get(_question() or inv)
         except (GraphError, KeyError):
             return ""
-        if q.get("type") != "question" or not _ORIGINAL.search(str((q.get("body") or {}).get("text") or "")):
+        if q.get("type") != "question" or not about_the_original(str((q.get("body") or {}).get("text") or "")):
             return ""
         for a in record.search("", "artifact", inv, 500):
             body = record.get(a["id"]).get("body") or {}

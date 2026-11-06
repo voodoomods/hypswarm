@@ -39,7 +39,7 @@ from .seats import Seat, fit
 from .telemetry import NULL, Telemetry, trace_tools
 from .tools import OnWrite, lead_tools
 from .worker import WorkerResult, await_external, run_agent_order, run_order
-from .world import World
+from .world import BASELINE_DIR, World, about_the_original
 
 log = logging.getLogger("hypswarm.scheduler")
 
@@ -61,6 +61,21 @@ def _to_review(row: dict[str, Any]) -> str:
 # aren't a fallback for another stage. With the tester busy, a counting question's claim stage went to the
 # implementer, who rewrote the code under test; the new head made every check stale (studies E4, evening run).
 _CHANGE_GATES = frozenset({"diff_registered"})
+def refresh_objective(question: str, code: str, why: str, text: str, *, kept: bool) -> str:
+    """The order that redoes a stale answer. A question about the original goes to the kept copy: "the files as they
+    are now" sent E3's tester to the fixed code, and its description of the fix replaced the right cause."""
+    if kept and about_the_original(text):
+        return (f"{question}'s answer {code} rests on evidence that is now stale — {why}. {question} asks about the "
+                f"original, which no fix changes: measure it again on the copy under {BASELINE_DIR}/ "
+                f"(sys.path.insert(0, '{BASELINE_DIR}')), not on the changed files. Register the run and write the "
+                f"claim again, about the original, the same answer if it holds; link the new claim supersedes {code}. "
+                f"The question: {text}")
+    return (f"{question}'s answer {code} rests on evidence that is now stale — {why}. The instrument re-ran it on the "
+            "current files and it did not reproduce. Recompute from the files as they are now (the notices say what "
+            f"changed), register the run, and write the claim again; link the new claim supersedes {code}. The "
+            f"question: {text}")
+
+
 READ_ONLY = (" This stage reads the working files as they are: don't edit them — a new head supersedes the code every "
              "check so far ran on.")
 
@@ -603,10 +618,8 @@ class Scheduler:
         why = "; ".join(self._stale(nid)[:2]) or "what it rests on has changed"
         who = next((gt["who"] for gt in gates[:i] if gt["gate"] in _RESULT_GATES), gates[i]["who"])
         seat = self._pick_for_stage(self.workers, who, text, avoid=_changers(gates))
-        objective = (f"{q['code']}'s answer {code} rests on evidence that is now stale — {why}. The instrument re-ran it on "
-                     "the current files and it did not reproduce. Recompute from the files as they are now (the notices "
-                     f"say what changed), register the run, and write the claim again; link the new claim supersedes "
-                     f"{code}. The question: {text}" + (READ_ONLY if _changers(gates) else ""))
+        kept = bool(self.world and self.world.kept)
+        objective = refresh_objective(q["code"], code, why, text, kept=kept) + (READ_ONLY if _changers(gates) else "")
         if seat and self._issue(seat, q["question"], objective, [{"p": "result_exists"}, {"p": "claim_made"}]):
             self.res.refreshes += 1
             self._ev("refresh_order", question=q["code"], stale=code, why=why[:160], seat=seat.name)

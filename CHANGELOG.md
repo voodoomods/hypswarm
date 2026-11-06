@@ -12,6 +12,11 @@ Found running the harder challenges on gpt-oss-20b on a local BC-250.
   instrument now runs such code again, and if outputs of the same shape differ, a value within the range of the numbers
   that moved is reported as varying. It's never called contradicted on an unnamed number, and a test run's output isn't
   read this way. Code that prints the same thing twice isn't run a third time.
+- **A cause is measured on the original.** A fix removes the fault a cause question asks about, but "What in raffle.py
+  causes the repeated winners?" doesn't say "original", so seats ran it on the working file. The fix made that stale, the
+  order to redo it said to use the files as they are now, and on E3 the right answer was replaced by a description of the
+  fix. A question asking for a cause now counts as one about the original unless it says "fixed", "patched" or
+  "changed", and the order to redo a stale answer to such a question sends the seat to `_base/`.
 - **A kept original stays the original.** A script could write to `_base/`, and on E1 one flattened `_base/semver.py`,
   so "all tests fail on an IndentationError" was checked. The watcher now restores any kept file each round and tells
   the seats that anything measured on the changed copy has to be measured again.
