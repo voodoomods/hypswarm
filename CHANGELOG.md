@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.0a14 — 2026-11-06: reviewers judge the right thing, and answers settle
+
 Found running the harder challenges on gpt-oss-20b on a local BC-250.
 
 - **A number registered with no code takes the code that printed it.** Seats ran `python` and then registered the
