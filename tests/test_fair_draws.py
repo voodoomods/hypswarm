@@ -4,6 +4,8 @@ objected to 21 of 29 reviewed counts, every one of them inside what the code giv
 import asyncio
 import random
 
+import pytest
+
 from hypswarm.reproduce import draw_band, reproduce_result
 
 from .test_counts_and_sources import _claim_on_a_draw, _record, _review_tool, _tools
@@ -41,6 +43,58 @@ def test_a_count_with_a_wide_range_keeps_it():
 def test_numbers_that_arent_counts_keep_the_printed_width():
     assert draw_band(1.25, 1.5) == (1.0, 1.75)
     assert draw_band(-3, -1) == (-5, 1)
+
+
+CAUSE = "The sampler draws with replacement, so a winner can repeat."
+COUNT_IN_SCOPE = "1,000 calls of the sampler, of which 104 repeated."
+COUNT_ON_THE_RESULT = "1,000 calls of the sampler on the default generator."
+
+
+def _on_a_draw(rec, inv, values, sampled, scope):
+    tools = _tools(rec, inv)
+    tools["register_run"](name="draw", result_summary="Repeats in a sample of the sampler.", values=values,
+                          code="n = 0\nprint(n)")
+    run = next(e["src"] for e in rec.get(rec.resolve("RS1", inv))["in"] if e["rel"] == "produced")
+    rec.create(author="instrument", type="run", inv=inv, fields={
+        "kind": "lab", "name": "re-execution", "state": "succeeded", "note": "re-ran it",
+        "config": {"reproduces": run, "sampled": sampled}},
+        links=[{"rel": "replicates", "to": run, "data": {"differs": "same_code"}}])
+    out = tools["graph_add"]("claim", {"statement": CAUSE, "scope": scope, "kind": "finding"},
+                             [{"rel": "answers", "to": "Q2"}, {"rel": "supports", "from": "RS1", "why": "RS1 counted the repeats in the sample."}])
+    assert "CL1" in out, out
+
+
+@pytest.mark.parametrize("scope", [COUNT_IN_SCOPE, COUNT_ON_THE_RESULT])
+def test_an_objection_to_a_draw_is_refused_wherever_the_count_is_written(tmp_path, scope):
+    # ro1: a right cause, its count in the scope, objected to because the reviewer's own run gave 96
+    _, rec, inv = _record(tmp_path)
+    _on_a_draw(rec, inv, {"repeats": 104}, {"repeats": [96, 112]}, scope)
+    out = _review_tool(rec, inv, "CL1")("CL1", "objection", "I ran the sampler once myself.", "I got 96, not the 104 claimed.")
+    assert out.startswith("refused") and "repeats: 96 to 112" in out, out
+    assert not _reviews(rec, inv, "CL1")
+
+
+def test_an_objection_to_the_cause_itself_is_recorded(tmp_path):
+    _, rec, inv = _record(tmp_path)
+    _on_a_draw(rec, inv, {"repeats": 104}, {"repeats": [96, 112]}, COUNT_IN_SCOPE)
+    out = _review_tool(rec, inv, "CL1")("CL1", "objection", "I read the source of the sampler.", "It draws without replacement.")
+    assert not out.startswith("refused"), out
+    assert len(_reviews(rec, inv, "CL1")) == 1
+
+
+def test_a_count_far_outside_the_range_is_still_open_to_objection(tmp_path):
+    _, rec, inv = _record(tmp_path)
+    _on_a_draw(rec, inv, {"repeats": 300}, {"repeats": [96, 112]}, COUNT_ON_THE_RESULT)
+    out = _review_tool(rec, inv, "CL1")("CL1", "objection", "I ran the sampler once myself.", "I got 96, not the 300 claimed.")
+    assert not out.startswith("refused"), out
+
+
+def test_only_the_value_that_varies_is_under_review(tmp_path):
+    # the size of the sample happens to sit inside the band, and says nothing about the count that varies
+    _, rec, inv = _record(tmp_path)
+    _on_a_draw(rec, inv, {"repeats": 300, "batches": 100}, {"repeats": [96, 112]}, COUNT_ON_THE_RESULT)
+    out = _review_tool(rec, inv, "CL1")("CL1", "objection", "I ran the sampler once myself.", "I got 96, not the 300 claimed.")
+    assert not out.startswith("refused"), out
 
 
 def _claimed(rec, inv, value, reruns):

@@ -12,6 +12,8 @@ Found running the harder challenges on gpt-oss-20b on a local BC-250.
   instrument now runs such code again, and if outputs of the same shape differ, a value within the range of the numbers
   that moved is reported as varying. It's never called contradicted on an unnamed number, and a test run's output isn't
   read this way. Code that prints the same thing twice isn't run a third time.
+- **An objection to a fair draw is refused wherever the count is written.** The refusal only read a claim's statement, so a
+  claim with its count in the scope, or only on its result, could still draw one. A right cause was contested that way.
 - **A review of a claim about the original goes to the original.** A reviewer who read the fixed file objected to a right
   cause, and the run stuck. A review order on such a claim now says to judge it on the kept copy, a reviewer's run on the
   working file is refused as a worker's is, and an objection is refused until the seat has read or run that copy.

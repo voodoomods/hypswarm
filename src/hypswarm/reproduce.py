@@ -321,7 +321,7 @@ def _claims_on(res: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(out))
 
 
-def _nums_of(v: Any) -> list[float]:
+def nums_of(v: Any) -> list[float]:
     """The numbers a registered value carries: its value, or k and n of a count."""
     if isinstance(v, bool):
         return []
@@ -365,7 +365,7 @@ def claim_rests_on(record: Record, claim_id: str, res: dict[str, Any], values: d
         return None
     keys: set[str] = set()
     for x, dec, _pct, _p in printed:
-        hit = {k for k, v in values.items() if any(_same_printed(x, dec, n) for n in _nums_of(v))}
+        hit = {k for k, v in values.items() if any(_same_printed(x, dec, n) for n in nums_of(v))}
         if not hit:
             return None
         keys |= hit
