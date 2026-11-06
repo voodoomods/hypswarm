@@ -51,6 +51,34 @@ def _matches(value: float, printed: list[float]) -> bool:
     return False
 
 
+TESTS_KEY = "tests_passed"           # {k, n}: a test run's count, as register_run takes it from the runner's own summary
+_PASSED = re.compile(r"\b(\d+) passed\b")
+_FAILED = re.compile(r"\b(\d+) (?:failed|errors?)\b")
+_RAN = re.compile(r"^Ran (\d+) tests? in .*$", re.MULTILINE)
+_UNITTEST_BAD = re.compile(r"^FAILED \((?:failures|errors)=(\d+)", re.MULTILINE)
+_OF = re.compile(r"\b(\d+) of (\d+) (?:tests? )?pass(?:ed)?\b")
+
+
+def runner_summary(stdout: str) -> dict[str, int] | None:
+    """Passed and failed from a test runner's own last line (pytest, unittest, or "4 of 4 passed"), or None. A test
+    run needs no value of its author's for the instrument to judge it: a seat that registered "All 6 tests passed"
+    with no values got "0 of 0 confirmed", inconclusive, however often it re-ran (BC-250, 2026-11-05, E1 and E5)."""
+    out = stdout.partition("\n[stderr]\n")[0]
+    of = _OF.findall(out)
+    if of:
+        k, n = int(of[-1][0]), int(of[-1][1])
+        return {"passed": k, "failed": n - k}
+    passed, failed = _PASSED.findall(out), _FAILED.findall(out)
+    if passed or failed:
+        return {"passed": int(passed[-1]) if passed else 0, "failed": int(failed[-1]) if failed else 0}
+    ran = _RAN.findall(out)
+    if ran:
+        bad = _UNITTEST_BAD.findall(out)
+        n, f = int(ran[-1]), int(bad[-1]) if bad else 0
+        return {"passed": n - f, "failed": f}
+    return None
+
+
 def _num(x: object) -> bool:
     """A registered number: int or float, not a bool, not the text a seat sometimes writes ("40/50")."""
     return isinstance(x, (int, float)) and not isinstance(x, bool)
@@ -81,6 +109,32 @@ def _spread(v: Any) -> tuple[float, float] | None:
     if isinstance(tol, (int, float)) and isinstance(centre, (int, float)) and tol >= 0:
         return float(centre) - abs(float(centre)) * float(tol), float(centre) + abs(float(centre)) * float(tol)
     return None
+
+
+def _sampled(values: dict[str, Any], chk: dict[str, Any], outputs: list[str]) -> dict[str, tuple[float, float]]:
+    """The contradicted values that are draws, not errors: re-runs of the same code print different numbers next to
+    their name, and the author's value lies within about the width of those. They move from contradicted to within, and
+    the range is returned. On the original raffle a seat's 100 of 1,000 was "contradicted" by 108, every later run was
+    too, and no count could settle a question whose true rate is 9.8 % (BC-250, 2026-11-05, E3)."""
+    moved: dict[str, tuple[float, float]] = {}
+    for name in list(chk["contradicted"]):
+        v = values.get(name)
+        centre = v.get("k") if isinstance(v, dict) and "k" in v else v.get("value") if isinstance(v, dict) else v
+        seen = [x for out in outputs for x in _labelled(name, out.partition("\n[stderr]\n")[0])[:1]]
+        if not _num(centre) or len(set(seen)) < 2:
+            continue
+        lo, hi = min(seen), max(seen)
+        assert isinstance(centre, (int, float))
+        if lo - (hi - lo) <= float(centre) <= hi + (hi - lo):
+            chk["contradicted"].remove(name)
+            chk["missing"].remove(name)
+            chk["confirmed"].append(name)
+            chk["found"] = chk["confirmed"]
+            chk.setdefault("within", []).append(name)
+            moved[name] = (lo, hi)
+    if moved:
+        chk["ok"] = not chk["contradicted"] and bool(chk["confirmed"])
+    return moved
 
 
 def check_output(values: dict[str, Any], stdout: str) -> dict[str, Any]:
@@ -123,6 +177,14 @@ def check_output(values: dict[str, Any], stdout: str) -> dict[str, Any]:
             want = [float(v)]
         if not want:
             continue
+        if name == TESTS_KEY and len(want) == 2:
+            # any 6 in the output would do for the check below ("collected 6 items" beside "5 passed, 1 failed"), and
+            # this count is what `tests_pass` rests on: only the runner's own summary confirms it
+            ran = runner_summary(out_part)
+            if ran:
+                same = ran["passed"] == want[0] and ran["passed"] + ran["failed"] == want[1]
+                (confirmed if same else contradicted).append(name)
+                continue
         labelled = _labelled(name, out_part)
         rng = _spread(v)
         if all(_matches(w, printed) for w in want):
@@ -263,9 +325,25 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
                                "ok": False}
     else:
         chk = check_output(values, stdout)
+    sampled: dict[str, tuple[float, float]] = {}
+    numeric = [k for k in chk["contradicted"] if k != TESTS_KEY]
+    if numeric and not err and all(_labelled(k, stdout) for k in numeric):
+        # a different number next to the value's name: an error, or a draw. Only running it again can tell
+        outs = [stdout]
+        for _ in range(2):
+            try:
+                again = reproducer(source)
+                outs.append(str(await again if inspect.isawaitable(again) else again))
+            except Exception as e:  # noqa: BLE001 — one re-run the fewer; the value stays contradicted unless the rest move
+                log.info("a further re-run of %s failed: %s", run["code"], e)
+        sampled = _sampled(values, chk, outs)
     n = len([k for k in values if k in chk["confirmed"] or k in chk["unprinted"] or k in chk["contradicted"]])
+    stated = [k for k in chk.get("within") or [] if k not in sampled]
     parts = [f"{len(chk['confirmed'])} of {n} registered values confirmed by the output"
-             + (f" ({', '.join(chk['within'])} within the spread its author stated)" if chk.get("within") else "")]
+             + (f" ({', '.join(stated)} within the spread its author stated)" if stated else "")]
+    for k, (lo, hi) in sampled.items():
+        parts.append(f"{k} varies from run to run (re-runs printed {lo:g} to {hi:g}): it is one draw, so a different "
+                     "number from another run is sampling, not an error; seed it or state its spread")
     if chk["unprinted"]:
         parts.append(f"not printed by the code (not evidence against): {', '.join(chk['unprinted'])}")
     if chk["contradicted"]:
@@ -275,6 +353,11 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
                         "its spread ([lo, hi]) or rel_tol"))
     if err:
         parts.append(f"the code failed: {err}")
+    # the run printed its test runner's summary, and either that's the value or there is none: it's what the instrument saw
+    tests = runner_summary(stdout) if not err and (TESTS_KEY in values or (
+        not chk["confirmed"] and not chk["contradicted"])) else None
+    if tests:
+        parts = [f"{tests['passed']} passed, {tests['failed']} failed, by the test runner's own summary"]
     verdict = "; ".join(parts)
     state = "succeeded" if not err else "failed"
     # the instrument's run uses what the author's run used (the diff, the instance, the data file): a workflow reads
@@ -287,12 +370,15 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
         "kind": "lab", "name": f"re-execution of {run['code']}", "state": state,
         "note": f"re-ran {run['code']}'s registered code: {verdict}"[:2000],
         "config": {"reproduces": run["id"], "stdout_tail": stdout[-1500:], "confirmed": chk["confirmed"],
-                   "unprinted": chk["unprinted"], "contradicted": chk["contradicted"]}},
+                   "unprinted": chk["unprinted"], "contradicted": chk["contradicted"],
+                   **({"sampled": {k: list(v) for k, v in sampled.items()}} if sampled else {})}},
         links=links)
     # the instrument confirms numbers; what they mean is the author's result's outcome. A confirmed "4 of 5 tests
     # pass" is a confirmed failure, so a negative result re-run stays negative — `tests_pass` reads the outcome.
     author_outcome = str((res.get("body") or {}).get("outcome") or "")
-    if chk["contradicted"] or err:
+    if tests:
+        outcome = "positive" if tests["passed"] and not tests["failed"] else "negative"
+    elif chk["contradicted"] or err:
         outcome = "negative"
     elif not chk["confirmed"]:
         outcome = "inconclusive"
@@ -300,7 +386,7 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
         outcome = "negative" if author_outcome == "negative" else "positive"
     lab_res = record.create(author=INSTRUMENT, type="result", inv=inv, fields={
         "summary": f"Re-executed {run['code']}'s code: {verdict}.", "kind": "computed", "outcome": outcome,
-        "values": {k: v for k, v in values.items() if k in chk["confirmed"]}},
+        "values": dict(tests) if tests else {k: v for k, v in values.items() if k in chk["confirmed"]}},
         links=[{"rel": "produced", "from": lab["id"]}])
     supported: list[str] = []
     every = bool(chk["confirmed"]) and not chk["contradicted"] and not chk["unprinted"] and not err
@@ -332,4 +418,5 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
             "supported": supported}
 
 
-__all__ = ["Reproducer", "check_output", "claim_rests_on", "claims_to_support", "live_version", "reproduce_result"]
+__all__ = ["TESTS_KEY", "Reproducer", "check_output", "claim_rests_on", "claims_to_support", "live_version", "reproduce_result",
+           "runner_summary"]

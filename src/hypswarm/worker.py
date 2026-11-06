@@ -45,18 +45,29 @@ CLOSING_REVIEW = ("Two turns are left on this order, and the only tool now is re
                   "inconclusive if the files can't tell. Your method is what you re-ran and compared so far.")
 
 
+CLOSING_WORK = ("Three turns are left on this order, and the tools now only write to the record. Register what you "
+                "ran (register_run, with its code), write the claim its numbers support, or return_work saying what "
+                "is missing. What isn't written is lost: the next order starts from the record, not from your turns.")
+WRITING = ("register_run", "graph_add", "graph_link", "return_work")
+
+
 def _closing(seat: Seat, state: dict[str, Any], turns_left: int) -> bool:
     return seat.role == "reviewer" and not state.get("reviewed") and turns_left <= 2
+
+
+def _closing_work(seat: Seat, turns_left: int) -> bool:
+    return seat.role == "worker" and turns_left <= 3
 
 
 async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, order: str, *, meter: Meter,
                     data_tools: Sequence[Tool] = (), preamble: str = "", header: str = "",
                     on_write: OnWrite | None = None, tel: Telemetry | None = None, tel_parent: str = "",
-                    runs_code: bool = True) -> WorkerResult:
+                    runs_code: bool = True, run_code: Any = None, folder: Any = None) -> WorkerResult:
     tel = tel or NULL
     code = record.get(order)["code"]
     res = WorkerResult(order=order, code=code, seat=seat.name)
-    rtools = worker_tools(record, seat, inv, order, meter, on_write=on_write, runs_code=runs_code)
+    rtools = worker_tools(record, seat, inv, order, meter, on_write=on_write, runs_code=runs_code, run_code=run_code,
+                          folder=folder)
     state = rtools[-1].fn.__dict__["_state"]
     tools = trace_tools([t for t in data_tools if seat.may_use(t.name)] + rtools, tel, parent=tel_parent,
                         seat=seat.name, order=code)
@@ -79,6 +90,13 @@ async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, orde
             offered = [by["review"]]
             if not closing:
                 messages.append(Message("user", CLOSING_REVIEW))
+                closing = True
+        elif _closing_work(seat, seat.max_turns - _turn) and any(n in by for n in WRITING):
+            # An order ran out of turns 60 times in 16 runs, 826 of about 1,900 calls, with its last calls mostly
+            # refused writes and 15 of the 60 having written nothing (BC-250, 2026-11-05). As with a reviewer's verdict.
+            offered = [by[n] for n in WRITING if n in by]
+            if not closing:
+                messages.append(Message("user", CLOSING_WORK))
                 closing = True
         t0 = time.time()
         mid = tel.start("model", parent=tel_parent, seat=seat.name, order=code, model=getattr(model, "name", ""),

@@ -65,18 +65,26 @@ _NOTES = {
                     "with its numbers bound answers the question; a reviewer checks it. Your order names the gates; "
                     "write them in order. An honest 'can't be answered' is a claim kind=inconclusive derived from what "
                     "you did find.",
-    "software@2": "Register the change first: graph_add artifact {sha256, path, kind: 'diff', meta: {base_sha, head_sha, "
-                  "files}} part_of the requirement. register_run with the exact test command as code and uses=[the diff]; "
-                  "the instrument re-runs it on that head — tests on a superseded head don't count. Then the claim.",
+    "software@2": "With a working folder the record watches it: edit the files and the change registers itself as the "
+                  "current head; never graph_add a diff. Without one, register it: graph_add artifact {sha256, path, "
+                  "kind: 'diff', meta: {base_sha, head_sha, files}} part_of the requirement. Then register_run with the "
+                  "exact test command as code, after your last edit: the instrument re-runs it on that head and reads "
+                  "the runner's summary, and tests on a superseded head don't count. Then the claim. Asked what causes "
+                  "a failure, say what fails and what the code does, side by side: 'test_x fails on the original; "
+                  "compare() compares the parts as strings.' 'because of', 'due to' and 'causes' are refused without an "
+                  "experiment that intervened, and rewording them spends your turns.",
     "trading@2": "Thesis first (a hypothesis answering the question), then the backtest preregistered as an experiment "
                  "(windows, costs, configurations to try; data.expected) BEFORE register_run. The result carries oos_*, "
                  "fees/slippage and trials (configurations tried). After the risk review, a decision based_on the claim: "
                  "kind=position with size, stop, review_date and paper=true — or kind=no_position when the thesis is "
                  "declined. Never a live order.",
-    "knowledge@2": "A source carries citation, url|doi, the passage that says it, retrieved (the date you read it) and "
-                   "kind (primary/secondary/tertiary); link it part_of the question. The claim cites it. If no source "
-                   "answers, register the search as a run with a result (pages read, mentions found) and a claim "
-                   "kind=inconclusive derived from it.",
+    "knowledge@2": "A source carries citation, a url or doi, the passage that says it, retrieved (the date you read it) and "
+                   "kind (primary/secondary/tertiary); link it part_of the question. The claim cites it. Before you rely "
+                   "on a source, writing or reviewing, list what else is there: a retraction, correction or erratum "
+                   "outranks the source it names, and a withdrawn source is not evidence; a primary source outranks a "
+                   "later summary of it. A table of parts answers a question about the whole: add it up with python, "
+                   "register_run the sum with its code, and cite the table. If no source answers, register the search "
+                   "as a run with a result (pages read, mentions found) and a claim kind=inconclusive derived from it.",
     "optimization@2": "Register the instance as an artifact {sha256, path, kind: 'instance'} part_of the question, state the "
                       "model as a hypothesis, the solve configuration as an experiment, then register_run with "
                       "uses=[the instance] and values {objective, feasible, bound|gap} (or feasible=false). A verifier "

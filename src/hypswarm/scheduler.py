@@ -72,9 +72,18 @@ def _changers(gates: Sequence[dict[str, Any]]) -> set[str]:
 # What a review judges. "Judge the method and the wording" drew objections to right answers over wording — the
 # numbers reproduced, the conclusion stood, and the claim was reworked anyway (studies S3, T2, evening): a full
 # rework for a point a note carries. A wrong number anywhere in the claim is still an objection (studies E4).
+# fewer-r4 settled a wrong answer: a hand-rolled exact test printed p=0.018 (true 0.08), the re-run confirmed the printed
+# value, and the reviewer took that for proof. A re-run shows the code reproduces, never that it computes the right thing.
+RERUN = ("what the instrument's re-run confirmed. A confirmed value is one the code really printed, no more: the re-run "
+         "doesn't show the code computes the right thing. So read how each number was computed, and work out any p-value or "
+         "test statistic a second way yourself. Otherwise recompute only a value the re-run CONTRADICTED; a value merely not "
+         "printed is not evidence against. A value the instrument says varies from run to run is one draw: your own "
+         "run will differ, and that is no objection unless it falls well outside that range")
 JUDGE = ("Judge whether the method and the numbers answer the question, and record a verdict: checked when they hold "
          "(put any wording point in your notes); objection only when the answer, a number in the claim or the method "
-         "is wrong — an objection sends the whole claim back for rework.")
+         "is wrong — an objection sends the whole claim back for rework. A claim must itself state the answer: 'it "
+         "opened on a date', a variable's name where its value belongs, or 'evidence of the implementation' answers "
+         "nothing, so object.")
 READ_ONLY_TOOLS = frozenset({"list_files", "read_file"})   # the files toolkit: reads, executes nothing
 MAX_CRASHES = 3      # a seat whose orders end in an error this many times in a row is benched for the run
 _DECIDE = ("rework", "cancel_work", "add")
@@ -114,8 +123,9 @@ class Scheduler:
                  on_return: Callable[[Scheduler, int], None] | None = None, external_poll_s: float = 1.0,
                  external_timeout_s: float | None = None, header: str = "", reproducer: Reproducer | None = None,
                  world: World | None = None, on_write: OnWrite | None = None, assemble_report: bool = True,
-                 tel: Telemetry | None = None, tel_parent: str = ""):
+                 tel: Telemetry | None = None, tel_parent: str = "", folder: Any = None):
         self.r, self.inv, self.seats = record, inv, list(seats)
+        self.folder = folder                                # the working folder, for what the worker tools read there
         self.model_for, self.meter = model_for, meter
         self.data_tools, self.preamble, self.header = list(data_tools), preamble, header
         self.reproducer = reproducer                        # host-supplied: re-executes registered code (no model)
@@ -123,6 +133,8 @@ class Scheduler:
         self.runs_code = reproducer is not None or not all(t.name in READ_ONLY_TOOLS for t in self.data_tools)
         self._reproduced: set[str] = set()
         self._codeless: dict[str, int] = {}                 # result id -> producing runs when it had no code
+        self._after_settled: dict[tuple[str, str], int] = {}  # (question, stage) -> orders issued once it had settled
+        self._stalled: set[str] = set()                     # settled questions whose workflow gates won't be met
         self.world = world                                  # host-supplied: keeps the record in step with the files
         self.on_write = on_write                            # host hook on every accepted write by a seat
         self.assemble_report = assemble_report              # no passing report from the lead: write it from the record
@@ -240,7 +252,8 @@ class Scheduler:
             task = asyncio.create_task(run_order(seat, model, self.r, self.inv, order, meter=self.meter,
                                                  data_tools=self.data_tools, preamble=self._preamble(),
                                                  header=self.header, on_write=self.on_write, tel=self.tel,
-                                                 tel_parent=sp, runs_code=self.runs_code))
+                                                 tel_parent=sp, runs_code=self.runs_code, run_code=self.reproducer,
+                                                 folder=self.folder))
         self._order_spans[task] = sp
         self.inflight[task] = (seat, order)
         escalated = bool(escalate and seat.escalate_to and seat.escalate_to != seat.model and not seat.external)
@@ -370,6 +383,9 @@ class Scheduler:
             self._ev("settled", order=d["order"], decision=d["decision"])
         rows = self._stage_rows()
         complete_qs = {q["question"] for q in rows if q["complete"]} if rows else set()
+        if rows:
+            # every live answer is checked: a rework can only ask for one more of them, which the copy check refuses
+            complete_qs |= {b["id"] for b in self.r.question_board(self.inv) if b["status"] == "settled"}
         for o in self.r.orders(self.inv, status="returned"):
             chk = self.r.check_work(o["id"])
             if chk["all_met"]:
@@ -385,6 +401,8 @@ class Scheduler:
             seat = next((s for s in self.seats if s.name == o["assignee"]), None)
             missing = "; ".join(x["why"] or x["p"] for x in chk["predicates"] if not x["met"])
             if seat and self.reworked.get(root, 0) < self.max_reworks and seat.name not in self.busy:
+                if any(x["p"] == "claim_made" and not x["met"] for x in chk["predicates"]):
+                    missing += self._already_measured(o["assignee"], root)
                 try:
                     rw = self.r.rework(author=HARNESS, order=o["id"], missing=missing[:1000])
                 except GraphError as e:
@@ -399,6 +417,25 @@ class Scheduler:
                 continue                                    # decide once the seat is free
             else:
                 self._escalate(o, missing)
+
+    def _already_measured(self, seat: str, root: str) -> str:
+        """What this chain of orders already measured, for a rework that only lacks the claim. The order lists a result
+        by title, without its numbers, and turns ran out recomputing it: a repeat is refused, 38 times in 24 runs, and
+        69 of 271 orders ended on their turn limit (BC-250, 2026-11-05)."""
+        since = str(self.r.get(root)["at"])
+        have: list[str] = []
+        for row in self.r.search("", "result", self.inv, 500):
+            n = self.r.get(row["id"])
+            values = (n.get("body") or {}).get("values") or {}
+            if n.get("by") != seat or str(n.get("at")) < since or not values:
+                continue
+            said = ", ".join(f"{k}={v.get('value', v) if isinstance(v, dict) else v}" for k, v in list(values.items())[:4])
+            have.append(f"{n['code']} ({said[:120]})")
+        if not have:
+            return ""
+        last = have[-1].split(" ", 1)[0]
+        return (f". This work already measured {'; '.join(have[-3:])}: don't compute it again, a repeat is refused. Write "
+                f'the claim now, with links [{{"rel": "supports", "from": "{last}", "why": "…"}}]')
 
     def _escalate(self, o: dict[str, Any], missing: str) -> None:
         """The lead judges an order the record couldn't settle; without a lead, it is cancelled with the reason."""
@@ -439,7 +476,9 @@ class Scheduler:
 
     def _assign_from_stages(self, rows: list[dict[str, Any]]) -> None:
         busy_targets = {o["target_id"] for o in self.r.orders(self.inv) if o["status"] in ("open", "overdue", "returned")}
-        answered = {b["id"]: b for b in self.r.question_board(self.inv) if b["status"] == "answered"}
+        board = self.r.question_board(self.inv)
+        answered = {b["id"]: b for b in board if b["status"] == "answered"}
+        settled = {b["id"] for b in board if b["status"] == "settled"}
         for q in rows:
             if q["complete"]:
                 continue
@@ -474,6 +513,15 @@ class Scheduler:
                 if gt["gate"] in _REVIEW_GATES:
                     break
                 run.append(gt)
+            key = (q["question"], first["stage"])
+            if q["question"] in settled and self._after_settled.get(key, 0) >= 1:
+                # its answers are all checked and an earlier gate (a hypothesis, an experiment's link) still isn't met:
+                # one order to repair the link, then stop. Each further order filed another hypothesis, experiment and
+                # copy of the answer until the budget ran out (BC-250, 2026-11-05)
+                if q["question"] not in self._stalled:
+                    self._stalled.add(q["question"])
+                    self._ev("stage_stalled", question=q["code"], stage=first["stage"], why=first["why"][:200])
+                continue
             changes = any(gt["gate"] in _CHANGE_GATES for gt in run)
             seat = self._pick_for_stage(self.workers, first["who"], text, avoid=None if changes else _changers(gates))
             objective = (f"{q['code']} is at stage '{first['stage']}' ({q['index']}/{q['of']}) of the {q['profile']} "
@@ -483,6 +531,8 @@ class Scheduler:
                 self._ev("stage_order", question=q["code"], stage=first["stage"], gates=[gt["gate"] for gt in run],
                          seat=seat.name)
                 busy_targets.add(q["question"])
+                if q["question"] in settled:
+                    self._after_settled[key] = self._after_settled.get(key, 0) + 1
 
     def _issue_review_stage(self, q: dict[str, Any], gates: list[dict[str, Any]], i: int, text: str,
                             busy_targets: set[str]) -> None:
@@ -583,8 +633,7 @@ class Scheduler:
         what = "claim" if first["gate"] == "reviewed" else "result"
         objective = (f"{q['code']} is at stage '{first['stage']}' ({q['index']}/{q['of']}) of the {q['profile']} "
                      f"workflow. Review {code}, the {what} that answers it: the order lists it, its values and "
-                     "what it rests on" + (", and what the instrument's re-run confirmed — recompute only a value it "
-                     "CONTRADICTED; a value merely not printed is not evidence against" if self.reproducer else "")
+                     "what it rests on" + (", and " + RERUN if self.reproducer else "")
                      + ". " + JUDGE
                      + self._beside(q["question"], code))
         if seat and self._issue(seat, target, objective, [{"p": first["gate"]}]):
@@ -628,9 +677,7 @@ class Scheduler:
                     continue
                 seat = self._pick(pool, q["text"], "claim")
                 objective = (f"Review {code}, which answers {q['code']}. The order lists the claim, its "
-                             "measurements and the results it rests on" + (", and what the instrument's re-run of the "
-                             "author's code confirmed — recompute only a value it CONTRADICTED; a value merely not "
-                             "printed is not evidence against" if self.reproducer else "") +
+                             "measurements and the results it rests on" + (", and " + RERUN if self.reproducer else "") +
                              ". " + JUDGE
                              + self._beside(q["id"], code))
                 if seat and self._issue(seat, claim, objective, [{"p": "reviewed"}]):
@@ -657,7 +704,7 @@ class Scheduler:
     def _done(self) -> str:
         rows = self._stage_rows()
         if rows is not None:                                # the workflow's word on done, question by question
-            if all(q["complete"] for q in rows) and not self.inflight:
+            if all(q["complete"] or q["question"] in self._stalled for q in rows) and not self.inflight:
                 return "settled"
             if not self.inflight and self._record_complete():
                 # The profile's completion criteria are its definition of done: a trading desk that declined once
@@ -856,8 +903,8 @@ class Scheduler:
         # cancel) belong to exceptions — a lead that spent its report turns adding questions nobody will work left
         # the run without a report (F7-907, pilot 4).
         tools = [t for t in lead_tools(self.r, self.lead, self.inv, self.meter, report_box=box, roster=self.roster,
-                                       order_author=HARNESS) if t.name in ("briefing", "report_facts", "submit_report",
-                                                                             "show")]
+                                       order_author=HARNESS, needs_answers="```answers" in self.preamble)
+                 if t.name in ("briefing", "report_facts", "submit_report", "show")]
         kind = self._report_kind()
         user = (f"Write the final report{' — the ' + kind if kind else ''}. Call report_facts and start from it; "
                 "write your interpretation under the facts; end with the answers in the format the task asks for. "

@@ -2,6 +2,58 @@
 
 ## Unreleased
 
+Found running the harder challenges on gpt-oss-20b on a local BC-250.
+
+- **Test runs reach the instrument.** The software prompt asks for the exact test command, and seats gave it:
+  `python -m pytest test_x.py` ran as Python source, a SyntaxError on every re-run. A test run registered with no values
+  got "0 of 0 confirmed", inconclusive. Neither ever met `tests_pass_current`, so both code-fix challenges settled
+  nothing. A one-line python or pytest command now runs as that command, in the tool and on the re-run, and the
+  instrument reads the runner's own summary when it has no value to confirm. Failing tests are negative, and "0 passed"
+  is not a pass.
+- **A worker's last three turns only write.** Orders ran out of turns 60 times in 16 runs, 826 of about 1,900 calls,
+  usually on a refused write and sometimes having written nothing. The last three turns offer `register_run`,
+  `graph_add`, `graph_link` and `return_work`, and say why.
+- **A settled question stops looping.** A question the board calls settled ends the run's work on it, and a stage that
+  can't move after one repair order is marked stalled instead of repeating.
+- **A review reads how the numbers were computed.** A re-run shows the code printed a value, not that it computes the
+  right thing: a hand-rolled exact test printed p=0.018 (true 0.08), the instrument confirmed it, and a wrong answer
+  settled. The review order now says so and asks for any p-value to be worked out a second way.
+- **A review objects to a claim that doesn't state its answer**, such as "it opened on a date".
+- **Tools take the calls seats meant.** `graph_add` accepts `register_run`'s field names and drops measurements it
+  can't read, takes a scope from the linked result, and defaults a hypothesis to the order's question; `register_run`
+  finds the order's open experiment, leaves out a `uses` the record doesn't hold, and moves a retry onto the seat's own
+  result. A run named as `supports` means its result. Every check still runs on what's passed on.
+- **A report needs its answers block.** gpt-oss put Python in `submit_report`'s text, and 4 of 17 runs ended on a
+  "report" that was a code snippet: with no claim in it, the checks had nothing to refuse. When the task asks for an
+  answers block, a report without one is refused, and the harness assembles one if the lead can't.
+- **Knowledge seats check a source's standing.** A run settled a retracted census figure: nobody opened the archive's
+  list of retractions, and a review objecting to "no source found" sent the researcher to the withdrawn survey. The
+  note now says a retraction outranks the source it names and a primary source outranks a later summary.
+- **A test run brings its own count.** `register_run` takes `tests_passed` {k, n} and the outcome from the test runner's
+  summary, and a claim that rules on all of a run is bound to that count. "All tests pass" had nothing behind it and was
+  refused about 12 times in 3 runs while the question stayed open. On 3 of 6 the record now refuses it as false.
+- **A withdrawn source is found wherever it's named.** The check read only `url`; a source naming its file under `doi` or
+  `citation` got past it.
+- **A claim about the original can't rest on a run of the current files.**
+- **A rework says what it already has.** A rework that only lacks the claim now names the numbers already measured and
+  asks for the claim, instead of the seat recomputing them until its turns run out.
+- **A different draw isn't an objection.** A reviewer objecting to a number the instrument found varies from run to run
+  is told so once; a second objection goes through.
+- **Fewer refused calls:** `url|doi` is read as a url or doi, and `graph_add(type="diff")` as an artifact.
+- **A run on the kept files doesn't rest on the head.** A fix no longer makes results about the original stale.
+- **A server still loading its model is waited for**, up to 15 minutes, instead of ending the run.
+- **A sampled number isn't a contradiction.** When a re-run prints a different number next to a value's name, the
+  instrument runs the code twice more. If the runs differ among themselves and the author's value is near them, the
+  value is reported as varying instead of contradicted, and a review is told that a different draw is no objection.
+- **A withdrawn file can't be cited.** `graph_add` refuses a source whose file another file in the folder withdraws,
+  and names the line. The note about retractions alone didn't get RETRACTIONS.md opened.
+- **The original stays runnable.** A run measured "the original" on the code it had just fixed, got 0 repeats where the
+  truth is about 98 in 1,000, and a reviewer passed it. `Task.baseline` now defaults to on for a software run with a
+  folder, and `register_run` refuses code that runs a kept file for a question about the original instead of its copy
+  under `_base/`. A bare `pytest` no longer stops on both copies of a test file.
+- **Refusals say how to fix them.** `submit_report` gives each finding's message, and `show` says a file isn't a node.
+- **The software note matches the tools.** Under watch the record registers the diff, and the note no longer asks for
+  one the tool refuses.
 - **An assembled report answers with the claim's sentence, not its bound values.** With no format named, the fallback
   report gave whatever a claim bound, so "What is A's accuracy?" could come back as `{"n_items": 1000}`: a claim's
   bound values are what it rests on, not its answer. A question that names a format is answered as before. Replayed on
