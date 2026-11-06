@@ -39,7 +39,7 @@ from .seats import Seat, fit
 from .telemetry import NULL, Telemetry, trace_tools
 from .tools import OnWrite, lead_tools
 from .worker import WorkerResult, await_external, run_agent_order, run_order
-from .world import World
+from .world import BASELINE_DIR, World, about_the_original
 
 log = logging.getLogger("hypswarm.scheduler")
 
@@ -61,6 +61,30 @@ def _to_review(row: dict[str, Any]) -> str:
 # aren't a fallback for another stage. With the tester busy, a counting question's claim stage went to the
 # implementer, who rewrote the code under test; the new head made every check stale (studies E4, evening run).
 _CHANGE_GATES = frozenset({"diff_registered"})
+def refresh_objective(question: str, code: str, why: str, text: str, *, kept: bool) -> str:
+    """The order that redoes a stale answer. A question about the original goes to the kept copy: "the files as they
+    are now" sent E3's tester to the fixed code, and its description of the fix replaced the right cause."""
+    if kept and about_the_original(text):
+        return (f"{question}'s answer {code} rests on evidence that is now stale — {why}. {question} asks about the "
+                f"original, which no fix changes: measure it again on the copy under {BASELINE_DIR}/ "
+                f"(sys.path.insert(0, '{BASELINE_DIR}')), not on the changed files. Register the run and write the "
+                f"claim again, about the original, the same answer if it holds; link the new claim supersedes {code}. "
+                f"The question: {text}")
+    return (f"{question}'s answer {code} rests on evidence that is now stale — {why}. The instrument re-ran it on the "
+            "current files and it did not reproduce. Recompute from the files as they are now (the notices say what "
+            f"changed), register the run, and write the claim again; link the new claim supersedes {code}. The "
+            f"question: {text}")
+
+
+def on_the_original(question: str, text: str, *, kept: bool) -> str:
+    """What a review order adds for a claim about the original. E3's reviewer read the fixed file, and its objection left
+    a right cause contested."""
+    if not (kept and about_the_original(text)):
+        return ""
+    return (f" {question} asks about the original, which no fix changes: judge this on the copy under {BASELINE_DIR}/, "
+            "by reading or running it. The working files may already be fixed, so what they show is no objection.")
+
+
 READ_ONLY = (" This stage reads the working files as they are: don't edit them — a new head supersedes the code every "
              "check so far ran on.")
 
@@ -77,8 +101,8 @@ def _changers(gates: Sequence[dict[str, Any]]) -> set[str]:
 RERUN = ("what the instrument's re-run confirmed. A confirmed value is one the code really printed, no more: the re-run "
          "doesn't show the code computes the right thing. So read how each number was computed, and work out any p-value or "
          "test statistic a second way yourself. Otherwise recompute only a value the re-run CONTRADICTED; a value merely not "
-         "printed is not evidence against. A value the instrument says varies from run to run is one draw: your own "
-         "run will differ, and that is no objection unless it falls well outside that range")
+         "printed is not evidence against. The instrument says when a value varies from run to run, and the range a "
+         "fair draw falls in: your own run will differ, and a number inside that range is no objection")
 JUDGE = ("Judge whether the method and the numbers answer the question, and record a verdict: checked when they hold "
          "(put any wording point in your notes); objection only when the answer, a number in the claim or the method "
          "is wrong — an objection sends the whole claim back for rework. A claim must itself state the answer: 'it "
@@ -603,10 +627,8 @@ class Scheduler:
         why = "; ".join(self._stale(nid)[:2]) or "what it rests on has changed"
         who = next((gt["who"] for gt in gates[:i] if gt["gate"] in _RESULT_GATES), gates[i]["who"])
         seat = self._pick_for_stage(self.workers, who, text, avoid=_changers(gates))
-        objective = (f"{q['code']}'s answer {code} rests on evidence that is now stale — {why}. The instrument re-ran it on "
-                     "the current files and it did not reproduce. Recompute from the files as they are now (the notices "
-                     f"say what changed), register the run, and write the claim again; link the new claim supersedes "
-                     f"{code}. The question: {text}" + (READ_ONLY if _changers(gates) else ""))
+        kept = bool(self.world and self.world.kept)
+        objective = refresh_objective(q["code"], code, why, text, kept=kept) + (READ_ONLY if _changers(gates) else "")
         if seat and self._issue(seat, q["question"], objective, [{"p": "result_exists"}, {"p": "claim_made"}]):
             self.res.refreshes += 1
             self._ev("refresh_order", question=q["code"], stale=code, why=why[:160], seat=seat.name)
@@ -635,6 +657,7 @@ class Scheduler:
                      f"workflow. Review {code}, the {what} that answers it: the order lists it, its values and "
                      "what it rests on" + (", and " + RERUN if self.reproducer else "")
                      + ". " + JUDGE
+                     + on_the_original(q["code"], text, kept=bool(self.world and self.world.kept))
                      + self._beside(q["question"], code))
         if seat and self._issue(seat, target, objective, [{"p": first["gate"]}]):
             self._ev("stage_order", question=q["code"], stage=first["stage"], gates=[first["gate"]], seat=seat.name)
@@ -679,6 +702,7 @@ class Scheduler:
                 objective = (f"Review {code}, which answers {q['code']}. The order lists the claim, its "
                              "measurements and the results it rests on" + (", and " + RERUN if self.reproducer else "") +
                              ". " + JUDGE
+                             + on_the_original(q["code"], q["text"], kept=bool(self.world and self.world.kept))
                              + self._beside(q["id"], code))
                 if seat and self._issue(seat, claim, objective, [{"p": "reviewed"}]):
                     busy_targets.add(claim)

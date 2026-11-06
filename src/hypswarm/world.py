@@ -95,6 +95,18 @@ def withdrawn_by(folder: str | Path | None, url: str) -> str:
     return ""
 
 
+_ORIGINAL = re.compile(r"\b(?:original|unfixed|unpatched)\b", re.IGNORECASE)
+_CAUSE = re.compile(r"\b(?:causes?|caused|why)\b", re.IGNORECASE)
+_FIXED = re.compile(r"\b(?:fixed|patched|changed)\b", re.IGNORECASE)
+
+
+def about_the_original(question: str) -> bool:
+    """Whether a question is answered from the files as they were at the start. One that says so, and one that asks for
+    a cause: the fix removes what it asks about, so the fixed code can only describe the fix (E3 Q2, "What in raffle.py
+    causes the repeated winners?", replaced by "uses rng.sample")."""
+    return bool(_ORIGINAL.search(question)) or (bool(_CAUSE.search(question)) and not _FIXED.search(question))
+
+
 def seed_baseline(record: Record, inv: str, folder: str | Path | None, files: Mapping[str, bytes]) -> list[str]:
     """Keep the files as they were at the start. Their bytes are written under ``_base/`` in ``folder`` and the
     task's file artifacts (one per content: the record is content-addressed) are marked ``meta.baseline`` with that

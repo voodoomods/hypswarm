@@ -51,8 +51,8 @@ class Task:
         files = ", ".join(sorted(self.files)) or "none"
         if self.baseline and self.files:
             files += ("\n(the files as they were at the start are under _base/ — artifacts of kind baseline that never "
-                      "change; a question about the original is answered from them, a question about the current "
-                      "code from the files above. To run the original, put it first on the path "
+                      "change; a question about the original, or about what caused a fault, is answered from them "
+                      "(the fix removes the fault), a question about the current code from the files above. To run the original, put it first on the path "
                       "(sys.path.insert(0, '_base')) or name the file (pytest _base/test_x.py). A review of such a "
                       "claim does the same: the current files say nothing about the original)")
         notes = self.notes
