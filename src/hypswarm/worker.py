@@ -124,6 +124,8 @@ async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, orde
         for tc in reply.tool_calls:
             tool = by.get(tc.name)
             out = await tool.call(tc.args) if tool else f"error: there is no tool {tc.name!r}"
+            if tool and tc.name == "python":        # register_run takes the code of a number registered without it
+                state["ran"].append((str(tc.args.get("code") or ""), out))
             res.tool_log.append({"turn": res.turns, "tool": tc.name, "args": _short(tc.args), "out": out[:1500],
                                  "s": round(time.time() - t0, 2)})
             messages.append(Message("tool", out[:12000], tool_call_id=tc.id))

@@ -125,6 +125,52 @@ def test_a_bare_pytest_finds_one_copy_of_each_test(tmp_path):
     assert "1 failed" in pytest("_base/test_one.py")
 
 
+def test_a_kept_original_that_was_changed_is_put_back(tmp_path):
+    work, task, rec, inv = _run(tmp_path)
+    seed_baseline(rec, inv, work, task.files)
+    world = World(rec, inv, work, tree=True, kept=task.files)
+    assert world.sync() == []
+    (work / BASELINE_DIR / "semver.py").write_bytes(b"def compare(a, b):\nreturn 0\n")
+    notes = world.sync()
+    assert (work / BASELINE_DIR / "semver.py").read_bytes() == CODE
+    assert any("_base/semver.py had been changed" in n and "measure it again" in n for n in notes)
+    assert world.sync() == []
+
+
+def test_a_kept_original_that_was_deleted_is_put_back(tmp_path):
+    work, task, rec, inv = _run(tmp_path)
+    seed_baseline(rec, inv, work, task.files)
+    world = World(rec, inv, work, kept=task.files)
+    (work / BASELINE_DIR / "test_semver.py").unlink()
+    assert any("_base/test_semver.py" in n for n in world.sync())
+    assert (work / BASELINE_DIR / "test_semver.py").read_bytes() == TEST
+
+
+def test_a_run_hands_the_watcher_its_originals(tmp_path):
+    import asyncio
+
+    from hypswarm import Budget, run
+    from hypswarm.providers.stub import StubModel
+
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "semver.py").write_bytes(CODE)
+    task = Task(title="semver", mission="Fix the failing tests in the folder.", profile="software", files={"semver.py": CODE},
+                questions=[("Q1", "Which tests fail on the original semver.py?", "measure")])
+
+    damaged = []
+
+    def script(messages, tools):
+        if not damaged:
+            damaged.append(True)
+            (work / BASELINE_DIR / "semver.py").write_bytes(b"broken\n")
+
+    seats = [Seat("lead", "lead"), Seat("tester", "worker"), Seat("reviewer", "reviewer")]
+    asyncio.run(run(task, seats, StubModel(script), budget=Budget(max_calls=3), folder=str(work),
+                    record=str(tmp_path / "r.hypgraph")))
+    assert damaged and (work / BASELINE_DIR / "semver.py").read_bytes() == CODE
+
+
 def _software_run(tmp_path, folder, **kw):
     import asyncio
 

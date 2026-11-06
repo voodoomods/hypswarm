@@ -19,7 +19,7 @@ from .assemble import answers_block, null_over_a_checked_claim
 from .budget import Meter
 from .messages import Tool
 from .record import Record
-from .reproduce import TESTS_KEY, runner_summary
+from .reproduce import TESTS_KEY, printed_by, runner_summary
 from .seats import Seat
 from .world import BASELINE_DIR, withdrawn_by
 
@@ -242,7 +242,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
     Through the CLI with only the files toolkit, seats registered code with its "output" 14 times in one run; with no
     instrument nothing checked it, and code text counts as the code behind a result (studies O1, evening)."""
     me = seat.name
-    state = {"returned": False, "reviewed": False}
+    state: dict[str, Any] = {"returned": False, "reviewed": False, "ran": []}
 
     def _told(kind: str, payload: dict[str, Any]) -> None:
         if on_write:
@@ -584,6 +584,8 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             return ("refused: nothing in this run executes code, so this code wasn't run and isn't evidence. Register "
                     "only what you read off the files (values, no code), or return the order and say it needs a tool "
                     "that runs code")
+        adopted = printed_by(values, state["ran"]) if values and runs_code and not code.strip() else ""
+        code = adopted or code
         wrong_copy = _not_the_original(code, answers)
         if wrong_copy:
             return wrong_copy
@@ -662,6 +664,8 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         if attached:
             out += (f" (your earlier {res['code']} had no code behind it; {r['code']} is now its code, and the "
                     "instrument re-runs it — claims on it need no copy)")
+        if adopted:
+            out += " (the code is your python call that printed these values, and the instrument re-runs it)"
         if again:                                         # the call came back after a refused claim
             out += f" (these are the numbers of your {res['code']}, so the claim goes on it)"
         if skipped:

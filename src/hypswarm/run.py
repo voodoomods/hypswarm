@@ -208,7 +208,7 @@ async def run(task: Task, seats: Sequence[Seat] | None, models: ModelSpec, *, re
         watch = bool(folder and wf and "diff" in getattr(wf, "artifacts", {}))
     if watch or refetch:
         from .world import World
-        world = World(rec, inv, folder if watch else None, refetch=refetch,
+        world = World(rec, inv, folder if watch else None, refetch=refetch, kept=task.files if task.baseline else None,
                       tree=bool(watch and folder and wf and "diff" in getattr(wf, "artifacts", {})))
     sched = Scheduler(rec, inv, seats, model_for, meter, data_tools=data_tools, preamble=preamble,
                       on_return=on_return, lease_minutes=lease_minutes, external_poll_s=external_poll_s,

@@ -137,10 +137,11 @@ def seed_baseline(record: Record, inv: str, folder: str | Path | None, files: Ma
 
 class World:
     def __init__(self, record: Record, inv: str, folder: str | Path | None = None, *, tree: bool = False,
-                 refetch: Refetch | None = None, author: str = HARNESS):
+                 refetch: Refetch | None = None, author: str = HARNESS, kept: Mapping[str, bytes] | None = None):
         self.r, self.inv, self.author = record, inv, author
         self.folder = Path(folder) if folder else None
         self.tree, self.refetch = tree, refetch
+        self.kept = dict(kept or {})                   # the originals under _base/, as they were at the start
         self.changes: list[dict[str, Any]] = []        # every change seen, for the run's events
 
     # ── helpers over the record ──────────────────────────────
@@ -169,6 +170,25 @@ class World:
             return None
 
     # ── the three watches ────────────────────────────────────
+    def _originals(self) -> list[str]:
+        """Put back a kept original something changed. Nothing else stands between a seat's script and ``_base/``, and
+        the copy is what every question about the original is measured on: on E1 a script flattened it, a re-run then
+        failed to import it, and "all six tests fail on an IndentationError" was checked (BC-250, 2026-11-05)."""
+        if not self.folder:
+            return []
+        notes = []
+        for name, data in self.kept.items():
+            p = self.folder / BASELINE_DIR / name
+            if p.is_file() and p.read_bytes() == data:
+                continue
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(data)
+            self.changes.append({"kind": "original", "path": f"{BASELINE_DIR}/{name}"})
+            notes.append(f"{BASELINE_DIR}/{name} had been changed and is back as it was: it is the original and stays "
+                         "that way. Anything measured on it since it changed isn't about the original: measure it "
+                         "again, and put any copy you want to edit somewhere else")
+        return notes
+
     def _files(self) -> list[str]:
         if not self.folder:
             return []
@@ -305,7 +325,7 @@ class World:
 
     def sync(self) -> list[str]:
         """One pass over files, the tree and sources; the sentences say what changed."""
-        notes = self._files()
+        notes = self._originals() + self._files()
         if self.tree:
             notes += self._tree()
         notes += self._sources()
