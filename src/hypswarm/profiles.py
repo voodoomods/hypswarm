@@ -71,7 +71,7 @@ _NOTES = {
                   "exact test command as code, after your last edit: the instrument re-runs it on that head and reads "
                   "the runner's summary, and tests on a superseded head don't count. Then the claim. Asked what causes "
                   "a failure, say what fails and what the code does, side by side: 'test_x fails on the original; "
-                  "compare() compares the parts as strings.' 'because', 'due to' and 'causes' are refused without an "
+                  "compare() compares the parts as strings.' 'because of', 'due to' and 'causes' are refused without an "
                   "experiment that intervened, and rewording them spends your turns.",
     "trading@2": "Thesis first (a hypothesis answering the question), then the backtest preregistered as an experiment "
                  "(windows, costs, configurations to try; data.expected) BEFORE register_run. The result carries oos_*, "
