@@ -19,7 +19,7 @@ from .assemble import answers_block, null_over_a_checked_claim
 from .budget import Meter
 from .messages import Tool
 from .record import Record
-from .reproduce import TESTS_KEY, draw_band, printed_by, runner_summary
+from .reproduce import TESTS_KEY, draw_band, nums_of, printed_by, runner_summary
 from .seats import Seat
 from .world import BASELINE_DIR, about_the_original, withdrawn_by
 
@@ -337,14 +337,17 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                         return said.replace("refused: ", f"refused: {res['code']} came from the current files. ", 1)
         return ""
 
-    def _draws(target: str) -> dict[str, tuple[float, float]]:
-        """What the instrument found to vary in the work a claim or result rests on: name -> (lo, hi) as re-runs printed."""
+    def _resting_on(target: str) -> list[str]:
+        """The work a claim rests on, or the result itself."""
         n = record.get(target)
-        results = [target] if n["type"] == "result" else [
+        return [target] if n["type"] == "result" else [
             e["src"] for e in n["in"] if e["rel"] == "supports"] + [
             e["dst"] for e in n["out"] if e["rel"] == "derived_from"]
+
+    def _draws(target: str) -> dict[str, tuple[float, float]]:
+        """What the instrument found to vary in the work a claim or result rests on: name -> (lo, hi) as re-runs printed."""
         out: dict[str, tuple[float, float]] = {}
-        for rid in results:
+        for rid in _resting_on(target):
             for e in record.get(rid)["in"]:
                 if e["rel"] != "produced":
                     continue
@@ -359,10 +362,16 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         """The refusal for an objection that only sets one draw against another ('' = it isn't one): the number under
         review is a fair draw of its own code, and the objection argues from a number that is too. Every objection to
         E3's counts did, and being told once didn't stop them: the reviewer sent the same objection again (BC-250,
-        2026-11-06). An objection that argues from no such number is recorded: it is about something else."""
+        2026-11-06). The number under review is the claim's, or the one on the result under it: two right causes on E3
+        said nothing of a count in their statement and drew objections over one anyway. An objection that argues from no
+        such number is recorded: it is about something else."""
         body = record.get(target).get("body") or {}
+        drawn = _draws(target)
         stated = _figures(str(body.get("statement") or body.get("summary") or ""))
-        for name, (lo, hi) in _draws(target).items():
+        for rid in _resting_on(target):
+            values = (record.get(rid).get("body") or {}).get("values") or {}
+            stated.update(x for k in drawn for x in nums_of(values.get(k)))
+        for name, (lo, hi) in drawn.items():
             low, high = draw_band(lo, hi)
             if any(low <= x <= high for x in stated) and any(low <= x <= high for x in _figures(said)):
                 return (f"refused: {name}: {lo:g} to {hi:g}, so anything from {low:g} to {high:g} is a fair draw of this "
