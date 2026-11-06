@@ -119,9 +119,68 @@ def test_a_bare_number_is_never_grounds_for_a_contradiction(tmp_path):
     assert out["unprinted"] == ["repeats"] and not out["contradicted"]
 
 
-def test_two_numbers_in_the_output_name_nothing(tmp_path):
-    _, out, _ = _rerun(tmp_path, ["92 of 1000\n", "108 of 1000\n", "101 of 1000\n"])
+def test_a_number_that_moves_beside_one_that_doesnt_is_a_draw(tmp_path):
+    rec, out, inv = _rerun(tmp_path, ["92 of 1000\n", "108 of 1000\n", "101 of 1000\n"])
+    assert out["ok"] and out["confirmed"] == ["repeats"]
+    assert rec.get(rec.resolve(out["run"], inv))["body"]["config"]["sampled"] == {"repeats": [92.0, 108.0]}
+
+
+FIVE = ["1000 115\n1000 97\n1000 104\n1000 100\n1000 96\n", "1000 101\n1000 118\n1000 93\n1000 105\n1000 102\n",
+        "1000 99\n1000 88\n1000 105\n1000 87\n1000 115\n"]
+
+
+def test_five_draws_a_run_with_the_value_among_them_are_draws(tmp_path):
+    """It used to read as confirmed: the 100 was the fourth number printed, and no run but that one printed it."""
+    rec, out, inv = _rerun(tmp_path, FIVE)
+    assert out["ok"] and out["confirmed"] == ["repeats"]
+    config = rec.get(rec.resolve(out["run"], inv))["body"]["config"]
+    assert config["sampled"] == {"repeats": [87.0, 118.0]}
+
+
+def test_five_draws_a_run_without_the_value_are_draws(tmp_path):
+    rec, out, inv = _rerun(tmp_path, FIVE[1:] + FIVE[:1], value=103)
+    assert out["ok"] and out["confirmed"] == ["repeats"]
+    assert rec.get(rec.resolve(out["run"], inv))["body"]["config"]["sampled"] == {"repeats": [87.0, 118.0]}
+
+
+def test_a_timing_in_the_output_cant_confirm_a_count(tmp_path):
+    rec, out, inv = _rerun(tmp_path, ["5 in 0.11 s, 0.42 s\n", "5 in 0.13 s, 0.52 s\n", "5 in 0.09 s, 0.47 s\n"], value=0.12)
+    assert out["unprinted"] == ["repeats"] and not out["ok"]
+    assert rec.get(rec.resolve(out["run"], inv))["body"]["config"]["sampled"] == {"repeats": [0.09, 0.13]}
+
+
+def test_a_steady_output_gets_one_further_run(tmp_path):
+    runs = []
+
+    def same(code):
+        runs.append(code)
+        return "17 23\n"
+    _, rec, inv = _record(tmp_path)
+    _tools(rec, inv)["register_run"](name="n", result_summary="two counts in a file", values={"a": 17, "b": 23}, code="x")
+    out = asyncio.run(reproduce_result(rec, inv, rec.resolve("RS1", inv), same))
+    assert out["confirmed"] == ["a", "b"] and len(runs) == 2
+
+
+def test_a_value_named_in_the_output_isnt_run_again(tmp_path):
+    runs = []
+
+    def named(code):
+        runs.append(code)
+        return "a 17\nb 23\n"
+    _, rec, inv = _record(tmp_path)
+    _tools(rec, inv)["register_run"](name="n", result_summary="two counts in a file", values={"a": 17, "b": 23}, code="x")
+    asyncio.run(reproduce_result(rec, inv, rec.resolve("RS1", inv), named))
+    assert len(runs) == 1
+
+
+def test_outputs_of_different_shapes_say_nothing(tmp_path):
+    _, out, _ = _rerun(tmp_path, ["92\n", "92\n108\n", "101\n"])
     assert out["unprinted"] == ["repeats"] and not out["contradicted"]
+
+
+def test_a_test_runs_output_isnt_read_for_draws(tmp_path):
+    rec, out, inv = _rerun(tmp_path, ["6 passed in 0.11s\n", "6 passed in 0.13s\n", "6 passed in 0.09s\n"], value=0.1)
+    assert not out.get("sampled") and "sampled" not in rec.get(rec.resolve(out["run"], inv))["body"]["config"]
 
 
 def test_a_value_in_the_code_isnt_what_the_number_speaks_of(tmp_path):

@@ -100,12 +100,6 @@ _LITERAL = re.compile(r"\d+(?:\.\d+)?")
 _ALONE = re.compile(r"(?<![\w.])-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\w.])")
 
 
-def _lone_number(stdout: str) -> float | None:
-    """The number the program printed, when it printed exactly one ('92', 'repeated_winners 96')."""
-    found = _ALONE.findall(stdout.partition("\n[stderr]\n")[0])
-    return float(found[0]) if len(found) == 1 else None
-
-
 def _in_the_source(values: dict[str, Any], source: str) -> bool:
     """Every one of these values is a literal in the code: the 1000 of ``for _ in range(1000)``."""
     return not check_output(values, " ".join(_LITERAL.findall(source)))["unprinted"]
@@ -125,13 +119,60 @@ def printed_by(values: dict[str, Any], ran: Sequence[tuple[str, str]]) -> str:
     return ""
 
 
-def _unnamed_value(values: dict[str, Any], chk: dict[str, Any], stdout: str, source: str) -> str:
-    """The registered value an output's only number has to be speaking of, or ''. ``print(cnt)`` prints no name, so
-    the value counts as unprinted and a different number never looked like a draw."""
-    if _lone_number(stdout) is None:
-        return ""
-    open_ = [k for k in chk["unprinted"] if k != TESTS_KEY and not _in_the_source({k: values[k]}, source)]
-    return open_[0] if len(open_) == 1 else ""
+def _centre(v: Any) -> float | None:
+    """A registered value's number, whatever its form: 104, {value: 104}, {k: 104, n: 1000}."""
+    c = v.get("k") if isinstance(v, dict) and "k" in v else v.get("value") if isinstance(v, dict) else v
+    return float(c) if c is not None and _num(c) else None
+
+
+def _nameless(values: dict[str, Any], chk: dict[str, Any], stdout: str, source: str) -> list[str]:
+    """The values an output might be speaking of without naming them, so only another run can tell whether they are
+    draws: ``print(cnt)`` prints no name, and a value "confirmed" among several numbers may just be one of them. E3's
+    tester printed five draws a run, and its 100 was confirmed by the fourth of them (BC-250, 2026-11-05). A literal
+    in the code is what the code was told, not something it found."""
+    out = stdout.partition("\n[stderr]\n")[0]
+    several = len(_ALONE.findall(out)) > 1
+    open_ = [k for k in values if k != TESTS_KEY and _centre(values[k]) is not None and (
+        k in chk["unprinted"] or (k in chk["confirmed"] and several and not _labelled(k, out)))]
+    return [k for k in open_ if not _in_the_source({k: values[k]}, source)]
+
+
+def _moved(outputs: list[str]) -> list[list[float]]:
+    """The numbers that differ between outputs of the same shape, one list per place in the output. Nothing here
+    depends on what the code calls them. Outputs of different shapes say nothing: a loop that printed more lines."""
+    outs = [o.partition("\n[stderr]\n")[0] for o in outputs]
+    if len(outs) < 2 or len({_ALONE.sub("#", o) for o in outs}) > 1:
+        return []
+    return [list(col) for col in zip(*([float(x) for x in _ALONE.findall(o)] for o in outs)) if len(set(col)) > 1]
+
+
+def _holds(places: list[list[float]], centre: float) -> list[list[float]]:
+    """Those of ``places`` a value lies within about the width of. A draw can fall outside what three others printed."""
+    return [c for c in places if min(c) - (max(c) - min(c)) <= centre <= max(c) + (max(c) - min(c))]
+
+
+def _nameless_draws(values: dict[str, Any], chk: dict[str, Any], names: list[str],
+                    outputs: list[str]) -> dict[str, tuple[float, float]]:
+    """The values among ``names`` that re-runs show to be draws, with the range printed. A value left unprinted counts
+    as confirmed only when every number that moved is its kind, so a timing in the output can't vouch for a count. A
+    number with no name can show a value varies; it is never grounds for calling the value wrong."""
+    moved: dict[str, tuple[float, float]] = {}
+    places = _moved(outputs)
+    for k in names:
+        centre = _centre(values[k])
+        hits = _holds(places, centre) if centre is not None else []
+        if not hits:
+            continue
+        moved[k] = min(min(c) for c in hits), max(max(c) for c in hits)
+        if k in chk["unprinted"] and len(hits) == len(places):
+            chk["unprinted"].remove(k)
+            chk["missing"].remove(k)
+            chk["confirmed"].append(k)
+            chk["found"] = chk["confirmed"]
+            chk.setdefault("within", []).append(k)
+    if moved:
+        chk["ok"] = not chk["contradicted"] and bool(chk["confirmed"])
+    return moved
 
 
 def _spread(v: Any) -> tuple[float, float] | None:
@@ -157,13 +198,12 @@ def _sampled(values: dict[str, Any], chk: dict[str, Any], outputs: list[str]) ->
     moved: dict[str, tuple[float, float]] = {}
     for name in list(chk["contradicted"]):
         v = values.get(name)
-        centre = v.get("k") if isinstance(v, dict) and "k" in v else v.get("value") if isinstance(v, dict) else v
+        centre = _centre(v)
         seen = [x for out in outputs for x in _labelled(name, out.partition("\n[stderr]\n")[0])[:1]]
-        if not _num(centre) or len(set(seen)) < 2:
+        if centre is None or len(set(seen)) < 2:
             continue
         lo, hi = min(seen), max(seen)
-        assert isinstance(centre, (int, float))
-        if lo - (hi - lo) <= float(centre) <= hi + (hi - lo):
+        if _holds([seen], centre):
             chk["contradicted"].remove(name)
             chk["missing"].remove(name)
             chk["confirmed"].append(name)
@@ -365,26 +405,20 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
         chk = check_output(values, stdout)
     sampled: dict[str, tuple[float, float]] = {}
     numeric = [k for k in chk["contradicted"] if k != TESTS_KEY]
-    unnamed = "" if err or numeric else _unnamed_value(values, chk, stdout, source)
-    if unnamed or (numeric and not err and all(_labelled(k, stdout) for k in numeric)):
+    named = bool(numeric) and not err and all(_labelled(k, stdout) for k in numeric)
+    names = [] if err or numeric or chk.get("error") or runner_summary(stdout) else _nameless(values, chk, stdout, source)
+    if named or names:
         # a different number next to the value's name: an error, or a draw. Only running it again can tell
         outs = [stdout]
-        for _ in range(2):
+        for i in range(2):
+            if i and not named and not _moved(outs):
+                break                                       # the same output twice: nothing here is a draw
             try:
                 again = reproducer(source)
                 outs.append(str(await again if inspect.isawaitable(again) else again))
             except Exception as e:  # noqa: BLE001 — one re-run the fewer; the value stays contradicted unless the rest move
                 log.info("a further re-run of %s failed: %s", run["code"], e)
-        if unnamed:
-            seen = [x for x in map(_lone_number, outs) if x is not None]
-            outs = [f"{unnamed} {x}" for x in seen]
-            if len(set(seen)) > 1:
-                chk["unprinted"].remove(unnamed)
-                chk["contradicted"].append(unnamed)
-        sampled = _sampled(values, chk, outs)
-        if unnamed in chk["contradicted"]:          # a number with no name can show a value varies, not that it's wrong
-            chk["contradicted"].remove(unnamed)
-            chk["unprinted"].append(unnamed)
+        sampled = {**_sampled(values, chk, outs), **_nameless_draws(values, chk, names, outs)}
     n = len([k for k in values if k in chk["confirmed"] or k in chk["unprinted"] or k in chk["contradicted"]])
     stated = [k for k in chk.get("within") or [] if k not in sampled]
     parts = [f"{len(chk['confirmed'])} of {n} registered values confirmed by the output"
@@ -392,8 +426,9 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
     for k, (lo, hi) in sampled.items():
         parts.append(f"{k} varies from run to run (re-runs printed {lo:g} to {hi:g}): it is one draw, so a different "
                      "number from another run is sampling, not an error; seed it or state its spread")
-    if chk["unprinted"]:
-        parts.append(f"not printed by the code (not evidence against): {', '.join(chk['unprinted'])}")
+    plain = [k for k in chk["unprinted"] if k not in sampled]
+    if plain:
+        parts.append(f"not printed by the code (not evidence against): {', '.join(plain)}")
     if chk["contradicted"]:
         parts.append(f"CONTRADICTED by the output: {', '.join(chk['contradicted'])}"
                      + ("" if all(_spread(values.get(k)) for k in chk["contradicted"]) else
