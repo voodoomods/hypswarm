@@ -139,16 +139,14 @@ def _figures(text: str) -> set[float]:
     return out
 
 
-def _same_answer(record: Record, inv: str, me: str, question: str, statement: str, kind: str = "") -> str:
-    """Why a claim is a copy of the seat's own live answer to the same question ('' = it isn't). The record holds a
-    question at "answered" until every answer to it is checked, so a copy is one more claim to review before it
-    settles: on a 3-slot gpt-oss swarm the analyst filed the same Q1 answer five times and the run's budget ran out
-    with two unchecked copies beside a checked one (BC-250, 2026-11-04). A copy states no figure the earlier claim
+def _copied(record: Record, inv: str, me: str, question: str, statement: str, kind: str = "") -> list[dict[str, Any]]:
+    """The seat's own live answers to the question that a claim would copy. A copy states no figure the earlier claim
     doesn't (or, with no figures, nearly the same words) and has the same kind."""
     try:
         q = record.get(record.resolve(question, inv))
     except (GraphError, KeyError):
-        return ""
+        return []
+    out: list[dict[str, Any]] = []
     nums, words = _figures(statement), _words(statement)
     for e in q.get("in", []):
         if e.get("rel") != "answers":
@@ -170,10 +168,36 @@ def _same_answer(record: Record, inv: str, me: str, question: str, statement: st
             same = not theirs and bool(words) and bool(their_words) and \
                 len(words & their_words) / len(words | their_words) >= 0.8
         if same:
-            return (f"refused: your {c['code']} already answers {q['code']} with this ({c['state']['sentence'][:90]}). "
-                    f"A copy is one more answer to check before {q['code']} settles. If {c['code']} is wrong, revise "
+            out.append(c)
+    return out
+
+
+def _same_answer(record: Record, inv: str, me: str, question: str, statement: str, kind: str = "") -> str:
+    """Why a claim is a copy of the seat's own standing answer to the same question ('' = it isn't). The record holds a
+    question at "answered" until every answer to it is checked, so a copy is one more claim to review before it
+    settles: on a 3-slot gpt-oss swarm the analyst filed the same Q1 answer five times and the run's budget ran out
+    with two unchecked copies beside a checked one (BC-250, 2026-11-04). A stale answer isn't one to copy: the order to
+    redo it says to write the claim again, and refusing that left right answers unchecked (_stale_copies)."""
+    for c in _copied(record, inv, me, question, statement, kind):
+        if not (c.get("state") or {}).get("stale"):
+            code = record.get(record.resolve(question, inv))["code"]
+            return (f"refused: your {c['code']} already answers {code} with this ({c['state']['sentence'][:90]}). "
+                    f"A copy is one more answer to check before {code} settles. If {c['code']} is wrong, revise "
                     "it; if it is right there is nothing new to file — return your order")
     return ""
+
+
+def _stale_copies(record: Record, inv: str, me: str, question: str, statement: str,
+                  kind: str = "") -> list[dict[str, Any]]:
+    """The seat's stale answers a claim says again. The new claim replaces them: left beside it, a stale answer that
+    was never checked holds the question open, and a seat told to link the two often doesn't."""
+    return [c for c in _copied(record, inv, me, question, statement, kind) if (c.get("state") or {}).get("stale")]
+
+
+def _replacing(links: list[dict[str, Any]], old: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The links with ``supersedes`` to each of the old claims, unless the seat named it."""
+    named = {str(l.get("to")) for l in links if l.get("rel") == "supersedes"}
+    return [*links, *({"rel": "supersedes", "to": c["id"]} for c in old if not named & {c["code"], c["id"]})]
 
 
 def _not_a_question(text: str, existing: list[tuple[str, str]]) -> str:
@@ -500,7 +524,9 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                 if where:
                     return (f"refused: {where} A withdrawn source is not evidence, so it can't be cited for an answer. "
                             "Use what that line points to; if it points nowhere, say no source answers")
+        off = ""
         if type == "claim":
+            replaced: list[dict[str, Any]] = []
             fields, links = _as_claim(fields, links)
             wrong = _rests_on_the_head(links)
             if wrong:
@@ -513,8 +539,12 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                                        str((fields or {}).get("kind") or ""))
                     if why:
                         return why
+                    replaced += _stale_copies(record, inv, me, str(l["to"]), str((fields or {}).get("statement") or ""),
+                                              str((fields or {}).get("kind") or ""))
+            links = _replacing(links, replaced)
+            if replaced:
+                off = f" (it replaces {', '.join(c['code'] for c in replaced)}, whose evidence is stale)"
         q = _question()
-        off = ""
         try:
             if type == "hypothesis" and q and not any(l.get("rel") == "answers" for l in links or []):
                 links = [*(links or []), {"rel": "answers", "to": q}]   # what the order asks about, unless it says
@@ -522,8 +552,8 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                 for l in links or []:
                     h = record.get(_node(str(l.get("to") or ""))) if l.get("rel") == "tests" else None
                     if h and not any(e.get("rel") == "answers" and e.get("dst") == q for e in h.get("out", [])):
-                        off = (f" (note: {h['code']} doesn't answer {record.get(q)['code']}, your order's question, so "
-                               "this experiment doesn't count for it)")
+                        off += (f" (note: {h['code']} doesn't answer {record.get(q)['code']}, your order's question, "
+                                "so this experiment doesn't count for it)")
             n = record.create(author=me, type=type, inv=inv, fields=fields, links=_links(links, type))
         except (GraphError, KeyError) as e:
             return _err(e)
@@ -687,6 +717,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                     cl_links.append({"rel": "answers", "to": _node(answers)})
                 except (GraphError, KeyError) as e:
                     return out + f"\n  claim not written: {e}" + _tail(res, meter)
+                cl_links = _replacing(cl_links, _stale_copies(record, inv, me, answers, claim, claim_kind))
             try:
                 c = record.create(author=me, type="claim", inv=inv, fields=cf, links=cl_links)
             except (GraphError, KeyError) as e:
