@@ -69,6 +69,7 @@ async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, orde
     rtools = worker_tools(record, seat, inv, order, meter, on_write=on_write, runs_code=runs_code, run_code=run_code,
                           folder=folder)
     state = rtools[-1].fn.__dict__["_state"]
+    state["read"] = []
     tools = trace_tools([t for t in data_tools if seat.may_use(t.name)] + rtools, tel, parent=tel_parent,
                         seat=seat.name, order=code)
     by = {t.name: t for t in tools}
@@ -126,6 +127,8 @@ async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, orde
             out = await tool.call(tc.args) if tool else f"error: there is no tool {tc.name!r}"
             if tool and tc.name == "python":        # register_run takes the code of a number registered without it
                 state["ran"].append((str(tc.args.get("code") or ""), out))
+            if tool and tc.name == "read_file":     # review asks whether a seat looked at the kept copy
+                state["read"].append(str(tc.args.get("name") or ""))
             res.tool_log.append({"turn": res.turns, "tool": tc.name, "args": _short(tc.args), "out": out[:1500],
                                  "s": round(time.time() - t0, 2)})
             messages.append(Message("tool", out[:12000], tool_call_id=tc.id))

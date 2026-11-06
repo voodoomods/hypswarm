@@ -76,6 +76,15 @@ def refresh_objective(question: str, code: str, why: str, text: str, *, kept: bo
             f"question: {text}")
 
 
+def on_the_original(question: str, text: str, *, kept: bool) -> str:
+    """What a review order adds for a claim about the original. E3's reviewer read the fixed file, and its objection left
+    a right cause contested."""
+    if not (kept and about_the_original(text)):
+        return ""
+    return (f" {question} asks about the original, which no fix changes: judge this on the copy under {BASELINE_DIR}/, "
+            "by reading or running it. The working files may already be fixed, so what they show is no objection.")
+
+
 READ_ONLY = (" This stage reads the working files as they are: don't edit them — a new head supersedes the code every "
              "check so far ran on.")
 
@@ -648,6 +657,7 @@ class Scheduler:
                      f"workflow. Review {code}, the {what} that answers it: the order lists it, its values and "
                      "what it rests on" + (", and " + RERUN if self.reproducer else "")
                      + ". " + JUDGE
+                     + on_the_original(q["code"], text, kept=bool(self.world and self.world.kept))
                      + self._beside(q["question"], code))
         if seat and self._issue(seat, target, objective, [{"p": first["gate"]}]):
             self._ev("stage_order", question=q["code"], stage=first["stage"], gates=[first["gate"]], seat=seat.name)
@@ -692,6 +702,7 @@ class Scheduler:
                 objective = (f"Review {code}, which answers {q['code']}. The order lists the claim, its "
                              "measurements and the results it rests on" + (", and " + RERUN if self.reproducer else "") +
                              ". " + JUDGE
+                             + on_the_original(q["code"], q["text"], kept=bool(self.world and self.world.kept))
                              + self._beside(q["id"], code))
                 if seat and self._issue(seat, claim, objective, [{"p": "reviewed"}]):
                     busy_targets.add(claim)

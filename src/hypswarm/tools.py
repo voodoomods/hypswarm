@@ -267,7 +267,8 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
     Through the CLI with only the files toolkit, seats registered code with its "output" 14 times in one run; with no
     instrument nothing checked it, and code text counts as the code behind a result (studies O1, evening)."""
     me = seat.name
-    state: dict[str, Any] = {"returned": False, "reviewed": False, "ran": []}
+    # read: the files read through the worker loop; None when nothing watches that (a seat outside it, a direct call)
+    state: dict[str, Any] = {"returned": False, "reviewed": False, "ran": [], "read": None}
 
     def _told(kind: str, payload: dict[str, Any]) -> None:
         if on_write:
@@ -283,6 +284,22 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             return target if target and record.get(target)["type"] == "question" else ""
         except (GraphError, KeyError):
             return ""
+
+    def _claim_question(claim: str) -> str:
+        """The question a claim answers, "" when it isn't a claim or answers none."""
+        try:
+            n = record.get(claim)
+            return next((e["dst"] for e in n.get("out", []) if e.get("rel") == "answers"), "") if n["type"] == "claim" else ""
+        except (GraphError, KeyError):
+            return ""
+
+    def _order_claim_question() -> str:
+        """The question behind this order when it works on a claim: a review, which _question can't see."""
+        try:
+            target = next((e["dst"] for e in record.get(order).get("out", []) if e.get("rel") == "works_on"), "")
+        except (GraphError, KeyError):
+            return ""
+        return _claim_question(target) if target else ""
 
     def _results_with_a_count(links: list[dict[str, Any]]) -> list[str]:
         """Results a claim may lean on for a test count: the ones it links, then this seat's own, newest first. E1's
@@ -362,7 +379,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         if not code.strip() or (BASELINE_DIR in code and not running) or _IN_BASE.search(code):
             return ""
         try:
-            q = record.get(_node(answers)) if answers.strip() else record.get(_question() or inv)
+            q = record.get(_node(answers)) if answers.strip() else record.get(_question() or _order_claim_question() or inv)
         except (GraphError, KeyError):
             return ""
         if q.get("type") != "question" or not about_the_original(str((q.get("body") or {}).get("text") or "")):
@@ -380,6 +397,25 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                 return (f"refused: {q.get('code')} asks about the original, and this code runs the current "
                         f"{body.get('path')}, which a fix changes. The original is {base}: {how}, then register that")
         return ""
+
+    def _unseen_original(target: str) -> str:
+        """The refusal for an objection to a claim about the original from a seat that hasn't looked at the original. On
+        E3 a reviewer read the fixed raffle.py, objected that the code uses rng.sample, and a right cause stayed
+        contested until the run stuck (BC-250, 2026-11-06). This goes by what the seat did, not what it says: after
+        looking at the kept copy it can object, and is recorded."""
+        if state["read"] is None:
+            return ""
+        asked = _claim_question(target)
+        q = record.get(asked) if asked else {}
+        if not asked or not about_the_original(str((q.get("body") or {}).get("text") or "")):
+            return ""
+        kept = [base for a in record.search("", "artifact", inv, 500)
+                if (base := str(((record.get(a["id"]).get("body") or {}).get("meta") or {}).get("baseline") or ""))]
+        if not kept or any(BASELINE_DIR in name for name in state["read"]) or any(BASELINE_DIR in c for c, _ in state["ran"]):
+            return ""
+        return (f"refused: {q.get('code')} asks about the original, and you haven't looked at it: the working files may "
+                f"already be fixed, and what they show says nothing about a claim on the original. read_file('{kept[0]}') "
+                "or run that copy, then give your verdict from it.")
 
     def _open_experiment() -> str:
         """The experiment a run under this order executes when the seat didn't name it: the one it wrote on the
@@ -760,7 +796,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         try:
             target = record.resolve(node, inv)
             if verdict.strip().lower() in ("objection", "fail"):
-                why = _another_draw(target, f"{method} {notes}")
+                why = _unseen_original(target) or _another_draw(target, f"{method} {notes}")
                 if why:
                     return why
             out = record.review(author=me, target=target, verdict=verdict.strip().lower(), method=method, notes=notes)
