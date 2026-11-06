@@ -76,6 +76,15 @@ def refresh_objective(question: str, code: str, why: str, text: str, *, kept: bo
             f"question: {text}")
 
 
+def on_the_original(question: str, text: str, *, kept: bool) -> str:
+    """What a review order adds for a claim about the original. E3's reviewer read the fixed file, and its objection left
+    a right cause contested."""
+    if not (kept and about_the_original(text)):
+        return ""
+    return (f" {question} asks about the original, which no fix changes: judge this on the copy under {BASELINE_DIR}/, "
+            "by reading or running it. The working files may already be fixed, so what they show is no objection.")
+
+
 READ_ONLY = (" This stage reads the working files as they are: don't edit them — a new head supersedes the code every "
              "check so far ran on.")
 
@@ -92,8 +101,8 @@ def _changers(gates: Sequence[dict[str, Any]]) -> set[str]:
 RERUN = ("what the instrument's re-run confirmed. A confirmed value is one the code really printed, no more: the re-run "
          "doesn't show the code computes the right thing. So read how each number was computed, and work out any p-value or "
          "test statistic a second way yourself. Otherwise recompute only a value the re-run CONTRADICTED; a value merely not "
-         "printed is not evidence against. A value the instrument says varies from run to run is one draw: your own "
-         "run will differ, and that is no objection unless it falls well outside that range")
+         "printed is not evidence against. The instrument says when a value varies from run to run, and the range a "
+         "fair draw falls in: your own run will differ, and a number inside that range is no objection")
 JUDGE = ("Judge whether the method and the numbers answer the question, and record a verdict: checked when they hold "
          "(put any wording point in your notes); objection only when the answer, a number in the claim or the method "
          "is wrong — an objection sends the whole claim back for rework. A claim must itself state the answer: 'it "
@@ -648,6 +657,7 @@ class Scheduler:
                      f"workflow. Review {code}, the {what} that answers it: the order lists it, its values and "
                      "what it rests on" + (", and " + RERUN if self.reproducer else "")
                      + ". " + JUDGE
+                     + on_the_original(q["code"], text, kept=bool(self.world and self.world.kept))
                      + self._beside(q["question"], code))
         if seat and self._issue(seat, target, objective, [{"p": first["gate"]}]):
             self._ev("stage_order", question=q["code"], stage=first["stage"], gates=[first["gate"]], seat=seat.name)
@@ -692,6 +702,7 @@ class Scheduler:
                 objective = (f"Review {code}, which answers {q['code']}. The order lists the claim, its "
                              "measurements and the results it rests on" + (", and " + RERUN if self.reproducer else "") +
                              ". " + JUDGE
+                             + on_the_original(q["code"], q["text"], kept=bool(self.world and self.world.kept))
                              + self._beside(q["id"], code))
                 if seat and self._issue(seat, claim, objective, [{"p": "reviewed"}]):
                     busy_targets.add(claim)

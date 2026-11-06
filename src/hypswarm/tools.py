@@ -19,7 +19,7 @@ from .assemble import answers_block, null_over_a_checked_claim
 from .budget import Meter
 from .messages import Tool
 from .record import Record
-from .reproduce import TESTS_KEY, printed_by, runner_summary
+from .reproduce import TESTS_KEY, draw_band, printed_by, runner_summary
 from .seats import Seat
 from .world import BASELINE_DIR, about_the_original, withdrawn_by
 
@@ -267,7 +267,8 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
     Through the CLI with only the files toolkit, seats registered code with its "output" 14 times in one run; with no
     instrument nothing checked it, and code text counts as the code behind a result (studies O1, evening)."""
     me = seat.name
-    state: dict[str, Any] = {"returned": False, "reviewed": False, "ran": []}
+    # read: the files read through the worker loop; None when nothing watches that (a seat outside it, a direct call)
+    state: dict[str, Any] = {"returned": False, "reviewed": False, "ran": [], "read": None}
 
     def _told(kind: str, payload: dict[str, Any]) -> None:
         if on_write:
@@ -283,6 +284,22 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             return target if target and record.get(target)["type"] == "question" else ""
         except (GraphError, KeyError):
             return ""
+
+    def _claim_question(claim: str) -> str:
+        """The question a claim answers, "" when it isn't a claim or answers none."""
+        try:
+            n = record.get(claim)
+            return next((e["dst"] for e in n.get("out", []) if e.get("rel") == "answers"), "") if n["type"] == "claim" else ""
+        except (GraphError, KeyError):
+            return ""
+
+    def _order_claim_question() -> str:
+        """The question behind this order when it works on a claim: a review, which _question can't see."""
+        try:
+            target = next((e["dst"] for e in record.get(order).get("out", []) if e.get("rel") == "works_on"), "")
+        except (GraphError, KeyError):
+            return ""
+        return _claim_question(target) if target else ""
 
     def _results_with_a_count(links: list[dict[str, Any]]) -> list[str]:
         """Results a claim may lean on for a test count: the ones it links, then this seat's own, newest first. E1's
@@ -320,13 +337,13 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                         return said.replace("refused: ", f"refused: {res['code']} came from the current files. ", 1)
         return ""
 
-    def _draws(target: str) -> str:
-        """What the instrument found to vary in the work a claim or result rests on: "name: lo to hi", or ''."""
+    def _draws(target: str) -> dict[str, tuple[float, float]]:
+        """What the instrument found to vary in the work a claim or result rests on: name -> (lo, hi) as re-runs printed."""
         n = record.get(target)
         results = [target] if n["type"] == "result" else [
             e["src"] for e in n["in"] if e["rel"] == "supports"] + [
             e["dst"] for e in n["out"] if e["rel"] == "derived_from"]
-        out: list[str] = []
+        out: dict[str, tuple[float, float]] = {}
         for rid in results:
             for e in record.get(rid)["in"]:
                 if e["rel"] != "produced":
@@ -334,8 +351,25 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                 for x in record.get(e["src"])["in"]:
                     if x["rel"] == "replicates":
                         config = (record.get(x["src"]).get("body") or {}).get("config") or {}
-                        out += [f"{k}: {lo:g} to {hi:g}" for k, (lo, hi) in (config.get("sampled") or {}).items()]
-        return "; ".join(dict.fromkeys(out))
+                        for k, (lo, hi) in (config.get("sampled") or {}).items():
+                            out[k] = min(lo, out[k][0]) if k in out else lo, max(hi, out[k][1]) if k in out else hi
+        return out
+
+    def _another_draw(target: str, said: str) -> str:
+        """The refusal for an objection that only sets one draw against another ('' = it isn't one): the number under
+        review is a fair draw of its own code, and the objection argues from a number that is too. Every objection to
+        E3's counts did, and being told once didn't stop them: the reviewer sent the same objection again (BC-250,
+        2026-11-06). An objection that argues from no such number is recorded: it is about something else."""
+        body = record.get(target).get("body") or {}
+        stated = _figures(str(body.get("statement") or body.get("summary") or ""))
+        for name, (lo, hi) in _draws(target).items():
+            low, high = draw_band(lo, hi)
+            if any(low <= x <= high for x in stated) and any(low <= x <= high for x in _figures(said)):
+                return (f"refused: {name}: {lo:g} to {hi:g}, so anything from {low:g} to {high:g} is a fair draw of this "
+                        "code. The number under review is inside that, so a different number from your own run is another "
+                        "draw, not an error, and an objection can't rest on it. Review it checked and put the range in "
+                        "your notes. If something else is wrong, object and say what, without comparing counts.")
+        return ""
 
     def _not_the_original(code: str, answers: str) -> str:
         """The refusal for a run on the current files that answers a question about the original. A file a fix changes
@@ -345,7 +379,7 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         if not code.strip() or (BASELINE_DIR in code and not running) or _IN_BASE.search(code):
             return ""
         try:
-            q = record.get(_node(answers)) if answers.strip() else record.get(_question() or inv)
+            q = record.get(_node(answers)) if answers.strip() else record.get(_question() or _order_claim_question() or inv)
         except (GraphError, KeyError):
             return ""
         if q.get("type") != "question" or not about_the_original(str((q.get("body") or {}).get("text") or "")):
@@ -363,6 +397,25 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                 return (f"refused: {q.get('code')} asks about the original, and this code runs the current "
                         f"{body.get('path')}, which a fix changes. The original is {base}: {how}, then register that")
         return ""
+
+    def _unseen_original(target: str) -> str:
+        """The refusal for an objection to a claim about the original from a seat that hasn't looked at the original. On
+        E3 a reviewer read the fixed raffle.py, objected that the code uses rng.sample, and a right cause stayed
+        contested until the run stuck (BC-250, 2026-11-06). This goes by what the seat did, not what it says: after
+        looking at the kept copy it can object, and is recorded."""
+        if state["read"] is None:
+            return ""
+        asked = _claim_question(target)
+        q = record.get(asked) if asked else {}
+        if not asked or not about_the_original(str((q.get("body") or {}).get("text") or "")):
+            return ""
+        kept = [base for a in record.search("", "artifact", inv, 500)
+                if (base := str(((record.get(a["id"]).get("body") or {}).get("meta") or {}).get("baseline") or ""))]
+        if not kept or any(BASELINE_DIR in name for name in state["read"]) or any(BASELINE_DIR in c for c, _ in state["ran"]):
+            return ""
+        return (f"refused: {q.get('code')} asks about the original, and you haven't looked at it: the working files may "
+                f"already be fixed, and what they show says nothing about a claim on the original. read_file('{kept[0]}') "
+                "or run that copy, then give your verdict from it.")
 
     def _open_experiment() -> str:
         """The experiment a run under this order executes when the seat didn't name it: the one it wrote on the
@@ -731,8 +784,6 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             return out + _tail(c, meter)
         return out + _tail(res, meter)
 
-    told_of_draws: set[str] = set()
-
     def review(node: str, verdict: str, method: str, notes: str) -> str:
         """Review a claim or result: checked | pass | fail | objection | resolved | inconclusive | comment. method:
         how you checked, in a full sentence; notes: what you found. Never your own author's work."""
@@ -744,15 +795,10 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                              f"Method, continued: {method[cut:].strip()}\n\n{notes}"[:4000])
         try:
             target = record.resolve(node, inv)
-            if verdict.strip().lower() in ("objection", "fail") and target not in told_of_draws:
-                # E3: 81 of 1,000 objected to because a reviewer's own run gave 106, on code that gives about 98 ± 9
-                spread = _draws(target)
-                if spread:
-                    told_of_draws.add(target)
-                    return (f"not recorded yet: the instrument re-ran this and it varies from run to run ({spread}), so "
-                            "a different number from your own run is another draw, not an error. If that is your only "
-                            "objection, review it checked and put the spread in your notes. If something else is wrong, "
-                            "send the objection again and say what.")
+            if verdict.strip().lower() in ("objection", "fail"):
+                why = _unseen_original(target) or _another_draw(target, f"{method} {notes}")
+                if why:
+                    return why
             out = record.review(author=me, target=target, verdict=verdict.strip().lower(), method=method, notes=notes)
         except (GraphError, KeyError) as e:
             return _err(e)

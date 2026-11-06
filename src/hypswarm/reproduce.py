@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import math
 import re
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
@@ -146,9 +147,24 @@ def _moved(outputs: list[str]) -> list[list[float]]:
     return [list(col) for col in zip(*([float(x) for x in _ALONE.findall(o)] for o in outs)) if len(set(col)) > 1]
 
 
+def draw_band(lo: float, hi: float) -> tuple[float, float]:
+    """Where a fair draw can fall, given the lowest and highest numbers re-runs printed. Two or three re-runs can't show
+    that: a new draw falls outside three others half the time. On E3, 104 of 1,000 was called wrong against re-runs of 89
+    to 98, on code that gives about 98 ± 9, and all 14 objections made against a known range were to fair draws
+    (BC-250, 2026-11-06). A count scatters by about its square root, so for whole numbers the band reaches at least three
+    of those from the middle: about 1 fair draw in 100 falls outside. That root is an upper bound, and a count close to
+    its total scatters less, so there the band is wider than it needs to be. Otherwise it reaches the printed width."""
+    width = hi - lo
+    if lo >= 0 and float(lo).is_integer() and float(hi).is_integer():
+        middle = (lo + hi) / 2
+        reach = max(width, 3 * middle ** 0.5)
+        return math.floor(middle - reach), math.ceil(middle + reach)
+    return lo - width, hi + width
+
+
 def _holds(places: list[list[float]], centre: float) -> list[list[float]]:
-    """Those of ``places`` a value lies within about the width of. A draw can fall outside what three others printed."""
-    return [c for c in places if min(c) - (max(c) - min(c)) <= centre <= max(c) + (max(c) - min(c))]
+    """Those of ``places`` a value could be a fair draw of."""
+    return [c for c in places if draw_band(min(c), max(c))[0] <= centre <= draw_band(min(c), max(c))[1]]
 
 
 def _nameless_draws(values: dict[str, Any], chk: dict[str, Any], names: list[str],
@@ -424,8 +440,10 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
     parts = [f"{len(chk['confirmed'])} of {n} registered values confirmed by the output"
              + (f" ({', '.join(stated)} within the spread its author stated)" if stated else "")]
     for k, (lo, hi) in sampled.items():
-        parts.append(f"{k} varies from run to run (re-runs printed {lo:g} to {hi:g}): it is one draw, so a different "
-                     "number from another run is sampling, not an error; seed it or state its spread")
+        low, high = draw_band(lo, hi)
+        parts.append(f"{k} varies from run to run (re-runs printed {lo:g} to {hi:g}, so a fair draw falls within {low:g} "
+                     f"to {high:g}): it is one draw, so a different number from another run is sampling, not an error; "
+                     "seed it or state its spread")
     plain = [k for k in chk["unprinted"] if k not in sampled]
     if plain:
         parts.append(f"not printed by the code (not evidence against): {', '.join(plain)}")
