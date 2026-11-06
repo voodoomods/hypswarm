@@ -19,7 +19,7 @@ from .assemble import answers_block, null_over_a_checked_claim
 from .budget import Meter
 from .messages import Tool
 from .record import Record
-from .reproduce import TESTS_KEY, printed_by, runner_summary
+from .reproduce import TESTS_KEY, draw_band, printed_by, runner_summary
 from .seats import Seat
 from .world import BASELINE_DIR, about_the_original, withdrawn_by
 
@@ -320,13 +320,13 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                         return said.replace("refused: ", f"refused: {res['code']} came from the current files. ", 1)
         return ""
 
-    def _draws(target: str) -> str:
-        """What the instrument found to vary in the work a claim or result rests on: "name: lo to hi", or ''."""
+    def _draws(target: str) -> dict[str, tuple[float, float]]:
+        """What the instrument found to vary in the work a claim or result rests on: name -> (lo, hi) as re-runs printed."""
         n = record.get(target)
         results = [target] if n["type"] == "result" else [
             e["src"] for e in n["in"] if e["rel"] == "supports"] + [
             e["dst"] for e in n["out"] if e["rel"] == "derived_from"]
-        out: list[str] = []
+        out: dict[str, tuple[float, float]] = {}
         for rid in results:
             for e in record.get(rid)["in"]:
                 if e["rel"] != "produced":
@@ -334,8 +334,25 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                 for x in record.get(e["src"])["in"]:
                     if x["rel"] == "replicates":
                         config = (record.get(x["src"]).get("body") or {}).get("config") or {}
-                        out += [f"{k}: {lo:g} to {hi:g}" for k, (lo, hi) in (config.get("sampled") or {}).items()]
-        return "; ".join(dict.fromkeys(out))
+                        for k, (lo, hi) in (config.get("sampled") or {}).items():
+                            out[k] = min(lo, out[k][0]) if k in out else lo, max(hi, out[k][1]) if k in out else hi
+        return out
+
+    def _another_draw(target: str, said: str) -> str:
+        """The refusal for an objection that only sets one draw against another ('' = it isn't one): the number under
+        review is a fair draw of its own code, and the objection argues from a number that is too. Every objection to
+        E3's counts did, and being told once didn't stop them: the reviewer sent the same objection again (BC-250,
+        2026-11-06). An objection that argues from no such number is recorded: it is about something else."""
+        body = record.get(target).get("body") or {}
+        stated = _figures(str(body.get("statement") or body.get("summary") or ""))
+        for name, (lo, hi) in _draws(target).items():
+            low, high = draw_band(lo, hi)
+            if any(low <= x <= high for x in stated) and any(low <= x <= high for x in _figures(said)):
+                return (f"refused: {name}: {lo:g} to {hi:g}, so anything from {low:g} to {high:g} is a fair draw of this "
+                        "code. The number under review is inside that, so a different number from your own run is another "
+                        "draw, not an error, and an objection can't rest on it. Review it checked and put the range in "
+                        "your notes. If something else is wrong, object and say what, without comparing counts.")
+        return ""
 
     def _not_the_original(code: str, answers: str) -> str:
         """The refusal for a run on the current files that answers a question about the original. A file a fix changes
@@ -731,8 +748,6 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             return out + _tail(c, meter)
         return out + _tail(res, meter)
 
-    told_of_draws: set[str] = set()
-
     def review(node: str, verdict: str, method: str, notes: str) -> str:
         """Review a claim or result: checked | pass | fail | objection | resolved | inconclusive | comment. method:
         how you checked, in a full sentence; notes: what you found. Never your own author's work."""
@@ -744,15 +759,10 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                              f"Method, continued: {method[cut:].strip()}\n\n{notes}"[:4000])
         try:
             target = record.resolve(node, inv)
-            if verdict.strip().lower() in ("objection", "fail") and target not in told_of_draws:
-                # E3: 81 of 1,000 objected to because a reviewer's own run gave 106, on code that gives about 98 ± 9
-                spread = _draws(target)
-                if spread:
-                    told_of_draws.add(target)
-                    return (f"not recorded yet: the instrument re-ran this and it varies from run to run ({spread}), so "
-                            "a different number from your own run is another draw, not an error. If that is your only "
-                            "objection, review it checked and put the spread in your notes. If something else is wrong, "
-                            "send the objection again and say what.")
+            if verdict.strip().lower() in ("objection", "fail"):
+                why = _another_draw(target, f"{method} {notes}")
+                if why:
+                    return why
             out = record.review(author=me, target=target, verdict=verdict.strip().lower(), method=method, notes=notes)
         except (GraphError, KeyError) as e:
             return _err(e)

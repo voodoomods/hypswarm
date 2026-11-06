@@ -221,4 +221,4 @@ def test_a_seats_call_reaches_the_reviewer_as_a_draw(tmp_path):
     out = asyncio.run(reproduce_result(rec, inv, rec.resolve("RS1", inv), lambda c: next(printed)))
     assert out["ok"]
     said = _review_tool(rec, inv, "CL1")("CL1", "objection", "I ran the sampler once myself.", "I got 88, not 100.")
-    assert said.startswith("not recorded yet") and "repeats: 92 to 108" in said, said
+    assert said.startswith("refused") and "repeats: 92 to 108" in said, said

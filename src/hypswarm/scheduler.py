@@ -92,8 +92,8 @@ def _changers(gates: Sequence[dict[str, Any]]) -> set[str]:
 RERUN = ("what the instrument's re-run confirmed. A confirmed value is one the code really printed, no more: the re-run "
          "doesn't show the code computes the right thing. So read how each number was computed, and work out any p-value or "
          "test statistic a second way yourself. Otherwise recompute only a value the re-run CONTRADICTED; a value merely not "
-         "printed is not evidence against. A value the instrument says varies from run to run is one draw: your own "
-         "run will differ, and that is no objection unless it falls well outside that range")
+         "printed is not evidence against. The instrument says when a value varies from run to run, and the range a "
+         "fair draw falls in: your own run will differ, and a number inside that range is no objection")
 JUDGE = ("Judge whether the method and the numbers answer the question, and record a verdict: checked when they hold "
          "(put any wording point in your notes); objection only when the answer, a number in the claim or the method "
          "is wrong — an objection sends the whole claim back for rework. A claim must itself state the answer: 'it "

@@ -315,15 +315,15 @@ def _review_tool(rec, inv, node):
                                                Meter(Budget(max_calls=50)))}["review"]
 
 
-def test_a_different_draw_is_not_an_objection_the_first_time(tmp_path):
+def test_a_different_draw_is_not_an_objection(tmp_path):
     work, rec, inv = _record(tmp_path)
     _claim_on_a_draw(work, rec, inv)
     review = _review_tool(rec, inv, "CL1")
     first = review("CL1", "objection", "I ran the sampler once myself.", "I got 106, not 100.")
-    assert first.startswith("not recorded yet") and "hits: 96 to 112" in first, first
+    assert first.startswith("refused") and "hits: 96 to 112" in first, first
     assert not [e for e in rec.get(rec.resolve("CL1", inv))["in"] if e["rel"] == "reviews"]
     second = review("CL1", "objection", "I ran the sampler once myself.", "It also counts the wrong thing.")
-    assert not second.startswith("not recorded"), second
+    assert not second.startswith("refused"), second
 
 
 def test_a_steady_claim_can_be_objected_to_at_once(tmp_path):
@@ -332,7 +332,7 @@ def test_a_steady_claim_can_be_objected_to_at_once(tmp_path):
     tools["register_run"](name="tests", result_summary="pytest on the changed calc.py", code=RUN_TESTS, answers="Q2",
                           claim="All tests in test_calc.py pass on the changed calc.py.")
     review = _review_tool(rec, inv, "CL1")
-    assert not review("CL1", "objection", "I read the claim against its run.", "It is wrong.").startswith("not recorded")
+    assert not review("CL1", "objection", "I read the claim against its run.", "It is wrong.").startswith("refused")
 
 
 def test_a_rework_names_what_this_work_already_measured(tmp_path):

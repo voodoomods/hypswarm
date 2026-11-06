@@ -12,6 +12,10 @@ Found running the harder challenges on gpt-oss-20b on a local BC-250.
   instrument now runs such code again, and if outputs of the same shape differ, a value within the range of the numbers
   that moved is reported as varying. It's never called contradicted on an unnamed number, and a test run's output isn't
   read this way. Code that prints the same thing twice isn't run a third time.
+- **Reviewers can't object to a fair draw.** The range of two or three re-runs was taken for the range of the code, but a
+  new draw falls outside three others half the time, so right counts drew objections until the budget ran out. The
+  instrument now gives the range a fair draw falls in, and a value inside it counts as one. An objection that sets one
+  fair draw against another is refused; an objection about anything else is recorded as before.
 - **A stale answer can be written again.** The order to redo a stale answer says to write the claim again, and the guard
   against copies refused it, so a seat that measured the same right answer was told "already answers" until the order
   escalated. A claim that says a stale answer again now passes and replaces it, so the stale one stops holding the
