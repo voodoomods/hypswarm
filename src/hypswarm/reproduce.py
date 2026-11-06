@@ -18,7 +18,7 @@ from __future__ import annotations
 import inspect
 import logging
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
 from .record import INSTRUMENT, Record
@@ -94,6 +94,44 @@ def _labelled(name: str, stdout: str) -> list[float]:
         except ValueError:
             continue
     return out
+
+
+_LITERAL = re.compile(r"\d+(?:\.\d+)?")
+_ALONE = re.compile(r"(?<![\w.])-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\w.])")
+
+
+def _lone_number(stdout: str) -> float | None:
+    """The number the program printed, when it printed exactly one ('92', 'repeated_winners 96')."""
+    found = _ALONE.findall(stdout.partition("\n[stderr]\n")[0])
+    return float(found[0]) if len(found) == 1 else None
+
+
+def _in_the_source(values: dict[str, Any], source: str) -> bool:
+    """Every one of these values is a literal in the code: the 1000 of ``for _ in range(1000)``."""
+    return not check_output(values, " ".join(_LITERAL.findall(source)))["unprinted"]
+
+
+def printed_by(values: dict[str, Any], ran: Sequence[tuple[str, str]]) -> str:
+    """The code among a seat's python calls, latest first, whose output shows these values: what a result registered
+    with no code was computed by. Seats run the code and then register the number: 9 of the 15 counts behind E3's
+    claims were never re-run, so nothing could say they vary (BC-250, 2026-11-05). A value left unprinted
+    has to be a literal in the code. This only gives the instrument something to re-run; a re-run still has to show the
+    value before anything is credited."""
+    for source, out in reversed(ran):
+        chk = check_output(values, out)
+        if chk["confirmed"] and not chk["contradicted"] and _in_the_source(
+                {k: values[k] for k in chk["unprinted"]}, source):
+            return source
+    return ""
+
+
+def _unnamed_value(values: dict[str, Any], chk: dict[str, Any], stdout: str, source: str) -> str:
+    """The registered value an output's only number has to be speaking of, or ''. ``print(cnt)`` prints no name, so
+    the value counts as unprinted and a different number never looked like a draw."""
+    if _lone_number(stdout) is None:
+        return ""
+    open_ = [k for k in chk["unprinted"] if k != TESTS_KEY and not _in_the_source({k: values[k]}, source)]
+    return open_[0] if len(open_) == 1 else ""
 
 
 def _spread(v: Any) -> tuple[float, float] | None:
@@ -327,7 +365,8 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
         chk = check_output(values, stdout)
     sampled: dict[str, tuple[float, float]] = {}
     numeric = [k for k in chk["contradicted"] if k != TESTS_KEY]
-    if numeric and not err and all(_labelled(k, stdout) for k in numeric):
+    unnamed = "" if err or numeric else _unnamed_value(values, chk, stdout, source)
+    if unnamed or (numeric and not err and all(_labelled(k, stdout) for k in numeric)):
         # a different number next to the value's name: an error, or a draw. Only running it again can tell
         outs = [stdout]
         for _ in range(2):
@@ -336,7 +375,16 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
                 outs.append(str(await again if inspect.isawaitable(again) else again))
             except Exception as e:  # noqa: BLE001 — one re-run the fewer; the value stays contradicted unless the rest move
                 log.info("a further re-run of %s failed: %s", run["code"], e)
+        if unnamed:
+            seen = [x for x in map(_lone_number, outs) if x is not None]
+            outs = [f"{unnamed} {x}" for x in seen]
+            if len(set(seen)) > 1:
+                chk["unprinted"].remove(unnamed)
+                chk["contradicted"].append(unnamed)
         sampled = _sampled(values, chk, outs)
+        if unnamed in chk["contradicted"]:          # a number with no name can show a value varies, not that it's wrong
+            chk["contradicted"].remove(unnamed)
+            chk["unprinted"].append(unnamed)
     n = len([k for k in values if k in chk["confirmed"] or k in chk["unprinted"] or k in chk["contradicted"]])
     stated = [k for k in chk.get("within") or [] if k not in sampled]
     parts = [f"{len(chk['confirmed'])} of {n} registered values confirmed by the output"
@@ -418,5 +466,5 @@ async def reproduce_result(record: Record, inv: str, result_id: str, reproducer:
             "supported": supported}
 
 
-__all__ = ["TESTS_KEY", "Reproducer", "check_output", "claim_rests_on", "claims_to_support", "live_version", "reproduce_result",
+__all__ = ["TESTS_KEY", "Reproducer", "check_output", "claim_rests_on", "claims_to_support", "live_version", "printed_by", "reproduce_result",
            "runner_summary"]

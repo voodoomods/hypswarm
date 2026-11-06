@@ -4,6 +4,12 @@
 
 Found running the harder challenges on gpt-oss-20b on a local BC-250.
 
+- **A number registered with no code takes the code that printed it.** Seats ran `python` and then registered the
+  number alone, so the instrument had nothing to re-run. `register_run` now uses the seat's latest python call whose
+  output shows those values, and a re-run still has to show them before anything is credited.
+- **A lone number can show a value varies.** `print(cnt)` prints no name, so a different count read as "not printed"
+  and was never run again. When an output's only number can only be one registered value, the instrument runs it
+  again. If the runs differ, the value is reported as varying. It's never called contradicted on an unnamed number.
 - **Test runs reach the instrument.** The software prompt asks for the exact test command, and seats gave it:
   `python -m pytest test_x.py` ran as Python source, a SyntaxError on every re-run. A test run registered with no values
   got "0 of 0 confirmed", inconclusive. Neither ever met `tests_pass_current`, so both code-fix challenges settled
