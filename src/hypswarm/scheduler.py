@@ -527,8 +527,14 @@ class Scheduler:
                     claim = self.r.resolve(code, self.inv)
                 except (GraphError, KeyError, IndexError):
                     claim = ""
-                if claim and claim not in busy_targets and not self._stale(claim):
-                    self._issue_review_on(q, gates[rev], claim, code, text, busy_targets, reviews_only=reviews_only)
+                if claim and not self._stale(claim):
+                    if claim not in busy_targets:
+                        self._issue_review_on(q, gates[rev], claim, code, text, busy_targets, reviews_only=reviews_only)
+                    # the review decides what stands; a work order beside it only adds another answer to check. S3 on
+                    # the BC-250 (fx1, fx2, 2026-11-07): a `run` order went out at every round beside the review —
+                    # the run gate read "no run executes an experiment" on a measured question — and the seats filed
+                    # 11 claims on 3 questions, each new one unchecked, so nothing settled
+                    continue
             if q["question"] in busy_targets:
                 continue
             if first["gate"] in _REVIEW_GATES:
