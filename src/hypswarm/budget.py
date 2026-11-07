@@ -61,6 +61,7 @@ class Meter:
     by_unit: dict[str, Usage] = field(default_factory=dict)
     pending: int = 0                                 # calls reserved and not yet completed
     pending_by_unit: dict[str, int] = field(default_factory=dict)
+    in_flight: set[str] = field(default_factory=set)  # units with an order running now (the scheduler keeps it)
 
     def add(self, unit: str, input_tokens: int, cached_tokens: int, output_tokens: int) -> None:
         usd = self.pricing.usd(input_tokens, cached_tokens, output_tokens) if self.pricing else 0.0
@@ -111,14 +112,17 @@ class Meter:
             self.pending_by_unit[unit] -= 1
 
     def left_for(self, unit: str = "") -> int:
-        """Calls ``unit`` can still make, counting the call about to be made: the run's — minus the report's hold
-        and the calls in flight — or its own cap, whichever is smaller. A worker closes its order on this, not on
-        its turn limit alone: a reviewer with 14 turns was cut off by the run after 9 and never gave its verdict
-        (BC-250 pa1, S2, 2026-11-07)."""
+        """Calls ``unit`` can still make, counting the call about to be made: its share of the run's — minus the
+        report's hold and the calls in flight, divided among the orders running now — or its own cap, whichever is
+        smaller. A worker closes its order on this, not on its turn limit alone: a reviewer with 14 turns was cut
+        off by the run after 9 and never gave its verdict (BC-250 pa1, S2, 2026-11-07). The share is what the run
+        can really give it: with three orders in flight and ten calls left, each was told ten, they spent them
+        three at a time, and the reviewer was cut off mid-review again (fx1, S3, the same day)."""
         held = 0 if unit == "report" else min(self.budget.report_calls, self.budget.max_calls // 5)
         run_left = self.budget.max_calls - held - self.total.calls - self.pending
+        share = max(1, len(self.in_flight | ({unit} if unit else set())))
         own = self.budget.per_order_calls - self.by_unit.get(unit, Usage()).calls - self.pending_by_unit.get(unit, 0)
-        return max(0, min(run_left, own))
+        return max(0, min(run_left // share, own))
 
     def orders_spent(self) -> bool:
         """Only the report's calls (or none) are left: no order can make another call."""
