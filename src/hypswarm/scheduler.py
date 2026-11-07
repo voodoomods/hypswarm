@@ -82,7 +82,9 @@ def on_the_original(question: str, text: str, *, kept: bool) -> str:
     if not (kept and about_the_original(text)):
         return ""
     return (f" {question} asks about the original, which no fix changes: judge this on the copy under {BASELINE_DIR}/, "
-            "by reading or running it. The working files may already be fixed, so what they show is no objection.")
+            "by reading or running it. The working files may already be fixed, so what they show is no objection. To run "
+            f"its tests name the test file under {BASELINE_DIR}/: pytest puts a test's own folder first on the path, so "
+            f"setting the path to {BASELINE_DIR} still tests the working files.")
 
 
 READ_ONLY = (" This stage reads the working files as they are: don't edit them — a new head supersedes the code every "
