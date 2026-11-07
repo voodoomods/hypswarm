@@ -110,6 +110,16 @@ class Meter:
             self.pending -= 1
             self.pending_by_unit[unit] -= 1
 
+    def left_for(self, unit: str = "") -> int:
+        """Calls ``unit`` can still make, counting the call about to be made: the run's — minus the report's hold
+        and the calls in flight — or its own cap, whichever is smaller. A worker closes its order on this, not on
+        its turn limit alone: a reviewer with 14 turns was cut off by the run after 9 and never gave its verdict
+        (BC-250 pa1, S2, 2026-11-07)."""
+        held = 0 if unit == "report" else min(self.budget.report_calls, self.budget.max_calls // 5)
+        run_left = self.budget.max_calls - held - self.total.calls - self.pending
+        own = self.budget.per_order_calls - self.by_unit.get(unit, Usage()).calls - self.pending_by_unit.get(unit, 0)
+        return max(0, min(run_left, own))
+
     def orders_spent(self) -> bool:
         """Only the report's calls (or none) are left: no order can make another call."""
         try:

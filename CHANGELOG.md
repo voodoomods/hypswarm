@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **A worker's closing turns count the run's remaining calls, not only its own.** A reviewer with 14 turns on paper
+  was cut off by the run's budget after 9 calls and never gave its verdict (BC-250 pa1, S2, 2026-11-07); the closing
+  turns — only `review` for a reviewer, only the writing tools for a worker — were keyed on the order's turn limit.
+  They now come at whichever ends first: the order's turns or the calls the run can still give it.
+- **Past the warning threshold a review of a live answer is still issued; nothing else is.** Runs ended at the
+  threshold with an unchecked claim on the board and calls to spare before the report's hold (pa1: S3 at 151 calls,
+  T3 at 153 of 160). The scheduler now issues one kind of order past it — a review that could settle a question —
+  under both the board and the workflow paths, and never a work, rework-to-worker or refresh order. Event
+  `late_review`. Whether it moves the budget stops is measured on the box, not assumed.
+
 ## 0.1.0a15 — 2026-11-07: reviewers reach the original and the better source
 
 Requires hypgraph 0.8.6 (a claim that is a question, or a figure's name where the figure belongs, says nothing).

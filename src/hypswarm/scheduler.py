@@ -500,7 +500,7 @@ class Scheduler:
             return None
         return max(idle, key=lambda s: (fit(s, f"{who} {text}", "question"), -self.seats.index(s)))
 
-    def _assign_from_stages(self, rows: list[dict[str, Any]]) -> None:
+    def _assign_from_stages(self, rows: list[dict[str, Any]], reviews_only: bool = False) -> None:
         busy_targets = {o["target_id"] for o in self.r.orders(self.inv) if o["status"] in ("open", "overdue", "returned")}
         board = self.r.question_board(self.inv)
         answered = {b["id"]: b for b in board if b["status"] == "answered"}
@@ -526,11 +526,13 @@ class Scheduler:
                 except (GraphError, KeyError, IndexError):
                     claim = ""
                 if claim and claim not in busy_targets and not self._stale(claim):
-                    self._issue_review_on(q, gates[rev], claim, code, text, busy_targets)
+                    self._issue_review_on(q, gates[rev], claim, code, text, busy_targets, reviews_only=reviews_only)
             if q["question"] in busy_targets:
                 continue
             if first["gate"] in _REVIEW_GATES:
-                self._issue_review_stage(q, gates, i, text, busy_targets)
+                self._issue_review_stage(q, gates, i, text, busy_targets, reviews_only=reviews_only)
+                continue
+            if reviews_only:
                 continue
             run = []
             for gt in gates[i:]:
@@ -561,7 +563,7 @@ class Scheduler:
                     self._after_settled[key] = self._after_settled.get(key, 0) + 1
 
     def _issue_review_stage(self, q: dict[str, Any], gates: list[dict[str, Any]], i: int, text: str,
-                            busy_targets: set[str]) -> None:
+                            busy_targets: set[str], reviews_only: bool = False) -> None:
         """A review stage: the order goes to a reviewer who didn't write the node, on the node the reviewed gate
         produced (the newest claim for `reviewed`, the solve result for `result_reviewed`)."""
         first = gates[i]
@@ -591,8 +593,8 @@ class Scheduler:
         if unchecked:
             fresh = unchecked
         if fresh:
-            self._issue_review_on(q, first, fresh[-1][1], fresh[-1][0], text, busy_targets)
-        elif ids:
+            self._issue_review_on(q, first, fresh[-1][1], fresh[-1][0], text, busy_targets, reviews_only=reviews_only)
+        elif ids and not reviews_only:
             self._issue_refresh(q, gates, i, text, ids[-1][0], ids[-1][1], busy_targets)
 
     def _beside(self, question: str, code: str) -> str:
@@ -637,13 +639,13 @@ class Scheduler:
             busy_targets.add(q["question"])
 
     def _issue_review_on(self, q: dict[str, Any], first: dict[str, Any], target: str, code: str, text: str,
-                         busy_targets: set[str]) -> None:
+                         busy_targets: set[str], reviews_only: bool = False) -> None:
         if target in busy_targets:
             return
         author = self.r.get(target)["by"]
         pool = [s for s in self.reviewers if s.name != author]
         if not pool:
-            if target in self._reissued or q["question"] in busy_targets:
+            if reviews_only or target in self._reissued or q["question"] in busy_targets:
                 return
             self._reissued.add(target)
             worker = self._pick(self.workers, text, "question")
@@ -663,19 +665,26 @@ class Scheduler:
                      + self._beside(q["question"], code))
         if seat and self._issue(seat, target, objective, [{"p": first["gate"]}]):
             self._ev("stage_order", question=q["code"], stage=first["stage"], gates=[first["gate"]], seat=seat.name)
+            if reviews_only:
+                self._ev("late_review", question=q["code"], claim=code, seat=seat.name)
             busy_targets.add(target)
 
     def _assign(self) -> None:
-        if self.meter.warn():
-            return                                          # drain; the report is next
+        # Past the warning threshold nothing new is started — except a review of a live answer, which is all that
+        # stands between an answered question and a settled one. Runs ended at the threshold with an unchecked
+        # claim on the board and calls to spare before the report's hold (BC-250 pa1: S3 at 151 calls, T3 at 153
+        # of 160; 2026-11-07). Work orders are never issued past it.
+        late = self.meter.warn()
+        if late and self.meter.orders_spent():
+            return                                          # not even a review fits: drain; the report is next
         rows = self._stage_rows()
         if rows is not None:
-            self._assign_from_stages(rows)
+            self._assign_from_stages(rows, reviews_only=late)
             return
         board = self.r.question_board(self.inv)
         busy_targets = {o["target_id"] for o in self.r.orders(self.inv) if o["status"] in ("open", "overdue", "returned")}
         for q in board:
-            if q["status"] == "open" and q["id"] not in busy_targets:
+            if q["status"] == "open" and q["id"] not in busy_targets and not late:
                 seat = self._pick(self.workers, q["text"], "question")
                 if seat and self._issue(seat, q["id"], f"Answer {q['code']}: {q['text']}"):
                     busy_targets.add(q["id"])
@@ -690,7 +699,7 @@ class Scheduler:
                     # The only reviewer wrote the answer (a reviewer seat on a served record, an outside seat): nobody
                     # here may review it, so the question would never settle. Ask a worker for the answer instead —
                     # once per such claim; if the worker's answer doesn't displace it, the lead sees it in the report.
-                    if q["id"] in busy_targets or claim in self._reissued:
+                    if late or q["id"] in busy_targets or claim in self._reissued:
                         continue
                     self._reissued.add(claim)
                     worker = self._pick(self.workers, q["text"], "question")
@@ -707,7 +716,11 @@ class Scheduler:
                              + on_the_original(q["code"], q["text"], kept=bool(self.world and self.world.kept))
                              + self._beside(q["id"], code))
                 if seat and self._issue(seat, claim, objective, [{"p": "reviewed"}]):
+                    if late:
+                        self._ev("late_review", question=q["code"], claim=code, seat=seat.name)
                     busy_targets.add(claim)
+        if late:
+            return
         try:
             nx = self.r.next_experiments(self.inv, limit=10)
         except (GraphError, KeyError):
