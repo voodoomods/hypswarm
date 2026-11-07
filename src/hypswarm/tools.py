@@ -47,6 +47,28 @@ def _live(n: dict[str, Any]) -> bool:
     return (st.get("lifecycle") or "active") == "active" and not st.get("fallen")
 
 
+_SOURCE_RANK = {"primary": 0, "secondary": 1, "tertiary": 2}      # a source's kind, as the knowledge profile names them
+
+
+def _is_file(url: str) -> bool:
+    """A source the seat can open with read_file: file:… or a bare relative path (K1's box2 wrote the path alone)."""
+    u = str(url or "").strip()
+    return bool(u) and (u.startswith("file:") or ("://" not in u and not u.startswith("10.") and not u.startswith("doi:")))
+
+
+def _file_key(name: str) -> str:
+    """One spelling for a file the seat read and a file a source names: no scheme, no ./, forward slashes."""
+    u = str(name or "").strip().removeprefix("file:").replace("\\", "/")
+    while u.startswith("./"):
+        u = u[2:]
+    return u.lstrip("/")
+
+
+def _kind_word(sources: list[dict[str, Any]]) -> str:
+    kinds = sorted({str((s.get("body") or {}).get("kind") or "").lower() for s in sources} - {""})
+    return " and ".join(kinds) or "source"
+
+
 _RUNS_TESTS = re.compile(r"\b(?:pytest|py\.test|unittest)\b")
 _IN_BASE = re.compile(r"""(?:cwd\s*=\s*['"]_base|\bcd\s+_base|chdir\(\s*['"]_base)""")
 _KEPT_TESTS = re.compile(r"""_base['"]?\s*(?:[/\\]+|,)\s*['"]?[\w./\\-]*test""")   # _base/test_x.py, or join('_base', 'test_x.py')
@@ -440,6 +462,46 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                 f"already be fixed, and what they show says nothing about a claim on the original. read_file('{kept[0]}') "
                 "or run that copy, then give your verdict from it.")
 
+    def _unread_better_source(target: str) -> str:
+        """The refusal for checking a claim that cites a source while the record holds a better one the reviewer
+        hasn't opened. On K1 "formally opened by the Mayor in 1889" cites the 2004 visitor guide (tertiary), and the
+        fact checker checked it twice in a row — "no contradictory source found" — having read the guide and the
+        retraction list, never the 1887 minutes the record cites on Q1, which say "without ceremony beyond a short
+        address" (BC-250, ho1 and ho2, 2026-11-07). The brief already says a primary source outranks a later summary
+        and to list what else is there first; this goes by what the seat did. Only file sources the seat can open,
+        only ones that outrank what the claim cites, never a withdrawn one; after reading it the seat may check or
+        object, and is recorded."""
+        if state["read"] is None:
+            return ""
+        try:
+            n = record.get(target)
+        except (GraphError, KeyError):
+            return ""
+        if n["type"] != "claim":
+            return ""
+        cited = [record.get(e["dst"]) for e in n["out"] if e["rel"] == "cites"]
+        if not cited:
+            return ""
+        worst = max(_SOURCE_RANK.get(str((s.get("body") or {}).get("kind") or "").lower(), 1) for s in cited)
+        read = {_file_key(x) for x in state["read"]}
+        opened = {_file_key(str((s.get("body") or {}).get("url") or "")) for s in cited}
+        for row in record.search("", "source", inv, 500):
+            s = record.get(row["id"])
+            body = s.get("body") or {}
+            kind = str(body.get("kind") or "").lower()
+            rank = _SOURCE_RANK.get(kind, 1)
+            url = str(body.get("url") or "")
+            if rank >= worst or not _is_file(url) or not _live(s):
+                continue
+            key = _file_key(url)
+            if key in read or key in opened or withdrawn_by(folder, url):
+                continue
+            path = url.strip().removeprefix("file:").lstrip("/")
+            return (f"refused: {n['code']} cites a {_kind_word(cited)} source, and the record holds a {kind} one you "
+                    f"haven't read: {s['code']} ({path}). A {kind} source outranks a later summary of it, and a check "
+                    f"that never opened it can't say they agree. read_file('{path}'), then give your verdict from both.")
+        return ""
+
     def _open_experiment() -> str:
         """The experiment a run under this order executes when the seat didn't name it: the one it wrote on the
         order's question that no run has executed. "" unless there is exactly one. A run registered with no experiment
@@ -822,6 +884,10 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             target = record.resolve(node, inv)
             if verdict.strip().lower() in ("objection", "fail"):
                 why = _unseen_original(target) or _another_draw(target, f"{method} {notes}")
+                if why:
+                    return why
+            if verdict.strip().lower() == "checked":
+                why = _unread_better_source(target)
                 if why:
                     return why
             out = record.review(author=me, target=target, verdict=verdict.strip().lower(), method=method, notes=notes)
