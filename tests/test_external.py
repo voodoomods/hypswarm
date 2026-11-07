@@ -13,11 +13,23 @@ from .test_alpha import TASK, lead_script, reviewer_script
 
 
 def _held(db) -> str:
+    """What the record held when an order came twice: the orders with when each was issued, the claims with when each
+    was written, and the record's own account of why it reworked (its events). The first such failure (2026-11-05)
+    showed only statuses — T1 reworked, T2 open on Q1, Q1 answered — which named no cause."""
+    from hypgraph import derive
     g = Graph(str(db))
     inv = g.investigations()[0]
     inv = inv["id"] if isinstance(inv, dict) else inv
-    orders = [(o["code"], o["target"], o["status"], o["assignee"], o["returned_note"]) for o in g.orders(inv)]
-    return f"orders: {orders}\nboard: {[(q['code'], q['status']) for q in g.question_board(inv)]}"
+    s = g.snapshot()
+    orders = [(o["code"], o["target"], o["status"], o["assignee"], o["returned_note"], s.nodes[o["id"]]["created_at"],
+               str(s.nodes[o["id"]]["body"].get("note") or "")[:200])
+              for o in g.orders(inv)]
+    claims = [(n["code"], n["created_by"], n["created_at"], derive.lifecycle(s, i))
+              for i, n in s.nodes.items() if n["type"] == "claim" and n["inv"] == inv]
+    events = [(e["seq"], e["kind"], e["actor"], e["at"], {k: str(v)[:160] for k, v in (e.get("payload") or {}).items()})
+              for e in g.events(inv=inv)["events"] if e["kind"] not in ("create", "link")]
+    return (f"orders: {orders}\nclaims: {claims}\nboard: {[(q['code'], q['status']) for q in g.question_board(inv)]}\n"
+            + "events:\n" + "\n".join(f"  {e}" for e in events))
 
 
 def test_an_external_seat_works_orders_over_mcp(tmp_path):
