@@ -17,6 +17,13 @@
   three at a time, and the critic was cut off by the run at 13 calls mid-review with no verdict. `Meter.left_for`
   now divides the run's remainder by the orders in flight (the scheduler keeps `Meter.in_flight`), so the closing
   turns come while the order can still finish.
+- **An answered question gets its review and nothing else.** Under a workflow the stage path issued the review of an
+  unchecked answer and, in the same round, a work order on the same question whenever an earlier gate still read
+  open. On S3 (BC-250, fx1 and fx2, 2026-11-07) the run gate read "no run executes an experiment" on a measured
+  question whose result and claim were both met — hypgraph's scope didn't count the run behind the result — so a
+  `run` order went out at every round beside the review, and the seats filed 11 claims on 3 questions, each new one
+  unchecked; nothing settled. The review decides what stands; more answers only join the queue. The gate itself is
+  fixed in hypgraph (the run that produced a result on the question is a run on the question).
 
 ## 0.1.0a15 — 2026-11-07: reviewers reach the original and the better source
 
