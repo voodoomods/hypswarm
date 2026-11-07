@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.1.0a15 — 2026-11-07: reviewers reach the original and the better source
+
+Requires hypgraph 0.8.6 (a claim that is a question, or a figure's name where the figure belongs, says nothing).
+
+- **A check on a claim citing a lesser source has to open the better source the record holds.** On K1 a fact checker
+  checked "formally opened by the Mayor in 1889" from a tertiary guide twice in a row, having read the guide and the
+  retraction list and never the primary minutes the record cites on another question. `review(checked)` is now refused
+  while a live file source of a better kind (primary over secondary over tertiary) is unread in the order, naming it;
+  after the read, checked or objection is recorded. Measured on a fresh challenge, eight runs against eight on the old
+  code: the primary gets opened and the reviewer then objects eight times in nine; it did not raise the settle rate,
+  costs calls in the runs where it fires, and one reviewer in nine still checked over the primary it had just read.
 - **A test run has to reach the original.** `PYTHONPATH=_base pytest test_semver.py` and `sys.path.insert(0, '_base')`
   with `pytest.main` still test the working file, because pytest puts a test's own folder first. A reviewer on E1 read
   the kept copy, reported that the original passes every test, where 3 of 6 fail, and a right answer was lost. An
