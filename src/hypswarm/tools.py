@@ -66,7 +66,7 @@ def _file_key(name: str) -> str:
 
 def _kind_word(sources: list[dict[str, Any]]) -> str:
     kinds = sorted({str((s.get("body") or {}).get("kind") or "").lower() for s in sources} - {""})
-    return " and ".join(kinds) or "source"
+    return (" and ".join(kinds) + " source") if kinds else "source of unstated kind"
 
 
 _RUNS_TESTS = re.compile(r"\b(?:pytest|py\.test|unittest)\b")
