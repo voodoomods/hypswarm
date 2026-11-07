@@ -49,6 +49,8 @@ def _live(n: dict[str, Any]) -> bool:
 
 _RUNS_TESTS = re.compile(r"\b(?:pytest|py\.test|unittest)\b")
 _IN_BASE = re.compile(r"""(?:cwd\s*=\s*['"]_base|\bcd\s+_base|chdir\(\s*['"]_base)""")
+_KEPT_TESTS = re.compile(r"""_base['"]?\s*(?:[/\\]+|,)\s*['"]?[\w./\\-]*test""")   # _base/test_x.py, or join('_base', 'test_x.py')
+_TEST_FILE = re.compile(r"(?:^|/)test_[^/]*$|_test\.[^/]*$")
 _RULES_ON_ALL = re.compile(r"\b(?:all|every|each|none|no|zero|never|always|any)\b", re.IGNORECASE)
 _TIME_UNIT = re.compile(r"^(?:s|secs?|seconds?|ms|msecs?|milliseconds?|us|µs|μs|microseconds?|ns|nanoseconds?)$",
                         re.IGNORECASE)
@@ -380,6 +382,10 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
                         "your notes. If something else is wrong, object and say what, without comparing counts.")
         return ""
 
+    def _tests_the_original(code: str) -> bool:
+        """Whether a test run reaches the kept copy: run from inside it, or on its own test file."""
+        return bool(_IN_BASE.search(code) or _KEPT_TESTS.search(code))
+
     def _not_the_original(code: str, answers: str) -> str:
         """The refusal for a run on the current files that answers a question about the original. A file a fix changes
         gives a different count, or a re-run contradicts the first one, so it has to run the copy under _base/. Only
@@ -411,7 +417,9 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         """The refusal for an objection to a claim about the original from a seat that hasn't looked at the original. On
         E3 a reviewer read the fixed raffle.py, objected that the code uses rng.sample, and a right cause stayed
         contested until the run stuck (BC-250, 2026-11-06). This goes by what the seat did, not what it says: after
-        looking at the kept copy it can object, and is recorded."""
+        looking at the kept copy it can object, and is recorded. Test runs have to reach it too: on E1 a reviewer read the
+        kept semver.py, reported that the original passes every test, where 3 of 6 fail, and a right answer was lost. With
+        sys.path.insert(0, '_base') or PYTHONPATH=_base, pytest test_semver.py still tests the fixed file."""
         if state["read"] is None:
             return ""
         asked = _claim_question(target)
@@ -420,7 +428,13 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
             return ""
         kept = [base for a in record.search("", "artifact", inv, 500)
                 if (base := str(((record.get(a["id"]).get("body") or {}).get("meta") or {}).get("baseline") or ""))]
-        if not kept or any(BASELINE_DIR in name for name in state["read"]) or any(BASELINE_DIR in c for c, _ in state["ran"]):
+        tests = [c for c, _ in state["ran"] if _RUNS_TESTS.search(c)]
+        kept_tests = [k for k in kept if _TEST_FILE.search(k)]
+        if kept_tests and tests and not state.get("ran_kept_tests") and not any(_tests_the_original(c) for c in tests):
+            return (f"refused: {q.get('code')} asks about the original, and your test runs ran the current files: pytest "
+                    f"puts a test's own folder first on the path, so setting the path to {BASELINE_DIR} doesn't reach the "
+                    f"original. Name the kept test: python -m pytest -q {kept_tests[0]}. Then give your verdict from that.")
+        if not kept or state.get("ran_kept_tests") or any(BASELINE_DIR in name for name in state["read"]) or any(BASELINE_DIR in c for c, _ in state["ran"]):
             return ""
         return (f"refused: {q.get('code')} asks about the original, and you haven't looked at it: the working files may "
                 f"already be fixed, and what they show says nothing about a claim on the original. read_file('{kept[0]}') "
@@ -682,6 +696,8 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         wrong_copy = _not_the_original(code, answers)
         if wrong_copy:
             return wrong_copy
+        if _RUNS_TESTS.search(code) and _tests_the_original(code):
+            state["ran_kept_tests"] = True
         no_claim = ""
         if seat.role == "reviewer" and claim.strip():
             # graph_add refuses this too; here the run and result are still evidence for the review. A reviewer's

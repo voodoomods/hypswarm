@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **A test run has to reach the original.** `PYTHONPATH=_base pytest test_semver.py` and `sys.path.insert(0, '_base')`
+  with `pytest.main` still test the working file, because pytest puts a test's own folder first. A reviewer on E1 read
+  the kept copy, reported that the original passes every test, where 3 of 6 fail, and a right answer was lost. An
+  objection to a claim about the original is now refused while the seat's test runs have only reached the current files,
+  and the review order says how to name the kept test.
+
 ## 0.1.0a14 — 2026-11-06: reviewers judge the right thing, and answers settle
 
 Found running the harder challenges on gpt-oss-20b on a local BC-250.
