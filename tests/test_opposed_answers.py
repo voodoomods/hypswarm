@@ -60,7 +60,7 @@ def test_an_unchecked_answer_from_another_order_is_reviewed_under_a_workflow():
     second = _answer(rec, inv, "stats", "A is right on 812 of 1000 items, counted again.", 812)
     s = Scheduler(rec, inv, seats, model_for=lambda seat: None, meter=Meter(Budget(max_calls=10)))  # type: ignore[arg-type,return-value]
     sent: list[str] = []
-    s._issue_review_on = lambda q, first_, target, code, text, busy: sent.append(code)  # type: ignore[method-assign]
+    s._issue_review_on = lambda q, first_, target, code, text, busy, **kw: sent.append(code)  # type: ignore[method-assign]
     gates = [{"gate": "claim_made", "met": True, "evidence": [first["code"]], "who": "analyst"},
              {"gate": "reviewed", "met": False, "evidence": [], "who": "critic", "stage": "reviewed"}]
     q = {"question": rec.resolve("Q1", inv), "code": "Q1"}

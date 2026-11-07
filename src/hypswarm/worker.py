@@ -78,13 +78,17 @@ async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, orde
                 Message("user", record.order_text(order))]
     closing = False
     for _turn in range(seat.max_turns):
+        # turns left: the order's own, or the calls the run can still give it, whichever ends first — the run's
+        # budget cut reviewers off before their turn limit, so the closing turns below never came (BC-250 pa1, S2:
+        # 14 turns on paper, 9 calls, no verdict; 2026-11-07)
+        left = min(seat.max_turns - _turn, meter.left_for(code))
         try:
             meter.reserve(code)                     # the claim on the budget is made before the call, not after
         except BudgetExhausted as e:
             res.stopped = f"budget: {e}"
             break
         offered = tools
-        if _closing(seat, state, seat.max_turns - _turn) and "review" in by:
+        if _closing(seat, state, left) and "review" in by:
             # A reviewer's order ends on its verdict, not on its turn limit: reviewers re-ran the claim's code turn
             # after turn and the order ran out with no review (studies E6: 1 review in 5 reviewer orders). The last
             # two turns offer only `review` — two, so a refused review gets its retry.
@@ -92,7 +96,7 @@ async def run_order(seat: Seat, model: ChatModel, record: Record, inv: str, orde
             if not closing:
                 messages.append(Message("user", CLOSING_REVIEW))
                 closing = True
-        elif _closing_work(seat, seat.max_turns - _turn) and any(n in by for n in WRITING):
+        elif _closing_work(seat, left) and any(n in by for n in WRITING):
             # An order ran out of turns 60 times in 16 runs, 826 of about 1,900 calls, with its last calls mostly
             # refused writes and 15 of the 60 having written nothing (BC-250, 2026-11-05). As with a reviewer's verdict.
             offered = [by[n] for n in WRITING if n in by]
