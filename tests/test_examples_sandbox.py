@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "examples"))
-from _common import python_sandbox  # noqa: E402
+from _common import python_sandbox
 
 
 def test_a_raw_non_utf8_byte_doesnt_lose_the_output(tmp_path):
