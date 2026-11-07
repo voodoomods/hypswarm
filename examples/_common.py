@@ -87,8 +87,11 @@ def python_sandbox(folder: Path, seconds: int = 60) -> Any:
         """Run python 3 in your working folder (the data files are there); print what you need. Write scratch
         files (copies, patches, notes) under tempfile.gettempdir(), not the working folder."""
         try:
-            p = subprocess.run([sys.executable, "-E", "-s", "-c", as_python(code)], check=False, cwd=folder, capture_output=True, text=True,
-                               timeout=seconds, env=env)
+            # -X utf8 on the child (-E would ignore PYTHONUTF8) and a replacing decoder on this side: on Windows a
+            # seat's print of an en dash came out as cp1252 byte 0x96, the UTF-8 reader thread died on it, and the
+            # call's whole output was lost — E1 spent 158 calls on nothing (BC-250, pa1, 2026-11-07)
+            p = subprocess.run([sys.executable, "-X", "utf8", "-E", "-s", "-c", as_python(code)], check=False, cwd=folder,
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=seconds, env=env)
         except subprocess.TimeoutExpired:
             return f"error: no output within {seconds} s"
         out = p.stdout + ("\n[stderr]\n" + p.stderr if p.stderr.strip() else "")
