@@ -11,6 +11,12 @@
   T3 at 153 of 160). The scheduler now issues one kind of order past it — a review that could settle a question —
   under both the board and the workflow paths, and never a work, rework-to-worker or refresh order. Event
   `late_review`. Whether it moves the budget stops is measured on the box, not assumed.
+- **The calls left to an order are its share among the orders in flight.** Measured on the box after the two rules
+  above (fx1, 2026-11-07): the late review settled T2's Q2 and gave E4 its verdict, but S3 was cut off exactly as
+  before — at call 121 three orders were running, each was told the whole remainder (~10 calls), they spent it
+  three at a time, and the critic was cut off by the run at 13 calls mid-review with no verdict. `Meter.left_for`
+  now divides the run's remainder by the orders in flight (the scheduler keeps `Meter.in_flight`), so the closing
+  turns come while the order can still finish.
 
 ## 0.1.0a15 — 2026-11-07: reviewers reach the original and the better source
 

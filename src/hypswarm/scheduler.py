@@ -282,6 +282,8 @@ class Scheduler:
                                                  folder=self.folder))
         self._order_spans[task] = sp
         self.inflight[task] = (seat, order)
+        if not seat.external:
+            self.meter.in_flight.add(code)              # its closing turns are its share of what's left, not all of it
         escalated = bool(escalate and seat.escalate_to and seat.escalate_to != seat.model and not seat.external)
         if escalated:
             self.res.model_escalations += 1
@@ -794,6 +796,7 @@ class Scheduler:
             for t in done:
                 seat, order = self.inflight.pop(t)
                 self.busy.pop(seat.name, None)
+                self.meter.in_flight.discard(self.r.get(order)["code"])
                 try:
                     wr = t.result()
                 except Exception as e:  # noqa: BLE001
@@ -820,6 +823,7 @@ class Scheduler:
                         self._ev("hook_error", why=str(e)[:200])
         for t in list(self.inflight):                       # drain anything still running (budget stop)
             t.cancel()
+            self.meter.in_flight.discard(self.r.get(self.inflight[t][1])["code"])
             self.tel.end(self._order_spans.pop(t, ""), ok=False, error="cancelled: the run stopped")
         if self._stop and not self.res.stopped:
             self.res.stopped = "stopped"                    # the host called stop(); the record keeps the open orders
