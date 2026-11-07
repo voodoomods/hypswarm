@@ -264,7 +264,7 @@ HypSwarm needs HypGraph's coordination layer and its workflows, and the claim ch
 on the first try, which ship with hypgraph 0.8.4:
 
 ```bash
-pip install --pre hypswarm                 # pulls hypgraph>=0.8.5; --pre while it is an alpha
+pip install --pre hypswarm                 # pulls hypgraph>=0.8.6; --pre while it is an alpha
 ```
 
 ## Disclaimer
