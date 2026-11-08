@@ -26,6 +26,28 @@
   that shows it, on the leak and on T1 (one run each), and one leak run recorded a paper position beside its
   no-position decision. Two of the six ended stuck, both on T1.
 
+- **The backtest code computes the conclusions as well as the figures.** With the figures fixed, reviewers re-ran the
+  code, saw the numbers match and stopped, so "does not exhibit look-ahead" was checked on the delayed figure that
+  shows it. `BACKTEST_CODE` now registers two more values, and nothing else decides them: `look_ahead` (1: the lead
+  over buy and hold is gone one bar later) and `edge` (1: a lead still there with the signal a bar late). A claim about
+  look-ahead says what `look_ahead` says, a claim or decision about a position says what `edge` says, and the reviewer
+  writes both from the re-run and objects to words that disagree with them. Measured on the box (gpt-oss-20b, 160
+  calls a run, 2026-11-08; T1, the leak and the control; report answers read by hand):
+
+  | | figures in code | figures and conclusions in code |
+  |---|---|---|
+  | runs | 6 | 9 |
+  | report answers right | 16.5 of 18 | 27 of 27 |
+  | runs with a wrong conclusion checked | 2 | 0 |
+  | runs with contradictory decisions | 1 | 0 |
+  | questions settled | 17 of 18 | 24 of 27 |
+  | budget stops | 0 | 1 |
+  | calls per run | 112 | 118 |
+
+  Few runs, so the drop in wrong checks alone is not significant (2 of 6 against 0 of 9, one-sided p = 0.14). Three
+  runs ended stuck with a question unsettled or an objection open, and the code does not stop a seat writing a figure
+  wrongly: one leak run had 94.7 % checked as "0.947 %".
+
 - **Requires hypgraph 0.8.7.** A run with an external seat could lose a claim: the scheduler and the MCP server the
   seat works through are two Graphs on one file, and a claim committed while the scheduler was loading its snapshot
   could reach it without its `answers` edge. The scheduler then found no claim on an answered question, reworked the
