@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.0a16 — 2026-11-08: a conclusion is read against the record's other answers
+
+Requires hypgraph 0.8.6, as a15 did. The run-gate fix the last entry below names is on hypgraph's main and not yet
+released; this release does not depend on it (an answered question gets its review and nothing else, in the
+scheduler).
+
 - **A conclusion gets one focused reading against the record's other answers before it stands.** With the sibling
   answers listed inside the ordinary review order (#55) the critic read them and wrote "no conflict": S3's "the
   supplement arm has a lower mean steps_k" beside Q2's "none of the 20 outcomes remain significant after Holm", and
