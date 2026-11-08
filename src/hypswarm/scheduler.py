@@ -618,6 +618,40 @@ class Scheduler:
                 "reproduce (a re-run confirms the numbers, not what they mean). The question settles only when every "
                 "live answer to it is checked.")
 
+    def _elsewhere(self, question: str, code: str) -> str:
+        """For every review: the checked answers on the record's other questions, with what they say. The critic checked
+        'the supplement reduces steps_k' with 'no outcome survives correction for the 20 tested' already checked on Q2
+        of the same record, and 'A is more accurate once difficulty is taken into account' with 'B is better on easy
+        items and on hard items' checked on Q2 (BC-250 rb1, S3 and S1, 2026-11-07): it recomputed the numbers, they
+        matched, and nothing it was shown held the sibling answers the claim contradicted."""
+        lines: list[str] = []
+        for row in self.r.question_board(self.inv):
+            if row["id"] == question:
+                continue
+            for c in row.get("answers") or []:
+                if c == code or c in (row.get("unchecked") or []):
+                    continue
+                try:
+                    nid = self.r.resolve(c, self.inv)
+                    if self._review_state(nid) != "checked":
+                        continue
+                    said = str((self.r.get(nid).get("body") or {}).get("statement") or "").strip()
+                except (GraphError, KeyError):
+                    continue
+                if len(said) > 160:
+                    said = said[:157].rstrip() + "..."
+                lines.append(f"{row['code']} — {c}: \"{said}\"" if said else f"{row['code']} — {c}")
+                if len(lines) >= 6:
+                    break
+            if len(lines) >= 6:
+                break
+        if not lines:
+            return ""
+        return (" Checked answers already stand on the record's other questions: " + "; ".join(lines) + f". Read {code} "
+                "beside them: it may rest on them or contradict them. An answer that contradicts a checked answer is "
+                "wrong, or the checked one is — the files decide which; object to the wrong one even if its numbers "
+                "reproduce (a re-run confirms the numbers, not what they mean), and name the claim in your notes.")
+
     def _review_state(self, nid: str) -> str:
         try:
             return str(((self.r.get(nid).get("state") or {}).get("review") or {}).get("state") or "unchecked")
@@ -670,7 +704,7 @@ class Scheduler:
                      "what it rests on" + (", and " + RERUN if self.reproducer else "")
                      + ". " + JUDGE
                      + on_the_original(q["code"], text, kept=bool(self.world and self.world.kept))
-                     + self._beside(q["question"], code))
+                     + self._beside(q["question"], code) + self._elsewhere(q["question"], code))
         if seat and self._issue(seat, target, objective, [{"p": first["gate"]}]):
             self._ev("stage_order", question=q["code"], stage=first["stage"], gates=[first["gate"]], seat=seat.name)
             if reviews_only:
