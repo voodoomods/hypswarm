@@ -9,6 +9,7 @@ from hypgraph import Graph
 from hypswarm import Budget, Seat, Task, run
 from hypswarm.providers.stub import StubModel, calls_made, tool_outputs
 from hypswarm.reproduce import check_output
+from hypswarm.scheduler import CONSISTENCY_MARK
 
 from .test_alpha import TASK, _target, lead_script, reviewer_script
 
@@ -72,9 +73,9 @@ def test_one_call_result_and_claim_then_instrument_reproduces(tmp_path):
         assert cl1["state"]["evidence"] in ("project_rerun", "new_data", "separate_implementation")
     finally:
         g.close()
-    review_orders = [o for o in res.orders if o["assignee"] == "critic"]
+    review_orders = [o for o in res.orders if o["assignee"] == "critic" and not o["objective"].startswith(CONSISTENCY_MARK)]
     assert review_orders and all("re-run" in o["objective"] and "CONTRADICTED" in o["objective"] for o in review_orders)
-    assert res.usage["calls"] <= 12                        # the same as the alpha task without any of this
+    assert res.usage["calls"] <= 16                        # the alpha task's calls (two readings included), none for this
 
 
 def test_a_wrong_number_is_contradicted(tmp_path):

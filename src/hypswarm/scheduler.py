@@ -111,6 +111,8 @@ JUDGE = ("Judge whether the method and the numbers answer the question, and reco
          "opened on a date', a variable's name where its value belongs, or 'evidence of the implementation' answers "
          "nothing, so object.")
 OBJECTIVE_MAX = 2000   # the record refuses a longer order objective ("shorten objective to 2000 characters")
+CONSISTENCY_MARK = "Consistency of "   # a consistency reading's objective starts with it (found again on resume)
+READINGS_PER_QUESTION = 2   # readings a question gets; a worker that re-files the same conclusion stops costing reviews
 READ_ONLY_TOOLS = frozenset({"list_files", "read_file"})   # the files toolkit: reads, executes nothing
 MAX_CRASHES = 3      # a seat whose orders end in an error this many times in a row is benched for the run
 _DECIDE = ("rework", "cancel_work", "add")
@@ -187,6 +189,9 @@ class Scheduler:
         self.crashes: dict[str, int] = {}                   # seat → orders ended in an error, in a row
         self.notices: list[str] = []
         self._reissued: set[str] = set()                    # unreviewable claims already re-issued to a worker
+        self._consistency_done: set[tuple[str, int]] = set()   # (claim, version) already given its reading
+        self._readings: dict[str, int] = {}                 # question → readings ordered so far
+        self._reading_capped: set[str] = set()             # questions whose cap was reported
 
     # ── notices: something the world tells the team mid-run ──
     def notify(self, text: str, *, stale: Sequence[str] = (), add_files: dict[str, bytes] | None = None) -> None:
@@ -319,6 +324,7 @@ class Scheduler:
             self._dispatch(seat, o["id"], escalate=depth > 0)
 
     def _issue(self, seat: Seat, target: str, objective: str, done_when: list[Any] | None = None) -> bool:
+        objective = self._with_reading_objection(target, objective)
         try:
             o = self.r.issue_work(author=HARNESS, inv=self.inv, target=target, assignee=seat.name, role=seat.role,
                                   objective=objective, done_when=done_when, lease_minutes=self.lease_minutes)
@@ -507,9 +513,11 @@ class Scheduler:
         busy_targets = {o["target_id"] for o in self.r.orders(self.inv) if o["status"] in ("open", "overdue", "returned")}
         board = self.r.question_board(self.inv)
         answered = {b["id"]: b for b in board if b["status"] == "answered"}
-        settled = {b["id"] for b in board if b["status"] == "settled"}
+        settled_rows = {b["id"]: b for b in board if b["status"] == "settled"}
+        settled = set(settled_rows)
         for q in rows:
             if q["complete"]:
+                self._check_consistency(q, settled_rows.get(q["question"]), busy_targets)
                 continue
             gates = q["gates"]
             i = next((k for k, gt in enumerate(gates) if not gt["met"] and not gt["optional"]), None)
@@ -619,17 +627,8 @@ class Scheduler:
                 "reproduce (a re-run confirms the numbers, not what they mean). The question settles only when every "
                 "live answer to it is checked.")
 
-    def _elsewhere(self, question: str, code: str, room: int = 2000) -> str:
-        """For every review: the checked answers on the record's other questions, with what they say. The critic checked
-        'the supplement reduces steps_k' with 'no outcome survives correction for the 20 tested' already checked on Q2
-        of the same record, and 'A is more accurate once difficulty is taken into account' with 'B is better on easy
-        items and on hard items' checked on Q2 (BC-250 rb1, S3 and S1, 2026-11-07): it recomputed the numbers, they
-        matched, and nothing it was shown held the sibling answers the claim contradicted.
-
-        ``room`` is the characters the order's objective can still take: the record caps an objective at
-        OBJECTIVE_MAX, and on T1 (re1, 2026-11-07) five long trading claims pushed every review order past it; the
-        record refused all twelve, three answers stayed unchecked and the run ended stuck. Statements are cut to fit,
-        then siblings dropped from the end; the block is left out when not even one line fits."""
+    def _sibling_lines(self, question: str, code: str) -> list[str]:
+        """The checked answers on the record's other questions, one line each: question code, claim code, statement."""
         lines: list[str] = []
         for row in self.r.question_board(self.inv):
             if row["id"] == question:
@@ -648,14 +647,16 @@ class Scheduler:
                     said = said[:157].rstrip() + "..."
                 lines.append(f"{row['code']} — {c}: \"{said}\"" if said else f"{row['code']} — {c}")
                 if len(lines) >= 6:
-                    break
-            if len(lines) >= 6:
-                break
-        head = " Checked answers already stand on the record's other questions: "
-        tail = (f". Read {code} beside them: it may rest on them or contradict them. An answer that contradicts a "
-                "checked answer is wrong, or the checked one is — the files decide which; object to the wrong one even "
-                "if its numbers reproduce (a re-run confirms the numbers, not what they mean), and name the claim in "
-                "your notes.")
+                    return lines
+        return lines
+
+    @staticmethod
+    def _fit(head: str, lines: list[str], tail: str, room: int) -> str:
+        """head + the lines + tail within ``room`` characters: statements cut to fit, then lines dropped from the end;
+        "" when not even one line fits. The record caps an order's objective at OBJECTIVE_MAX, and on T1 (re1,
+        2026-11-07) five long trading claims pushed every review order past it — the record refused all twelve, three
+        answers stayed unchecked and the run ended stuck."""
+        lines = list(lines)
         while lines:
             fit = room - len(head) - len(tail) - 2 * (len(lines) - 1)
             if fit >= len(lines) * 40:                       # every line keeps at least its codes and a few words
@@ -665,6 +666,140 @@ class Scheduler:
                     return head + "; ".join(cut) + tail
             lines.pop()                                       # drop the last sibling and try again
         return ""
+
+    def _elsewhere(self, question: str, code: str, room: int = 2000) -> str:
+        """For every review: the checked answers on the record's other questions, with what they say. The critic checked
+        'the supplement reduces steps_k' with 'no outcome survives correction for the 20 tested' already checked on Q2
+        of the same record, and 'A is more accurate once difficulty is taken into account' with 'B is better on easy
+        items and on hard items' checked on Q2 (BC-250 rb1, S3 and S1, 2026-11-07): it recomputed the numbers, they
+        matched, and nothing it was shown held the sibling answers the claim contradicted. ``room``: the characters
+        the objective can still take (see _fit)."""
+        head = " Checked answers already stand on the record's other questions: "
+        tail = (f". Read {code} beside them: it may rest on them or contradict them. An answer that contradicts a "
+                "checked answer is wrong, or the checked one is — the files decide which; object to the wrong one even "
+                "if its numbers reproduce (a re-run confirms the numbers, not what they mean), and name the claim in "
+                "your notes.")
+        return self._fit(head, self._sibling_lines(question, code), tail, room)
+
+    def _check_consistency(self, q: dict[str, Any], row: dict[str, Any] | None, busy_targets: set[str]) -> None:
+        """A complete question whose answer is a conclusion (not a measurement) gets one focused reading before it stands:
+        can the checked answer be the record's answer to this question while the checked answers to the other
+        questions stand? One order to a reviewer, done when it records a review; an objection reopens the question.
+
+        Why a separate order: with the siblings listed inside the ordinary review order (#55), the critic read them and
+        wrote "no conflict" — S3's "the supplement arm has a lower mean steps_k" beside Q2's "none of the 20 outcomes
+        remain significant after Holm", T1's "the desk should take a paper position" beside Q2's "the signal depends on
+        future prices" (BC-250 re1, re2, 2026-11-07). The numbers in each were right; the inference between the answers
+        was the error, and a review order busy with re-runs and numbers never asked it. The 04 study measured the same
+        thing: asked the focused question on its own, every model caught nearly every planted error that a rule in the
+        prompt had not stopped. Measured on the box, not assumed."""
+        if not row or not self.reviewers:
+            return
+        if str((self.r.get(q["question"]).get("body") or {}).get("asks") or "") == "measure":
+            return                                             # a measurement is checked by recomputation, not by reading
+        pairs = []
+        for c in row.get("answers") or []:
+            if c in (row.get("unchecked") or []):
+                continue
+            try:
+                nid = self.r.resolve(c, self.inv)
+            except (GraphError, KeyError, IndexError):
+                continue
+            if self._review_state(nid) == "checked":
+                pairs.append((c, nid))
+        if not pairs:
+            return
+        code, claim = pairs[0]
+        node = self.r.get(claim)
+        key = (claim, int(node.get("v") or 1))
+        if key in self._consistency_done or claim in busy_targets:
+            return
+        if any(o["target_id"] == claim and str(o.get("objective") or "").startswith(CONSISTENCY_MARK)
+               for o in self.r.orders(self.inv)):
+            self._consistency_done.add(key)                   # a resumed run: the reading was already ordered
+            return
+        if self._readings.get(q["question"], 0) >= READINGS_PER_QUESTION:
+            if q["question"] not in self._reading_capped:
+                self._reading_capped.add(q["question"])
+                self._ev("consistency_cap", question=q["code"], claim=code, readings=READINGS_PER_QUESTION)
+            return                                             # the objections stand on the record; the report shows them
+        lines = self._sibling_lines(q["question"], code)
+        if not lines:
+            return                                             # nothing to read against yet: again when a sibling is checked
+        pool = [s for s in self.reviewers if s.name != node["by"]]
+        if not pool:
+            self._consistency_done.add(key)                   # nobody who may read it
+            return
+        text = str((self.r.get(q["question"]).get("body") or {}).get("text") or "")
+        who = next((str(gt.get("who") or "") for gt in q.get("gates") or [] if gt.get("gate") == "reviewed"), "")
+        seat = self._pick_for_stage(pool, who, text)
+        if not seat:
+            return                                             # every reviewer is busy: next round
+        said = str((node.get("body") or {}).get("statement") or "").strip()
+        if len(said) > 300:
+            said = said[:297].rstrip() + "..."
+        head = (f"{CONSISTENCY_MARK}{code} with the record's other answers. {q['code']} asks: {text} Its checked answer "
+                f"{code} says: \"{said}\". Before it stands as the record's answer, one reading: can {code} be the answer "
+                f"to {q['code']} while these stand as the answers to the other questions — ")
+        tail = ("? An answer that asserts an effect the record's own correction found nothing of, a recommendation that "
+                "rests on a figure another checked answer shows is not real (out of sample, after costs, or from "
+                "information not available at the time), or a comparison another checked answer reverses, cannot "
+                f"stand. Record a review on {code}: objection, naming the claim it cannot stand beside and what the "
+                f"honest answer to {q['code']} is; otherwise checked, with one sentence on why they stand together. No "
+                "computation is needed: this is a reading of the record.")
+        objective = self._fit(head, lines, tail, OBJECTIVE_MAX)
+        if not objective:
+            self._consistency_done.add(key)
+            return
+        if self._issue(seat, claim, objective, [{"p": "reviewed"}]):
+            self._consistency_done.add(key)
+            self._readings[q["question"]] = self._readings.get(q["question"], 0) + 1
+            busy_targets.add(claim)
+            self._ev("consistency_order", question=q["code"], claim=code, seat=seat.name)
+
+    def _with_reading_objection(self, target: str, objective: str) -> str:
+        """A work order on a question whose earlier answer fell to a reading carries that objection: without it the
+        next worker files the same conclusion again (the scripted run in tests/test_consistency_reading_e2e.py did,
+        until the budget)."""
+        try:
+            node = self.r.get(target)
+        except (GraphError, KeyError):
+            return objective
+        if node.get("type") != "question":
+            return objective
+        latest: tuple[str, str, str, str] = ("", "", "", "")
+        for o in self.r.orders(self.inv):
+            if not str(o.get("objective") or "").startswith(CONSISTENCY_MARK):
+                continue
+            claim = o["target_id"]
+            try:
+                cn = self.r.get(claim)
+            except (GraphError, KeyError):
+                continue
+            if not any(e["rel"] == "answers" and e["dst"] == target for e in cn.get("out") or []):
+                continue
+            if self._review_state(claim) != "contested":
+                continue
+            for e in cn.get("in") or []:
+                if e["rel"] != "reviews":
+                    continue
+                try:
+                    rv = self.r.get(e["src"])
+                except (GraphError, KeyError):
+                    continue
+                body = rv.get("body") or {}
+                if body.get("verdict") == "objection" and str(rv.get("at") or e.get("at") or "") >= latest[0]:
+                    latest = (str(rv.get("at") or e.get("at") or ""), str(cn.get("code") or ""),
+                              str((cn.get("body") or {}).get("statement") or ""), str(body.get("notes") or ""))
+        if not latest[1]:
+            return objective
+        _, code, said, notes = latest
+        line = (f" An earlier answer to this question, {code} (\"{said[:120]}\"), was objected to on reading beside the "
+                f"record's other answers: \"{notes[:300]}\". Answer from the evidence; the same conclusion cannot stand "
+                "without what the objection asks for.")
+        if len(objective) + len(line) > OBJECTIVE_MAX:
+            return objective
+        return objective + line
 
     def _review_state(self, nid: str) -> str:
         try:
@@ -745,6 +880,8 @@ class Scheduler:
                 seat = self._pick(self.workers, q["text"], "question")
                 if seat and self._issue(seat, q["id"], f"Answer {q['code']}: {q['text']}"):
                     busy_targets.add(q["id"])
+            elif q["status"] == "settled":
+                self._check_consistency({"question": q["id"], "code": q["code"], "gates": []}, q, busy_targets)
             elif q["status"] == "answered" and self.reviewers:
                 code = _to_review(q)
                 claim = self.r.resolve(code, self.inv)

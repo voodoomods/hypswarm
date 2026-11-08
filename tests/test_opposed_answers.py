@@ -8,6 +8,7 @@ import pytest
 
 from hypswarm import Budget, run
 from hypswarm.record import LocalRecord
+from hypswarm.scheduler import CONSISTENCY_MARK
 
 from .test_alpha import TASK, make_models
 from .test_roles import SEATS
@@ -41,7 +42,8 @@ def test_the_second_answer_is_reviewed_with_what_it_sits_beside(tmp_path):
     res = asyncio.run(run(TASK, SEATS, make_models(), record=path, budget=Budget(max_calls=80), resume=inv))
     reviews = [o for o in res.orders if o["target"] == second["code"]]
     assert reviews and reviews[0]["assignee"] == "critic"
-    assert not [o for o in res.orders if o["target"] == first["code"]]          # the checked one isn't reviewed again
+    assert not [o for o in res.orders if o["target"] == first["code"]
+                and not o["objective"].startswith(CONSISTENCY_MARK)]            # the checked one isn't reviewed again
     assert "sits beside " + first["code"] in reviews[0]["objective"]
 
 

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **A conclusion gets one focused reading against the record's other answers before it stands.** With the sibling
+  answers listed inside the ordinary review order (#55) the critic read them and wrote "no conflict": S3's "the
+  supplement arm has a lower mean steps_k" beside Q2's "none of the 20 outcomes remain significant after Holm", and
+  T1's "the desk should take a paper position" beside Q2's "the signal depends on future prices" (BC-250 re1 and re2,
+  2026-11-07). The numbers were right each time; the inference between the answers was the error, and a review order
+  busy with re-runs and numbers never asked it. Now a complete question whose answer is a conclusion (not an
+  `asks: measure` question) gets one more order to a reviewer, with a single question — can this checked answer be
+  the record's answer while the other checked answers stand? — done when a review is recorded; an objection reopens
+  the question, and the next work order on it carries the objection. One reading per claim version, at most two
+  per question (a worker that re-files the same conclusion stops costing reviews; the objections stand on the
+  record). Events `consistency_order`, `consistency_cap`. Measured on the box, not assumed.
 - **The sibling answers in a review order fit the record's 2,000-character cap.** On the first sweep with #55 (re1,
   2026-11-07) T1's five long trading claims pushed every review order past the cap; the record refused all twelve,
   three answers stayed unchecked beside checked ones and the run ended stuck at 134 calls. `_elsewhere` now takes the
