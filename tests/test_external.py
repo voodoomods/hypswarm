@@ -52,8 +52,14 @@ def test_an_external_seat_works_orders_over_mcp(tmp_path):
                                                                   "result_summary": f"Counted the items for {q}.",
                                                                   "result_values": vals}))
                 except fastmcp.exceptions.ToolError as e:
-                    # An Ubuntu job now and then is handed a second order on Q1 (2026-11-05, on main too), never seen on
-                    # Windows, even at 10 copies at once. Say what the record held, so the next one names the cause.
+                    # An Ubuntu job now and then was handed a second order on Q1 (2026-11-05 to 11-08, on main too),
+                    # never on Windows. The dump below named the cause (hypswarm#59, 2026-11-08): the record held
+                    # T1 reworked and T2 open on Q1 with Q1 answered — hypgraph loaded a snapshot's tables in
+                    # separate implicit reads, so the claim's `answers` edge, committed by the MCP server's Graph
+                    # (fastmcp runs its tools on a worker thread) between the scheduler's `nodes` read and its
+                    # `edges` read, was skipped and its mark advanced past it: the scheduler's check_work found no
+                    # live claim and reworked. Fixed in hypgraph#119 (one read transaction per load); until the
+                    # floor reaches that release, a failure here with that dump is the same cause.
                     pytest.fail(f"{e}\n{_held(db)}")
                 assert "Result RS" in reg and "your work orders" in reg.lower()
                 stmt = ("A is right on 812 of 1000 items." if q == "Q1" else
