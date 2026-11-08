@@ -110,6 +110,7 @@ JUDGE = ("Judge whether the method and the numbers answer the question, and reco
          "is wrong — an objection sends the whole claim back for rework. A claim must itself state the answer: 'it "
          "opened on a date', a variable's name where its value belongs, or 'evidence of the implementation' answers "
          "nothing, so object.")
+OBJECTIVE_MAX = 2000   # the record refuses a longer order objective ("shorten objective to 2000 characters")
 READ_ONLY_TOOLS = frozenset({"list_files", "read_file"})   # the files toolkit: reads, executes nothing
 MAX_CRASHES = 3      # a seat whose orders end in an error this many times in a row is benched for the run
 _DECIDE = ("rework", "cancel_work", "add")
@@ -618,12 +619,17 @@ class Scheduler:
                 "reproduce (a re-run confirms the numbers, not what they mean). The question settles only when every "
                 "live answer to it is checked.")
 
-    def _elsewhere(self, question: str, code: str) -> str:
+    def _elsewhere(self, question: str, code: str, room: int = 2000) -> str:
         """For every review: the checked answers on the record's other questions, with what they say. The critic checked
         'the supplement reduces steps_k' with 'no outcome survives correction for the 20 tested' already checked on Q2
         of the same record, and 'A is more accurate once difficulty is taken into account' with 'B is better on easy
         items and on hard items' checked on Q2 (BC-250 rb1, S3 and S1, 2026-11-07): it recomputed the numbers, they
-        matched, and nothing it was shown held the sibling answers the claim contradicted."""
+        matched, and nothing it was shown held the sibling answers the claim contradicted.
+
+        ``room`` is the characters the order's objective can still take: the record caps an objective at
+        OBJECTIVE_MAX, and on T1 (re1, 2026-11-07) five long trading claims pushed every review order past it; the
+        record refused all twelve, three answers stayed unchecked and the run ended stuck. Statements are cut to fit,
+        then siblings dropped from the end; the block is left out when not even one line fits."""
         lines: list[str] = []
         for row in self.r.question_board(self.inv):
             if row["id"] == question:
@@ -645,12 +651,20 @@ class Scheduler:
                     break
             if len(lines) >= 6:
                 break
-        if not lines:
-            return ""
-        return (" Checked answers already stand on the record's other questions: " + "; ".join(lines) + f". Read {code} "
-                "beside them: it may rest on them or contradict them. An answer that contradicts a checked answer is "
-                "wrong, or the checked one is — the files decide which; object to the wrong one even if its numbers "
-                "reproduce (a re-run confirms the numbers, not what they mean), and name the claim in your notes.")
+        head = " Checked answers already stand on the record's other questions: "
+        tail = (f". Read {code} beside them: it may rest on them or contradict them. An answer that contradicts a "
+                "checked answer is wrong, or the checked one is — the files decide which; object to the wrong one even "
+                "if its numbers reproduce (a re-run confirms the numbers, not what they mean), and name the claim in "
+                "your notes.")
+        while lines:
+            fit = room - len(head) - len(tail) - 2 * (len(lines) - 1)
+            if fit >= len(lines) * 40:                       # every line keeps at least its codes and a few words
+                each = fit // len(lines)
+                cut = [ln if len(ln) <= each else ln[: max(each - 3, 0)].rstrip() + "..." for ln in lines]
+                if sum(len(x) for x in cut) + 2 * (len(cut) - 1) <= fit:
+                    return head + "; ".join(cut) + tail
+            lines.pop()                                       # drop the last sibling and try again
+        return ""
 
     def _review_state(self, nid: str) -> str:
         try:
@@ -704,7 +718,8 @@ class Scheduler:
                      "what it rests on" + (", and " + RERUN if self.reproducer else "")
                      + ". " + JUDGE
                      + on_the_original(q["code"], text, kept=bool(self.world and self.world.kept))
-                     + self._beside(q["question"], code) + self._elsewhere(q["question"], code))
+                     + self._beside(q["question"], code))
+        objective += self._elsewhere(q["question"], code, OBJECTIVE_MAX - len(objective))
         if seat and self._issue(seat, target, objective, [{"p": first["gate"]}]):
             self._ev("stage_order", question=q["code"], stage=first["stage"], gates=[first["gate"]], seat=seat.name)
             if reviews_only:

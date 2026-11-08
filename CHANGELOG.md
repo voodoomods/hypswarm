@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **The sibling answers in a review order fit the record's 2,000-character cap.** On the first sweep with #55 (re1,
+  2026-11-07) T1's five long trading claims pushed every review order past the cap; the record refused all twelve,
+  three answers stayed unchecked beside checked ones and the run ended stuck at 134 calls. `_elsewhere` now takes the
+  room the objective has left: statements are cut to fit, then siblings dropped from the end, and the block is left
+  out when not even one line fits. S3 and S1 on the same sweep settled 3/3; S1's Q3 came out right, with rb1's error
+  objected to by name; S3's Q3 was still checked ("the arm has a lower mean steps_k" beside "nothing survives
+  correction").
 - **A review order carries the checked answers on the record's other questions.** Measured on the box with the two
   rules below in (rb1, 2026-11-07): S3 and S1 settled every question — and two of the six settled answers were wrong.
   The critic checked "the supplement reduces steps_k" while "no outcome remains significant after correction" stood
