@@ -51,14 +51,32 @@ def _seats(p) -> tuple[Seat, ...]:  # type: ignore[no-untyped-def]
 # it), -4.1 % (each position against the return of the day it was printed, which nobody could trade) and -17 to -18 %
 # (traded once the signal could be known). Reviewers checked whichever they reproduced, two of them in one run, and
 # nothing said how to line up time. A signal built from the next close earns a fortune as given and nothing a bar later.
-_TIMING = (" A signal you were given is not trusted for timing. Put each position against the return after it: ret[t] = "
-           "close[t+1]/close[t] - 1, position[t] earns ret[t], and each change of position multiplies its fee into the "
-           "equity; a fee is never subtracted from the total. Backtest the same window twice: as the signal says "
-           "(position[t] = signal[t], values oos_return) and one bar later (position[t] = signal[t-1], values "
-           "oos_return_delayed). A position against the return of the day it was printed, close[t]/close[t-1], is "
-           "neither: don't report it. If the lead over buy and hold is gone one bar later, it can't be told from "
-           "look-ahead and it is no edge: say so, and give the delayed figure beside the one as given. A reviewer "
-           "re-runs both, and objects to a claim that reports only the figure as given.")
+# A first version said this in prose (BC-250 df1, 2026-11-08): the seats then wrote their own loops and one paired
+# signal[t] with the return that ENDED at t, which on a momentum signal peeks — a genuine edge was reported as look-ahead,
+# and a right claim was objected to over a fee convention. Prose doesn't fix a convention; this function does.
+BACKTEST_CODE = """def backtest(close, signal, start, fee, delay=0):
+    # position[t] = signal[t - delay] earns close[t+1]/close[t] - 1; a change of position multiplies (1 - fee) in
+    equity, held = 1.0, 0
+    for t in range(start, len(close) - 1):
+        pos = signal[t - delay] if t - delay >= 0 else 0
+        if pos != held:
+            equity *= 1 - fee
+        held = pos
+        if pos:
+            equity *= close[t + 1] / close[t]
+    return equity - 1
+oos_return = backtest(close, signal, start, fee)                # as the signal says
+oos_return_delayed = backtest(close, signal, start, fee, 1)     # one bar later: the signal known a bar late
+buy_and_hold = close[-1] / close[start] - 1"""
+_TIMING = (" A signal you were given is not trusted for timing, and a backtest of it is this code, pasted as written "
+           "(close and signal are the file's columns in date order; start is the first out-of-sample row; fee is the "
+           "cost per position change as a fraction):\n" + BACKTEST_CODE + "\nRegister all three values with those "
+           "names. A claim about the return states oos_return and oos_return_delayed beside each other and against "
+           "buy_and_hold, or the reviewer objects. The reviewer re-runs this same code; another loop is not a check, "
+           "and a difference under one point from a fee or window convention is not an objection. Look-ahead means "
+           "the lead over buy and hold is gone one bar later (oos_return_delayed at or below buy_and_hold while "
+           "oos_return is above it): then there is no edge, and the position is declined. A lead that survives the "
+           "bar is not look-ahead; say so, and the position question is decided on oos_return_delayed.")
 
 _NOTES = {
     "scientific@1": "Numbers come from registered results; claims are checked as written.",
