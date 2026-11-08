@@ -516,9 +516,13 @@ class Scheduler:
         settled_rows = {b["id"]: b for b in board if b["status"] == "settled"}
         settled = set(settled_rows)
         for q in rows:
-            if q["complete"]:
-                self._check_consistency(q, settled_rows.get(q["question"]), busy_targets)
-                continue
+            if q["complete"] or q["question"] in settled:
+                reading = self._check_consistency(q, settled_rows.get(q["question"]), busy_targets)
+                if q["complete"] or reading:
+                    # a question settled at the board whose later stages are still open (trading: positioned,
+                    # still_valid) is read now and those stages wait for the reading — T1 on the BC-250 (cs1,
+                    # 2026-11-08) settled Q1 and Q2 and never got one, because only complete rows were read
+                    continue
             gates = q["gates"]
             i = next((k for k, gt in enumerate(gates) if not gt["met"] and not gt["optional"]), None)
             if i is None:
@@ -681,7 +685,7 @@ class Scheduler:
                 "your notes.")
         return self._fit(head, self._sibling_lines(question, code), tail, room)
 
-    def _check_consistency(self, q: dict[str, Any], row: dict[str, Any] | None, busy_targets: set[str]) -> None:
+    def _check_consistency(self, q: dict[str, Any], row: dict[str, Any] | None, busy_targets: set[str]) -> bool:
         """A complete question whose answer is a conclusion (not a measurement) gets one focused reading before it stands:
         can the checked answer be the record's answer to this question while the checked answers to the other
         questions stand? One order to a reviewer, done when it records a review; an objection reopens the question.
@@ -692,11 +696,11 @@ class Scheduler:
         future prices" (BC-250 re1, re2, 2026-11-07). The numbers in each were right; the inference between the answers
         was the error, and a review order busy with re-runs and numbers never asked it. The 04 study measured the same
         thing: asked the focused question on its own, every model caught nearly every planted error that a rule in the
-        prompt had not stopped. Measured on the box, not assumed."""
-        if not row or not self.reviewers:
-            return
+        prompt had not stopped. Measured on the box, not assumed. Returns whether a reading of the question's answer is out."""
+        if not row or not row.get("answers") or not self.reviewers:
+            return False
         if str((self.r.get(q["question"]).get("body") or {}).get("asks") or "") == "measure":
-            return                                             # a measurement is checked by recomputation, not by reading
+            return False                                             # a measurement is checked by recomputation, not by reading
         pairs = []
         for c in row.get("answers") or []:
             if c in (row.get("unchecked") or []):
@@ -708,33 +712,33 @@ class Scheduler:
             if self._review_state(nid) == "checked":
                 pairs.append((c, nid))
         if not pairs:
-            return
+            return False
         code, claim = pairs[0]
         node = self.r.get(claim)
         key = (claim, int(node.get("v") or 1))
         if key in self._consistency_done or claim in busy_targets:
-            return
+            return self._reading_open(claim)
         if any(o["target_id"] == claim and str(o.get("objective") or "").startswith(CONSISTENCY_MARK)
                for o in self.r.orders(self.inv)):
             self._consistency_done.add(key)                   # a resumed run: the reading was already ordered
-            return
+            return self._reading_open(claim)
         if self._readings.get(q["question"], 0) >= READINGS_PER_QUESTION:
             if q["question"] not in self._reading_capped:
                 self._reading_capped.add(q["question"])
                 self._ev("consistency_cap", question=q["code"], claim=code, readings=READINGS_PER_QUESTION)
-            return                                             # the objections stand on the record; the report shows them
+            return False                                             # the objections stand on the record; the report shows them
         lines = self._sibling_lines(q["question"], code)
         if not lines:
-            return                                             # nothing to read against yet: again when a sibling is checked
+            return False                                             # nothing to read against yet: again when a sibling is checked
         pool = [s for s in self.reviewers if s.name != node["by"]]
         if not pool:
             self._consistency_done.add(key)                   # nobody who may read it
-            return
+            return False
         text = str((self.r.get(q["question"]).get("body") or {}).get("text") or "")
         who = next((str(gt.get("who") or "") for gt in q.get("gates") or [] if gt.get("gate") == "reviewed"), "")
         seat = self._pick_for_stage(pool, who, text)
         if not seat:
-            return                                             # every reviewer is busy: next round
+            return False                                       # every reviewer is busy: next round
         said = str((node.get("body") or {}).get("statement") or "").strip()
         if len(said) > 300:
             said = said[:297].rstrip() + "..."
@@ -750,12 +754,19 @@ class Scheduler:
         objective = self._fit(head, lines, tail, OBJECTIVE_MAX)
         if not objective:
             self._consistency_done.add(key)
-            return
+            return False
         if self._issue(seat, claim, objective, [{"p": "reviewed"}]):
             self._consistency_done.add(key)
             self._readings[q["question"]] = self._readings.get(q["question"], 0) + 1
             busy_targets.add(claim)
             self._ev("consistency_order", question=q["code"], claim=code, seat=seat.name)
+            return True
+        return False
+
+    def _reading_open(self, claim: str) -> bool:
+        """Whether a reading of this claim is still out (issued and not yet answered)."""
+        return any(o["target_id"] == claim and o["status"] in ("open", "overdue", "returned")
+                   and str(o.get("objective") or "").startswith(CONSISTENCY_MARK) for o in self.r.orders(self.inv))
 
     def _with_reading_objection(self, target: str, objective: str) -> str:
         """A work order on a question whose earlier answer fell to a reading carries that objection: without it the

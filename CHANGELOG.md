@@ -12,7 +12,9 @@
   the record's answer while the other checked answers stand? — done when a review is recorded; an objection reopens
   the question, and the next work order on it carries the objection. One reading per claim version, at most two
   per question (a worker that re-files the same conclusion stops costing reviews; the objections stand on the
-  record). Events `consistency_order`, `consistency_cap`. Measured on the box, not assumed.
+  record). A question settled at the board is read even while its later stages are open (trading's position
+  gates), and they wait for the reading. Events `consistency_order`, `consistency_cap`. Measured on the box, not
+  assumed.
 - **The sibling answers in a review order fit the record's 2,000-character cap.** On the first sweep with #55 (re1,
   2026-11-07) T1's five long trading claims pushed every review order past the cap; the record refused all twelve,
   three answers stayed unchecked beside checked ones and the run ended stuck at 134 calls. `_elsewhere` now takes the

@@ -119,3 +119,21 @@ def test_the_reading_waits_until_a_sibling_answer_is_checked():
     rec.review(author="critic", target=q2["id"], verdict="checked", **REVIEW)
     s._assign_from_stages(rows)
     assert [t for _, t, _, _ in issued] == [q3["id"]]
+
+
+def test_a_question_settled_at_the_board_is_read_while_its_later_stages_are_open():
+    """Trading's workflow goes on after the answer is checked (positioned, still_valid): the question is settled at the
+    board and its row isn't complete. T1 on the BC-250 (cs1, 2026-11-08) settled Q1 and Q2 that way and got no reading.
+    The reading goes out first; the position order waits for it."""
+    rec, inv, _q1, _q2, q3 = _settled_record()
+    rows = _rows(rec, inv)
+    rows[2] = {**rows[2], "complete": False, "workflow": "trading@1", "profile": "trading", "index": 7, "of": 8,
+               "gates": [{"gate": "reviewed", "who": "critic", "met": True, "optional": False},
+                         {"gate": "positioned", "stage": "positioned", "who": "quant", "met": False, "optional": False,
+                          "why": "no decision based on a claim on Q3"}]}
+    s, issued = _scheduler(rec, inv)
+    s._assign_from_stages(rows)
+    assert [(seat, t) for seat, t, _, _ in issued] == [("critic", q3["id"])]      # the reading, not the position order
+    s._assign_from_stages(rows)                                                     # the reading is answered (no open order)
+    assert len(issued) == 2 and issued[1][1] == rec.resolve("Q3", inv)
+    assert issued[1][2].startswith("Q3 is at stage 'positioned'")
