@@ -47,6 +47,19 @@ def _seats(p) -> tuple[Seat, ...]:  # type: ignore[no-untyped-def]
     return tuple(out)
 
 
+# Every T1 record on the box (2026-11-07 and 08) holds the same few numbers for one signal: +146 % (as the vendor defines
+# it), -4.1 % (each position against the return of the day it was printed, which nobody could trade) and -17 to -18 %
+# (traded once the signal could be known). Reviewers checked whichever they reproduced, two of them in one run, and
+# nothing said how to line up time. A signal built from the next close earns a fortune as given and nothing a bar later.
+_TIMING = (" A signal you were given is not trusted for timing. Put each position against the return after it: ret[t] = "
+           "close[t+1]/close[t] - 1, position[t] earns ret[t], and each change of position multiplies its fee into the "
+           "equity; a fee is never subtracted from the total. Backtest the same window twice: as the signal says "
+           "(position[t] = signal[t], values oos_return) and one bar later (position[t] = signal[t-1], values "
+           "oos_return_delayed). A position against the return of the day it was printed, close[t]/close[t-1], is "
+           "neither: don't report it. If the lead over buy and hold is gone one bar later, it can't be told from "
+           "look-ahead and it is no edge: say so, and give the delayed figure beside the one as given. A reviewer "
+           "re-runs both, and objects to a claim that reports only the figure as given.")
+
 _NOTES = {
     "scientific@1": "Numbers come from registered results; claims are checked as written.",
     "software@1": "A requirement is verified only by a test the instrument ran: register_run with the exact test command "
@@ -54,7 +67,7 @@ _NOTES = {
                   "builds are artifacts, by hash.",
     "trading@1": "A thesis is a hypothesis. A backtest result must carry the costs it charged and name its out-of-sample "
                  "window (oos_*). 'Edge' without both is refused. Positions are paper: a sized position with a stop is "
-                 "a decision based_on the claim. Never a live order.",
+                 "a decision based_on the claim. Never a live order." + _TIMING,
     "knowledge@1": "Every factual claim cites a source node you added (citation, url or doi, the passage). Recall is "
                    "not a source. The report is linted against the record.",
     "optimization@1": "A result reports objective, feasible (true/false) and bound or gap. 'Optimal' without a bound is "
@@ -77,7 +90,7 @@ _NOTES = {
                  "(windows, costs, configurations to try; data.expected) BEFORE register_run. The result carries oos_*, "
                  "fees/slippage and trials (configurations tried). After the risk review, a decision based_on the claim: "
                  "kind=position with size, stop, review_date and paper=true — or kind=no_position when the thesis is "
-                 "declined. Never a live order.",
+                 "declined. Never a live order." + _TIMING,
     "knowledge@2": "A source carries citation, a url or doi, the passage that says it, retrieved (the date you read it) and "
                    "kind (primary/secondary/tertiary); link it part_of the question. The claim cites it. Before you rely "
                    "on a source, writing or reviewing, list what else is there: a retraction, correction or erratum "
