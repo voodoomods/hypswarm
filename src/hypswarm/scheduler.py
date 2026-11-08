@@ -696,7 +696,11 @@ class Scheduler:
         future prices" (BC-250 re1, re2, 2026-11-07). The numbers in each were right; the inference between the answers
         was the error, and a review order busy with re-runs and numbers never asked it. The 04 study measured the same
         thing: asked the focused question on its own, every model caught nearly every planted error that a rule in the
-        prompt had not stopped. Measured on the box, not assumed. Returns whether a reading of the question's answer is out."""
+        prompt had not stopped. Measured on the box, not assumed. Returns whether a reading of the question's answer is out.
+
+        The reading asks for one small computation: S1's reader checked "Model A performs better on hard items (0.32
+        vs 0.48125 for B)" twice (BC-250 cs2 and wide2, 2026-11-08) — the sentence said A was better, the figures
+        said B, and "no computation is needed" let the sentence win."""
         if not row or not row.get("answers") or not self.reviewers:
             return False
         if str((self.r.get(q["question"]).get("body") or {}).get("asks") or "") == "measure":
@@ -750,7 +754,8 @@ class Scheduler:
                 "information not available at the time), or a comparison another checked answer reverses, cannot "
                 f"stand. Record a review on {code}: objection, naming the claim it cannot stand beside and what the "
                 f"honest answer to {q['code']} is; otherwise checked, with one sentence on why they stand together. No "
-                "computation is needed: this is a reading of the record.")
+                "re-run is needed: this is a reading of the record. Where an answer compares two figures, say which "
+                "is larger before accepting who is better — a sentence can name the smaller one as the better.")
         objective = self._fit(head, lines, tail, OBJECTIVE_MAX)
         if not objective:
             self._consistency_done.add(key)
