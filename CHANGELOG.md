@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **A review order carries the checked answers on the record's other questions.** Measured on the box with the two
+  rules below in (rb1, 2026-11-07): S3 and S1 settled every question — and two of the six settled answers were wrong.
+  The critic checked "the supplement reduces steps_k" while "no outcome remains significant after correction" stood
+  checked on Q2 of the same record, and "A is more accurate once difficulty is taken into account" while "B is better
+  on easy items and on hard items" stood checked beside it; each time it recomputed the claim's numbers, they matched,
+  and the order named no other claim. The review order now lists the checked answers on the investigation's other
+  questions, with what they say, and asks the reviewer to read the claim beside them: a contradiction is grounds to
+  object, the same as a wrong number. Whether it moves either answer is measured on the box, not assumed.
 - **A worker's closing turns count the run's remaining calls, not only its own.** A reviewer with 14 turns on paper
   was cut off by the run's budget after 9 calls and never gave its verdict (BC-250 pa1, S2, 2026-11-07); the closing
   turns — only `review` for a reviewer, only the writing tools for a worker — were keyed on the order's turn limit.
