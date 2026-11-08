@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Requires hypgraph 0.8.7.** A run with an external seat could lose a claim: the scheduler and the MCP server the
+  seat works through are two Graphs on one file, and a claim committed while the scheduler was loading its snapshot
+  could reach it without its `answers` edge. The scheduler then found no claim on an answered question, reworked the
+  order and asked the seat to count again. It is also the Ubuntu-only failure in the external-seat test. 0.8.7 loads a
+  snapshot in one read transaction, and counts the run behind a result on a question as a run on the question.
+
 ## 0.1.0a16 — 2026-11-08: a conclusion is read against the record's other answers
 
 Requires hypgraph 0.8.6, as a15 did. The run-gate fix the last entry below names is on hypgraph's main and not yet

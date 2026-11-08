@@ -58,8 +58,8 @@ def test_an_external_seat_works_orders_over_mcp(tmp_path):
                     # separate implicit reads, so the claim's `answers` edge, committed by the MCP server's Graph
                     # (fastmcp runs its tools on a worker thread) between the scheduler's `nodes` read and its
                     # `edges` read, was skipped and its mark advanced past it: the scheduler's check_work found no
-                    # live claim and reworked. Fixed in hypgraph#119 (one read transaction per load); until the
-                    # floor reaches that release, a failure here with that dump is the same cause.
+                    # live claim and reworked. Fixed in hypgraph#119 (one read transaction per load), released in
+                    # 0.8.7, which is now the floor: a failure here with that dump is a new cause.
                     pytest.fail(f"{e}\n{_held(db)}")
                 assert "Result RS" in reg and "your work orders" in reg.lower()
                 stmt = ("A is right on 812 of 1000 items." if q == "Q1" else
