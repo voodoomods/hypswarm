@@ -6,7 +6,7 @@ named no other claim. Now it is shown them and asked to read the claim beside th
 from hypswarm import Budget, Seat
 from hypswarm.budget import Meter
 from hypswarm.record import LocalRecord
-from hypswarm.scheduler import Scheduler
+from hypswarm.scheduler import OBJECTIVE_MAX, Scheduler
 
 SEATS = [Seat("analyst", "worker"), Seat("stats", "worker"), Seat("critic", "reviewer")]
 QUESTIONS = [("Q1", "Which outcomes differ between the arms at p < 0.05 without correction?", "measure"),
@@ -71,3 +71,36 @@ def test_a_record_with_one_question_adds_nothing():
     q3 = _answer(rec, inv, "stats", "Q3", "The supplement reduces steps_k compared to placebo.")
     objective = _review_order(rec, inv, q3)
     assert "Checked answers already stand" not in objective
+
+
+def test_the_order_stays_within_the_record_cap_however_long_the_siblings_are():
+    """T1 (re1, 2026-11-07): five long trading claims pushed every review order past the record's 2,000-character cap;
+    the record refused all twelve, three answers stayed unchecked and the run ended stuck."""
+    rec, inv = _record()
+    long = ("The long/flat strategy on the signal was traded on the day the signal appears, with the position changed "
+            "whenever the signal changed, and the resulting series of daily returns was recorded for the out-of-sample "
+            "period along with the buy and hold series for the same days, costs applied at each position change. ")
+    for q in ("Q1", "Q2"):
+        for _ in range(3):
+            c = _answer(rec, inv, "analyst", q, (long * 2).strip())
+            rec.review(author="critic", target=c["id"], verdict="checked",
+                       method="Recomputed every number from trial.csv.",
+                       notes="Every number holds and the method answers the question.")
+    q3 = _answer(rec, inv, "stats", "Q3", "The supplement reduces steps_k compared to placebo.")
+    objective = _review_order(rec, inv, q3)
+    assert len(objective) <= OBJECTIVE_MAX
+    assert "Checked answers already stand on the record's other questions" in objective
+    assert "Q1 \u2014 CL1:" in objective                       # at least the first sibling is still named
+    assert objective.endswith("name the claim in your notes.")
+
+
+def test_no_sibling_text_when_the_objective_has_no_room_left():
+    rec, inv = _record()
+    c = _answer(rec, inv, "analyst", "Q2", "No outcome remains significant after correction for the outcomes tested.")
+    rec.review(author="critic", target=c["id"], verdict="checked", method="Recomputed every number from trial.csv.",
+               notes="Every number holds and the method answers the question.")
+    s = Scheduler(rec, inv, SEATS, model_for=lambda seat: None, meter=Meter(Budget(max_calls=10)))  # type: ignore[arg-type,return-value]
+    q3 = rec.resolve("Q3", inv)
+    assert s._elsewhere(q3, "CL9", room=60) == ""
+    full = s._elsewhere(q3, "CL9", room=OBJECTIVE_MAX)
+    assert "No outcome remains significant" in full and len(full) < OBJECTIVE_MAX
