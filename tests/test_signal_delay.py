@@ -11,6 +11,7 @@ def _run_note(close, signal, start, fee):
     """Execute the note's code as a seat would paste it."""
     ns = {"close": close, "signal": signal, "start": start, "fee": fee}
     exec(BACKTEST_CODE, ns)          # noqa: S102 — the point is that the pasted text is the recipe
+    _run_note.last = ns
     return ns["oos_return"], ns["oos_return_delayed"], ns["buy_and_hold"]
 
 
@@ -34,6 +35,8 @@ def test_a_signal_built_from_the_next_close_is_gone_one_bar_later():
     as_given, delayed, hold = _run_note(close, signal, 1000, 0.001)
     assert as_given > hold + 0.5            # looks like an edge as given
     assert delayed < hold + 0.05            # and isn't one a bar later
+    assert delayed <= hold
+    assert (_run_note.last["look_ahead"], _run_note.last["edge"]) == (1, 0)    # the code says so, not the reader
 
 
 def test_a_signal_built_from_the_past_keeps_its_lead_one_bar_later():
@@ -42,6 +45,7 @@ def test_a_signal_built_from_the_past_keeps_its_lead_one_bar_later():
     signal = [0] * 20 + [int(close[t] > close[t - 20]) for t in range(20, 1500)]
     as_given, delayed, hold = _run_note(close, signal, 1000, 0.001)
     assert as_given > hold and delayed > hold   # the rule doesn't call a real trend look-ahead
+    assert (_run_note.last["look_ahead"], _run_note.last["edge"]) == (0, 1)
 
 
 def test_the_code_pairs_a_position_with_the_return_after_it_not_the_one_that_ended():
@@ -57,3 +61,15 @@ def test_the_code_pairs_a_position_with_the_return_after_it_not_the_one_that_end
             peeking *= close[t + 1] / close[t]
     assert peeking - 1 > 1.0                  # the wrong pairing looks like a fortune
     assert abs(as_given) < 0.6 and abs(delayed) < 0.6      # the note's pairing finds no such thing
+
+
+def test_no_lead_at_all_is_neither_look_ahead_nor_an_edge():
+    close = [100.0 + t for t in range(100)]
+    _run_note(close, [0] * 100, 50, 0.001)                  # always flat: earns nothing, hold earns something
+    assert (_run_note.last["look_ahead"], _run_note.last["edge"]) == (0, 0)
+
+
+def test_the_note_makes_the_two_conclusions_the_reviewers_to_read():
+    for pid in ("trading@1", "trading@2"):
+        note = _NOTES[pid]
+        assert "look_ahead" in note and "edge" in note and "words disagree" in note

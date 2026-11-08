@@ -54,6 +54,9 @@ def _seats(p) -> tuple[Seat, ...]:  # type: ignore[no-untyped-def]
 # A first version said this in prose (BC-250 df1, 2026-11-08): the seats then wrote their own loops and one paired
 # signal[t] with the return that ENDED at t, which on a momentum signal peeks — a genuine edge was reported as look-ahead,
 # and a right claim was objected to over a fee convention. Prose doesn't fix a convention; this function does.
+# With the function (dg1, dg2, 2026-11-08) every figure was right and two of six runs still checked "no look-ahead" on the
+# delayed figure that shows it: reviewers re-ran the code, saw the numbers match and stopped. The rule was prose. Now the
+# code computes the two conclusions as well.
 BACKTEST_CODE = """def backtest(close, signal, start, fee, delay=0):
     # position[t] = signal[t - delay] earns close[t+1]/close[t] - 1; a change of position multiplies (1 - fee) in
     equity, held = 1.0, 0
@@ -67,16 +70,20 @@ BACKTEST_CODE = """def backtest(close, signal, start, fee, delay=0):
     return equity - 1
 oos_return = backtest(close, signal, start, fee)                # as the signal says
 oos_return_delayed = backtest(close, signal, start, fee, 1)     # one bar later: the signal known a bar late
-buy_and_hold = close[-1] / close[start] - 1"""
+buy_and_hold = close[-1] / close[start] - 1
+look_ahead = int(oos_return > buy_and_hold >= oos_return_delayed)   # 1: the lead over buy and hold is gone one bar later
+edge = int(oos_return_delayed > buy_and_hold)                       # 1: a lead still there with the signal a bar late"""
 _TIMING = (" A signal you were given is not trusted for timing, and a backtest of it is this code, pasted as written "
            "(close and signal are the file's columns in date order; start is the first out-of-sample row; fee is the "
-           "cost per position change as a fraction):\n" + BACKTEST_CODE + "\nRegister all three values with those "
+           "cost per position change as a fraction):\n" + BACKTEST_CODE + "\nRegister all five values with those "
            "names. A claim about the return states oos_return and oos_return_delayed beside each other and against "
            "buy_and_hold, or the reviewer objects. The reviewer re-runs this same code; another loop is not a check, "
-           "and a difference under one point from a fee or window convention is not an objection. Look-ahead means "
-           "the lead over buy and hold is gone one bar later (oos_return_delayed at or below buy_and_hold while "
-           "oos_return is above it): then there is no edge, and the position is declined. A lead that survives the "
-           "bar is not look-ahead; say so, and the position question is decided on oos_return_delayed.")
+           "and a difference under one point from a fee or window convention is not an objection. look_ahead and edge "
+           "are the conclusions, and nothing else decides them, a negative return included: a claim about look-ahead "
+           "says what look_ahead says (1: there is look-ahead; 0: there is not), and a claim or decision about a "
+           "position says what edge says (1: a paper position is open; 0: decline, and record only that). The reviewer "
+           "writes both values from the re-run in the review notes and objects to a claim whose words disagree with "
+           "them, however well its numbers match.")
 
 _NOTES = {
     "scientific@1": "Numbers come from registered results; claims are checked as written.",
