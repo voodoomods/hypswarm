@@ -47,6 +47,37 @@ def _seats(p) -> tuple[Seat, ...]:  # type: ignore[no-untyped-def]
     return tuple(out)
 
 
+# Every T1 record on the box (2026-11-07 and 08) holds the same few numbers for one signal: +146 % (as the vendor defines
+# it), -4.1 % (each position against the return of the day it was printed, which nobody could trade) and -17 to -18 %
+# (traded once the signal could be known). Reviewers checked whichever they reproduced, two of them in one run, and
+# nothing said how to line up time. A signal built from the next close earns a fortune as given and nothing a bar later.
+# A first version said this in prose (BC-250 df1, 2026-11-08): the seats then wrote their own loops and one paired
+# signal[t] with the return that ENDED at t, which on a momentum signal peeks — a genuine edge was reported as look-ahead,
+# and a right claim was objected to over a fee convention. Prose doesn't fix a convention; this function does.
+BACKTEST_CODE = """def backtest(close, signal, start, fee, delay=0):
+    # position[t] = signal[t - delay] earns close[t+1]/close[t] - 1; a change of position multiplies (1 - fee) in
+    equity, held = 1.0, 0
+    for t in range(start, len(close) - 1):
+        pos = signal[t - delay] if t - delay >= 0 else 0
+        if pos != held:
+            equity *= 1 - fee
+        held = pos
+        if pos:
+            equity *= close[t + 1] / close[t]
+    return equity - 1
+oos_return = backtest(close, signal, start, fee)                # as the signal says
+oos_return_delayed = backtest(close, signal, start, fee, 1)     # one bar later: the signal known a bar late
+buy_and_hold = close[-1] / close[start] - 1"""
+_TIMING = (" A signal you were given is not trusted for timing, and a backtest of it is this code, pasted as written "
+           "(close and signal are the file's columns in date order; start is the first out-of-sample row; fee is the "
+           "cost per position change as a fraction):\n" + BACKTEST_CODE + "\nRegister all three values with those "
+           "names. A claim about the return states oos_return and oos_return_delayed beside each other and against "
+           "buy_and_hold, or the reviewer objects. The reviewer re-runs this same code; another loop is not a check, "
+           "and a difference under one point from a fee or window convention is not an objection. Look-ahead means "
+           "the lead over buy and hold is gone one bar later (oos_return_delayed at or below buy_and_hold while "
+           "oos_return is above it): then there is no edge, and the position is declined. A lead that survives the "
+           "bar is not look-ahead; say so, and the position question is decided on oos_return_delayed.")
+
 _NOTES = {
     "scientific@1": "Numbers come from registered results; claims are checked as written.",
     "software@1": "A requirement is verified only by a test the instrument ran: register_run with the exact test command "
@@ -54,7 +85,7 @@ _NOTES = {
                   "builds are artifacts, by hash.",
     "trading@1": "A thesis is a hypothesis. A backtest result must carry the costs it charged and name its out-of-sample "
                  "window (oos_*). 'Edge' without both is refused. Positions are paper: a sized position with a stop is "
-                 "a decision based_on the claim. Never a live order.",
+                 "a decision based_on the claim. Never a live order." + _TIMING,
     "knowledge@1": "Every factual claim cites a source node you added (citation, url or doi, the passage). Recall is "
                    "not a source. The report is linted against the record.",
     "optimization@1": "A result reports objective, feasible (true/false) and bound or gap. 'Optimal' without a bound is "
@@ -77,7 +108,7 @@ _NOTES = {
                  "(windows, costs, configurations to try; data.expected) BEFORE register_run. The result carries oos_*, "
                  "fees/slippage and trials (configurations tried). After the risk review, a decision based_on the claim: "
                  "kind=position with size, stop, review_date and paper=true — or kind=no_position when the thesis is "
-                 "declined. Never a live order.",
+                 "declined. Never a live order." + _TIMING,
     "knowledge@2": "A source carries citation, a url or doi, the passage that says it, retrieved (the date you read it) and "
                    "kind (primary/secondary/tertiary); link it part_of the question. The claim cites it. Before you rely "
                    "on a source, writing or reviewing, list what else is there: a retraction, correction or erratum "

@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- **A supplied signal is backtested with the note's own code, as given and one bar later.** Every T1 record held
+  several timings of one signal: +146 % as the vendor defines it, -4.1 % (each position against the return of the day
+  it was printed, which nobody could trade) and -17 % (traded once the signal could be known). Reviewers checked
+  whichever they reproduced, and nothing said how to line up time. A first version said so in prose, and the seats
+  wrote their own loops: one paired a signal with the return that ended at it, which peeks, and a genuine edge was
+  reported as look-ahead. The trading notes now carry `BACKTEST_CODE`, pasted as written, which registers
+  `oos_return`, `oos_return_delayed` and `buy_and_hold`. Look-ahead means the lead over buy and hold is gone one bar
+  later; a lead that survives the bar is not look-ahead, and the position is decided on the delayed figure. Measured
+  on the box (gpt-oss-20b, 160 calls a run, 2026-11-08, two runs of each challenge, answers read by hand): T1, a new
+  leak built like it, and a control whose momentum signal is genuine.
+
+  | | no timing note | the note in prose | the note as code |
+  |---|---|---|---|
+  | report answers right, leak + control | 5 of 12 | 4.5 of 12 | 11.5 of 12 |
+  | report answers right, T1 | 4.5 of 12 | 5 of 6 | 5 of 6 |
+  | questions settled, all three | 17 of 24 | 7 of 18 | 17 of 18 |
+  | runs out of budget | 6 of 8 | 6 of 6 | 0 of 6 |
+  | calls per run | 147 | 155 | 112 |
+
+  With the code no false figure was checked in six runs, and the control kept its edge in both. Two limits. Reviewers
+  now re-run the code and stop at matching numbers: "does not exhibit look-ahead" was checked on the delayed figure
+  that shows it, on the leak and on T1 (one run each), and one leak run recorded a paper position beside its
+  no-position decision. Two of the six ended stuck, both on T1.
+
 - **Requires hypgraph 0.8.7.** A run with an external seat could lose a claim: the scheduler and the MCP server the
   seat works through are two Graphs on one file, and a claim committed while the scheduler was loading its snapshot
   could reach it without its `answers` edge. The scheduler then found no claim on an answered question, reworked the
