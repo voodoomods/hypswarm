@@ -30,7 +30,7 @@ def test_a_swarm_runs_against_a_served_record(tmp_path):
         assert all(o["status"] == "accepted" for o in r.orders) and r.scheduler.lead_calls == 2
         rec.close()
         g = Graph(str(tmp_path / "served.hypgraph"))          # the server's file holds everything, verifiably
-        assert g.verify_chain()["ok"] and len(g.orders(r.inv)) == 4
+        assert g.verify_chain()["ok"] and len(g.orders(r.inv)) == 6      # 2 answers, 2 reviews, 2 readings
         runs = [n for n in g.search("hypswarm run", type="run", inv=r.inv)]
         assert runs and g.get(runs[0]["id"])["body"]["state"] == "succeeded"
     finally:

@@ -90,9 +90,10 @@ def test_a_swarm_settles_every_question_and_the_report_passes(tmp_path):
     assert {q["code"]: q["status"] for q in r.board} == {"Q1": "settled", "Q2": "settled"}
     assert r.report_accepted and r.answers() == {"Q1": 0.812, "Q2": "no"}
     st = [o["status"] for o in r.orders]
-    assert st.count("accepted") == 4 and set(st) == {"accepted"}           # 2 answers + 2 reviews, all settled
+    assert st.count("accepted") == 6 and set(st) == {"accepted"}           # 2 answers + 2 reviews + 2 readings
     kinds = [e["kind"] for e in r.scheduler.events]
-    assert kinds.count("settled") == 4 and "rework" not in kinds and "escalate" not in kinds
+    assert kinds.count("settled") == 6 and "rework" not in kinds and "escalate" not in kinds
+    assert kinds.count("consistency_order") == 2                            # each conclusion read against the other
     assert r.scheduler.lead_calls == 2                                    # report_facts + submit_report, nothing else
     assert r.usage["calls"] == sum(w.calls for w in r.scheduler.workers) + r.scheduler.lead_calls
     assert r.usage["usd"] > 0 and r.usage["calls"] <= 60
