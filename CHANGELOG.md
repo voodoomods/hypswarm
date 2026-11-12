@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- **A worker's claim under a question's order names its question.** A claim added with none of `answers`,
+  `supports`, `challenges`, `supersedes` or `corrects` in its links was accepted ("added CL5") and counted for
+  nothing: the gate read "no claim answering Q1" and a later order wrote the claim again. `graph_add` now refuses
+  such a claim from a worker whose order is on a question, says nothing was added, and gives the call to send with
+  the order's question in it. The question isn't attached for the seat: one unlinked claim in eight was about another
+  question. Reviewers, leads and orders that aren't on a question are untouched. Measured on the box (gpt-oss-20b,
+  160 calls a run, 2026-11-11 and 12) on three sets of three new knowledge challenges, 48 runs a side each, every
+  settled answer read by hand:
+
+  | main vs this change | set 1 | set 2 | set 3 | all 144 runs a side |
+  |---|---|---|---|---|
+  | worker claims naming no question | 100 vs 0 | 66 vs 0 | 40 vs 0 | 206 vs 0 |
+  | answers settled right, questions with a sourced answer | 94 vs 95 | 95 vs 96 | 96 vs 94 | 285 vs 285 of 288 |
+  | the same, settled wrong | 0 vs 1 | 0 vs 0 | 0 vs 0 | 0 vs 1 |
+  | runs ended settled | 45 vs 48 | 46 vs 48 | 48 vs 46 | 139 vs 142 |
+  | mean calls a run | 81.3 vs 62.1 | 77.4 vs 68.5 | 65.5 vs 65.3 | 74.7 vs 65.3 |
+  | refusal followed by the linked claim within three calls | 44 of 48 | 41 of 65 | 52 of 58 | |
+
+  This is record hygiene, not a cost fix. Each set was a test frozen before its runs, and each missed one of its
+  conditions: set 1 the wrong answer (a question settled on two checked claims that contradict each other, which this
+  change neither wrote nor checked), set 2 the refusal's fix rate, set 3 the call saving. The saving follows how
+  often main leaves such claims (2.1, 1.4 and 0.8 a run) and was 19, 9 and 0 calls; none is claimed. Sets 1 and 2
+  ran an earlier wording ("add ... to its links"), which seats read as a job for `graph_link` on a claim that did
+  not exist; set 3 ran this one. Limits: knowledge profile, challenges written here, one small model; `register_run`'s
+  own claim path is not covered; the refusal comes before the record's claim checks, so a claim that also lacks a
+  scope is refused once for each.
+
 - **A supplied signal is backtested with the note's own code, as given and one bar later.** Every T1 record held
   several timings of one signal: +146 % as the vendor defines it, -4.1 % (each position against the return of the day
   it was printed, which nobody could trade) and -17 % (traded once the signal could be known). Reviewers checked

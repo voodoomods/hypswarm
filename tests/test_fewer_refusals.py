@@ -79,12 +79,12 @@ def test_a_measurement_the_record_can_read_is_kept_and_still_checked():
     r, inv, t = _setup()
     _result(t)
     good = {"name": "acc_a", "result": "RS1", "key": "acc_a", "k": 814, "n": 1000}
-    out = t["graph_add"]("claim", {"statement": SENTENCE, "scope": SCOPE, "measurements": [good]},
+    out = t["graph_add"]("claim", {"statement": SENTENCE, "scope": SCOPE, "answers": "Q1", "measurements": [good]},
                          [{"rel": "derived_from", "to": "RS1"}])
     assert out.startswith("added CL1"), out
     assert _claim(r, inv)["body"]["measurements"][0]["key"] == "acc_a"
     wrong = t["graph_add"]("claim", {"statement": "A is right on 900 of 1000 items.", "scope": SCOPE,
-                                     "measurements": [dict(good, k=900)]},
+                                     "answers": "Q1", "measurements": [dict(good, k=900)]},
                            [{"rel": "derived_from", "to": "RS1"}])
     assert wrong.startswith("refused"), wrong
 
@@ -93,7 +93,7 @@ def test_a_number_no_result_holds_stays_refused_when_its_measurement_is_dropped(
     _, _, t = _setup()
     _result(t)
     out = t["graph_add"]("claim", {"statement": "A is right on 900 of 1000 items.", "scope": SCOPE,
-                                   "measurements": [{"name": "acc", "result": 900}]},
+                                   "answers": "Q1", "measurements": [{"name": "acc", "result": 900}]},
                          [{"rel": "derived_from", "to": "RS1"}])
     assert out.startswith("refused") and "900" in out, out
 
@@ -101,14 +101,16 @@ def test_a_number_no_result_holds_stays_refused_when_its_measurement_is_dropped(
 def test_a_claim_with_no_evidence_stays_refused_with_its_fields_tidied():
     _, _, t = _setup()
     out = t["graph_add"]("claim", {"statement": "A is not more accurate than B on the items.", "scope": SCOPE,
-                                   "claim_kind": "finding", "measurements": [{"name": "p", "result": 0.08}]}, [])
+                                   "claim_kind": "finding", "answers": "Q1",
+                                   "measurements": [{"name": "p", "result": 0.08}]}, [])
     assert out.startswith("refused") and "evidence" in out, out
 
 
 def test_a_claim_that_uses_a_result_derives_from_it():
     r, inv, t = _setup()
     _result(t)
-    out = t["graph_add"]("claim", {"statement": SENTENCE, "scope": SCOPE}, [{"rel": "uses", "dst": "RS1"}])
+    out = t["graph_add"]("claim", {"statement": SENTENCE, "scope": SCOPE, "answers": "Q1"},
+                         [{"rel": "uses", "dst": "RS1"}])
     assert out.startswith("added CL1"), out
     assert any(e["rel"] == "derived_from" and e["dst"] == r.resolve("RS1", inv) for e in _claim(r, inv)["out"])
 
@@ -285,7 +287,7 @@ def test_fields_in_the_wrong_place_and_a_missing_scope_from_the_result():
     r, inv, t = _setup()
     _result(t)
     assert _hypothesis_with_links_in_fields(t).startswith("added H1")
-    out = t["graph_add"]("claim", {"statement": SENTENCE, "name": "CL-a", "scope": "all"},
+    out = t["graph_add"]("claim", {"statement": SENTENCE, "name": "CL-a", "scope": "all", "answers": "Q1"},
                          [{"rel": "derived_from", "to": "RS1"}])
     assert out.startswith("added CL1"), out
     assert _claim(r, inv)["body"]["scope"] == "Counted A's correct items."
