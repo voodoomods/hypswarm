@@ -48,6 +48,7 @@ def _live(n: dict[str, Any]) -> bool:
 
 
 _SOURCE_RANK = {"primary": 0, "secondary": 1, "tertiary": 2}      # a source's kind, as the knowledge profile names them
+_CLAIM_IS_FOR = ("answers", "supports", "challenges", "supersedes", "corrects")   # links that say what a claim is for
 
 
 def _is_file(url: str) -> bool:
@@ -666,6 +667,19 @@ def worker_tools(record: Record, seat: Seat, inv: str, order: str, meter: Meter,
         if type == "claim":
             replaced: list[dict[str, Any]] = []
             fields, links = _as_claim(fields, links)
+            asked = _question()
+            if seat.role == "worker" and asked and not any(l.get("rel") in _CLAIM_IS_FOR for l in links):
+                # 1,303 of 4,331 claims in 815 knowledge runs named no question. Each counted for nothing: the gate
+                # read "no claim answering Q1" and the next order wrote the claim again, a tenth to a fifth of a run's
+                # calls depending on the challenge (BC-250, 2026-11-11). The order's question isn't attached for the
+                # seat, as it is for a hypothesis: one such claim in eight was about another question
+                code = record.get(asked)["code"]
+                # the first wording said "add ... to its links": in 48 runs seats then called graph_link on the claim
+                # that was never made 21 times and sent the same add again 18 times (BC-250, 2026-11-12)
+                return ('refused: this claim names no question, so nothing was added. Send graph_add again with the '
+                        f'same fields and "links": [{{"rel": "answers", "to": "{code}"}}] if it answers {code}, the '
+                        "question of your order (use another question's code if it answers that one). graph_link "
+                        "cannot do this: there is no claim to link yet")
             wrong = _rests_on_the_head(links)
             if wrong:
                 return wrong
