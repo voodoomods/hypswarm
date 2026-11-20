@@ -13,7 +13,9 @@ profile's seats when none are given and builds its toolkits from the registry.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
 from hypgraph import profiles as _gp
 
@@ -129,11 +131,43 @@ _NOTES = {
                       "reviews the result before the claim.",
 }
 
+
+def _shape(p: Any) -> tuple[object, object]:
+    """What a note talks about: who sits at the table and the stages the work moves through."""
+    wf = getattr(p, "workflow", None)
+    return tuple(p.seats), (tuple(wf.stages) if wf is not None else None)
+
+
+def _note_source(p: Any, registry: Mapping[str, Any] | None = None) -> str | None:
+    """The profile id whose note the seats of record profile ``p`` get: its own, else the nearest earlier version of
+    the same profile that has one, as long as every version between keeps p's seats and stages. A version that only
+    adds checks keeps the words its seats were given (trading@3, optimization@3 and software@3 add claim checks;
+    scientific@3, trading@4 and optimization@4 judge preregistration per link). Keyed by exact id, each of them ran
+    with no note at all, and so did the bare name once it resolved to one. A version that changes the seats or the
+    stages gets None until it has a note of its own: the old one would describe a table that isn't there."""
+    if p.id in _NOTES:
+        return str(p.id)
+    reg = _gp.PROFILES if registry is None else registry
+    earlier = sorted((q for q in reg.values() if q.name == p.name and q.version < p.version),
+                     key=lambda q: q.version, reverse=True)
+    for q in earlier:
+        if _shape(q) != _shape(p):
+            return None
+        if q.id in _NOTES:
+            return str(q.id)
+    return None
+
+
+def _note(p: Any) -> str:
+    src = _note_source(p)
+    return _NOTES[src] if src else ""
+
+
 PROFILES: dict[str, SwarmProfile] = {}
 for _pid, _p in _gp.PROFILES.items():
-    PROFILES[_pid] = SwarmProfile(_pid, _seats(_p), toolkits=("files",), notes=_NOTES.get(_pid, ""), about=_p.about)
+    PROFILES[_pid] = SwarmProfile(_pid, _seats(_p), toolkits=("files",), notes=_note(_p), about=_p.about)
 for _p in sorted(_gp.PROFILES.values(), key=lambda p: p.version):
-    PROFILES[_p.name] = PROFILES[_p.id]         # "software" → the newest version (software@2: the workflow)
+    PROFILES[_p.name] = PROFILES[_p.id]         # "software" → the newest version (software@3 on hypgraph 0.8.10+)
 
 
 def get(name: str) -> SwarmProfile:
