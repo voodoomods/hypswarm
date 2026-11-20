@@ -142,9 +142,12 @@ def test_http_record_speaks_stages():
 
 @pytest.mark.parametrize("name", ["scientific", "software", "trading", "knowledge", "optimization"])
 def test_every_profile_name_is_its_workflow_version(name):
+    from hypgraph import profiles as gp
+
     from hypswarm import profiles
     p = profiles.get(name)
-    assert p.id == f"{name}@2" and p.workflow is not None and p.notes
+    newest = max((q for q in gp.PROFILES.values() if q.name == name), key=lambda q: q.version)
+    assert p.id == newest.id and p.workflow is not None and p.notes        # @2 or a later version, with its note
 
 
 def test_a_failing_suite_is_a_confirmed_failure_that_settles_the_requirement(tmp_path):
