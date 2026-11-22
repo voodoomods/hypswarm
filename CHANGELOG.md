@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **A new profile version keeps its seats' note.** Notes were keyed by exact profile id, so every version hypgraph
+  added after @2 ran with no note at all: `trading@3` and `optimization@3` (hypgraph 0.8.9) and `software@3` (0.8.10),
+  and, since the bare name resolves to the newest version, a plain `profile="trading"`, `"optimization"` or
+  `"software"` on those releases too — the trading desk lost its backtest code that way. A version without a note of
+  its own now gets the nearest earlier version's, as long as every version between keeps the same seats and workflow
+  stages, which is what the notes describe; every affected version only adds checks, and so do `scientific@3`,
+  `trading@4` and `optimization@4` (hypgraph#209), which the BC-250 preregistration A/B ran on their predecessors'
+  notes. A version that changes the seats or stages gets nothing borrowed, and a test over every profile hypgraph ships
+  fails until it has a note, so the next one can't lose its guidance silently. No note's text changed. The deprecated
+  `evaluation@1` still has none. Three tests assumed an unpinned run lands on @2; they now expect the newest version,
+  so the suite passes on hypgraph 0.8.13 and on hypgraph main with #209.
+
 - **A supplied signal is backtested with the note's own code, as given and one bar later.** Every T1 record held
   several timings of one signal: +146 % as the vendor defines it, -4.1 % (each position against the return of the day
   it was printed, which nobody could trade) and -17 % (traded once the signal could be known). Reviewers checked

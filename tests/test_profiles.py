@@ -16,7 +16,7 @@ def test_profiles_mirror_the_record_and_carry_rosters():
     assert {"scientific@1", "software@1", "trading@1", "knowledge@1", "optimization@1",
             "scientific@2", "software@2", "trading@2", "knowledge@2", "optimization@2"} <= set(profiles.names())
     sw = profiles.get("software")                                   # the name → the newest version: the workflow
-    assert sw.id == "software@2" and [s.name for s in sw.seats] == ["implementer", "tester", "reviewer", "lead"]
+    assert sw.id == max((n for n in profiles.names() if n.startswith("software@")), key=lambda n: int(n.split("@")[1])) and [s.name for s in sw.seats] == ["implementer", "tester", "reviewer", "lead"]
     assert sw.workflow is not None and [s.name for s in sw.workflow.stages][:3] == ["specified", "implemented", "verified"]
     assert "tests_pass_current" in sw.record_profile.predicates and "files" in sw.toolkits
     assert profiles.get("software@1").workflow is None and profiles.get("software@1").record_profile.predicates == ("tests_pass",)
