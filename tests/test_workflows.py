@@ -50,7 +50,9 @@ def test_stage_orders_walk_a_scientific_question_to_complete(tmp_path):
     assert any(e["stage"] == "reviewed" and e["gates"] == ["reviewed"] and e["seat"] == "critic" for e in issued)
     g = Graph(str(path))
     try:
-        assert g.get(res.inv)["body"]["profile"] == "scientific@2"
+        from hypgraph import profiles as gp
+        newest = max((q for q in gp.PROFILES.values() if q.name == "scientific"), key=lambda q: q.version)
+        assert g.get(res.inv)["body"]["profile"] == newest.id     # unpinned: the newest version (@2 on 0.8.13, @3 after #209)
         first = g.orders(res.inv)[0]
         assert "is at stage 'conjectured' (2/8)" in g.order_text(first["id"]) and "[preregistered]" in g.order_text(first["id"])
         rows = g.stages(res.inv)

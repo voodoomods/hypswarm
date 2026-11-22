@@ -11,7 +11,8 @@
   `trading@4` and `optimization@4` (hypgraph#209), which the BC-250 preregistration A/B ran on their predecessors'
   notes. A version that changes the seats or stages gets nothing borrowed, and a test over every profile hypgraph ships
   fails until it has a note, so the next one can't lose its guidance silently. No note's text changed. The deprecated
-  `evaluation@1` still has none.
+  `evaluation@1` still has none. Three tests assumed an unpinned run lands on @2; they now expect the newest version,
+  so the suite passes on hypgraph 0.8.13 and on hypgraph main with #209.
 
 - **A supplied signal is backtested with the note's own code, as given and one bar later.** Every T1 record held
   several timings of one signal: +146 % as the vendor defines it, -4.1 % (each position against the return of the day
